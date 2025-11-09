@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Miri Lab Projects - Kyle Fisher</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #f0f7f4;
+            color: #2d3748;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 20px;
+        }
+
+        header {
+            padding: 60px 0 40px;
+            text-align: center;
+            background: white;
+            border-bottom: 2px solid #d4e8e0;
+        }
+
+        .back-link {
+            display: inline-block;
+            margin-bottom: 20px;
+            color: #2d5a5e;
+            text-decoration: none;
+            font-size: 1.1em;
+            transition: color 0.3s ease;
+        }
+
+        .back-link:hover {
+            color: #142223;
+        }
+
+        h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            color: #142223;
+        }
+
+        .subtitle {
+            font-size: 1.2em;
+            color: #2d5a5e;
+            margin-bottom: 20px;
+        }
+
+        section {
+            padding: 60px 0;
+        }
+
+        .project-overview {
+            background: white;
+            padding: 40px;
+            border-radius: 15px;
+            border: 1px solid #d4e8e0;
+            box-shadow: 0 5px 20px rgba(20, 34, 35, 0.1);
+            margin-bottom: 40px;
+        }
+
+        .project-overview h2 {
+            color: #142223;
+            font-size: 2em;
+            margin-bottom: 20px;
+        }
+
+        .project-overview p {
+            color: #2d3748;
+            font-size: 1.1em;
+            line-height: 1.8;
+            margin-bottom: 15px;
+        }
+
+        .project-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 30px;
+            margin-top: 30px;
+        }
+
+        .project-card {
+            background: white;
+            padding: 35px;
+            border-radius: 15px;
+            border: 1px solid #d4e8e0;
+            box-shadow: 0 5px 20px rgba(20, 34, 35, 0.1);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .project-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 30px rgba(20, 34, 35, 0.15);
+        }
+
+        .project-card h3 {
+            color: #142223;
+            font-size: 1.6em;
+            margin-bottom: 15px;
+        }
+
+        .project-meta {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+
+        .project-tag {
+            background: #d4e8e0;
+            color: #142223;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 0.9em;
+            font-weight: 600;
+        }
+
+        .project-description {
+            color: #2d3748;
+            margin-bottom: 20px;
+            line-height: 1.8;
+        }
+
+        .project-highlights {
+            list-style: none;
+            margin-top: 15px;
+        }
+
+        .project-highlights li {
+            padding: 8px 0;
+            color: #2d3748;
+            position: relative;
+            padding-left: 25px;
+        }
+
+        .project-highlights li:before {
+            content: "▹";
+            position: absolute;
+            left: 0;
+            color: #2d5a5e;
+            font-weight: bold;
+            font-size: 1.2em;
+        }
+
+        .impact-box {
+            background: #e8f4f0;
+            border-left: 4px solid #2d5a5e;
+            padding: 15px 20px;
+            margin-top: 20px;
+            border-radius: 5px;
+        }
+
+        .impact-box strong {
+            color: #142223;
+        }
+
+        .tools-section {
+            background: #f8fdfb;
+            padding: 20px;
+            border-radius: 10px;
+            margin-top: 15px;
+        }
+
+        .tools-section h4 {
+            color: #142223;
+            margin-bottom: 10px;
+        }
+
+        .tools-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .tool-badge {
+            background: white;
+            padding: 5px 12px;
+            border-radius: 15px;
+            font-size: 0.9em;
+            border: 1px solid #d4e8e0;
+            color: #2d5a5e;
+        }
+
+        .project-image {
+            width: 100%;
+            border-radius: 10px;
+            margin-top: 20px;
+            border: 1px solid #d4e8e0;
+        }
+
+        footer {
+            text-align: center;
+            padding: 40px 0;
+            background: white;
+            border-top: 2px solid #d4e8e0;
+            color: #2d5a5e;
+        }
+
+        @media (max-width: 768px) {
+            h1 {
+                font-size: 2em;
+            }
+
+            .project-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="container">
+            <a href="index.html" class="back-link">← Back to Portfolio</a>
+            <h1>Miri Lab Projects</h1>
+            <p class="subtitle">Medical Device Research & Design Engineering</p>
+        </div>
+    </header>
+
+    <section>
+        <div class="container">
+            <div class="project-overview">
+                <h2>Surgical Hydrogel Extruder</h2>
+                <img src="https://raw.githubusercontent.com/kackle1998/kackle1998.github.io/refs/heads/main/resources/images/mirilab/HydrogelExtruder.png" alt="Surgical Hydrogel Extruder" class="project-image">
+                <p>
+                    Led the research and development of an innovative two-chamber medicine extrusion device designed for larynx surgery applications. This patent-pending medical device delivers controlled dosages through a sophisticated mechanical system combining ergonomics, precision engineering, and FDA compliance.
+                </p>
+                <p>
+                    The device features a ratcheting trigger mechanism coupled with a gear train to provide mechanical advantage, enabling precise control during surgical procedures. The project spanned the complete product development lifecycle from initial concept through validated prototypes ready for clinical evaluation.
+                </p>
+            </div>
+
+            <div class="project-grid">
+                <div class="project-card">
+                    <h3>Patent-Pending Medical Device Design</h3>
+                    <div class="project-meta">
+                        <span class="project-tag">Product Development</span>
+                        <span class="project-tag">FDA Compliance</span>
+                    </div>
+                    <p class="project-description">
+                        Led the complete design lifecycle of a patent-pending medical device for in-situ wound repair operations during larynx surgery, ensuring compliance with stringent FDA standards throughout development.
+                    </p>
+                    <ul class="project-highlights">
+                        <li>Designed initial prototype from concept through detailed engineering</li>
+                        <li>Led multiple design iterations based on testing feedback</li>
+                        <li>Ensured FDA regulatory compliance at every stage</li>
+                        <li>Coordinated cross-functional development team</li>
+                        <li>Managed intellectual property documentation for patent filing</li>
+                    </ul>
+                    <div class="impact-box">
+                        <strong>Impact:</strong> Created novel medical device with patent-pending status, advancing wound repair capabilities in laryngeal surgery
+                    </div>
+                </div>
+
+                <div class="project-card">
+                    <h3>Two-Chamber Extrusion Mechanism</h3>
+                    <div class="project-meta">
+                        <span class="project-tag">Mechanical Design</span>
+                        <span class="project-tag">Precision Engineering</span>
+                    </div>
+                    <p class="project-description">
+                        Engineered a sophisticated two-chamber system enabling controlled medicine extrusion with precise dosage control through an innovative ratcheting trigger and gear train mechanism.
+                    </p>
+                    <ul class="project-highlights">
+                        <li>Designed ratcheting trigger for controlled activation</li>
+                        <li>Developed gear train to provide mechanical advantage</li>
+                        <li>Optimized chamber geometry for consistent flow</li>
+                        <li>Ensured reliable dosage control for surgical precision</li>
+                        <li>Validated extrusion consistency across operating conditions</li>
+                    </ul>
+                    <div class="tools-section">
+                        <h4>Tools Used:</h4>
+                        <div class="tools-list">
+                            <span class="tool-badge">SolidWorks CAD</span>
+                            <span class="tool-badge">SolidWorks CFD</span>
+                            <span class="tool-badge">Ansys Structural Simulator</span>
+                            <span class="tool-badge">AutoCAD</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="project-card">
+                    <h3>Advanced CAD and Simulation</h3>
+                    <div class="project-meta">
+                        <span class="project-tag">SolidWorks</span>
+                        <span class="project-tag">CFD Analysis</span>
+                    </div>
+                    <p class="project-description">
+                        Utilized advanced CAD modeling and computational fluid dynamics to optimize device performance, material flow characteristics, and structural integrity.
+                    </p>
+                    <ul class="project-highlights">
+                        <li>Created detailed 3D models in SolidWorks</li>
+                        <li>Performed CFD analysis for fluid flow optimization</li>
+                        <li>Conducted structural simulations using Ansys</li>
+                        <li>Validated mechanical advantage calculations</li>
+                        <li>Optimized component geometry for manufacturability</li>
+                    </ul>
+                </div>
+
+                <div class="project-card">
+                    <h3>Rapid Prototyping & Additive Manufacturing</h3>
+                    <div class="project-meta">
+                        <span class="project-tag">FDM</span>
+                        <span class="project-tag">SLA</span>
+                    </div>
+                    <p class="project-description">
+                        Developed rapid prototyping workflow for complete mechanical design and ergonomic optimization using state-of-the-art additive manufacturing techniques.
+                    </p>
+                    <ul class="project-highlights">
+                        <li>Utilized FDM (Fused Deposition Modeling) for functional testing</li>
+                        <li>Implemented SLA (Stereolithography) for high-resolution parts</li>
+                        <li>Optimized ergonomics through iterative physical prototypes</li>
+                        <li>Reduced prototype lead times from weeks to days</li>
+                        <li>Enabled rapid design validation cycles</li>
+                    </ul>
+                    <div class="impact-box">
+                        <strong>Impact:</strong> Accelerated design iterations and improved device usability through rapid prototyping
+                    </div>
+                </div>
+
+                <div class="project-card">
+                    <h3>Mechanical Validation Testing</h3>
+                    <div class="project-meta">
+                        <span class="project-tag">Testing & Validation</span>
+                        <span class="project-tag">Quality Assurance</span>
+                    </div>
+                    <p class="project-description">
+                        Conducted comprehensive mechanical testing using Universal Testing Machines to validate prototype performance, ensure tolerances, and confirm clinical reliability for surgical applications.
+                    </p>
+                    <ul class="project-highlights">
+                        <li>Performed tension testing for material strength validation</li>
+                        <li>Conducted compression testing for durability assessment</li>
+                        <li>Executed bending tests for flexibility analysis</li>
+                        <li>Validated dimensional tolerances and repeatability</li>
+                        <li>Confirmed clinical performance requirements</li>
+                        <li>Documented test results for FDA compliance</li>
+                    </ul>
+                    <div class="impact-box">
+                        <strong>Impact:</strong> Ensured device reliability and safety through rigorous mechanical validation protocols
+                    </div>
+                </div>
+
+                <div class="project-card">
+                    <h3>Customer Discovery & Market Analysis</h3>
+                    <div class="project-meta">
+                        <span class="project-tag">Market Research</span>
+                        <span class="project-tag">User Experience</span>
+                    </div>
+                    <p class="project-description">
+                        Led comprehensive customer discovery initiative including market analysis and user interviews with surgeons to define product requirements and optimize device ergonomics for clinical use.
+                    </p>
+                    <ul class="project-highlights">
+                        <li>Conducted interviews with laryngeal surgeons</li>
+                        <li>Analyzed competitive landscape and existing solutions</li>
+                        <li>Identified unmet clinical needs in wound repair</li>
+                        <li>Defined product requirements based on user feedback</li>
+                        <li>Optimized device ergonomics for surgical workflows</li>
+                        <li>Validated product-market fit with end users</li>
+                    </ul>
+                    <div class="impact-box">
+                        <strong>Impact:</strong> Achieved strong product-market fit through user-centered design approach
+                    </div>
+                </div>
+
+                <div class="project-card">
+                    <h3>Multi-Generation Prototype Development</h3>
+                    <div class="project-meta">
+                        <span class="project-tag">Iterative Design</span>
+                        <span class="project-tag">Engineering</span>
+                    </div>
+                    <p class="project-description">
+                        Managed the evolution of device design through multiple prototype generations, incorporating test results, surgical feedback, and manufacturing considerations.
+                    </p>
+                    <ul class="project-highlights">
+                        <li>Incorporated lessons from each design iteration</li>
+                        <li>Balanced performance with manufacturability</li>
+                        <li>Enhanced ergonomic features progressively</li>
+                        <li>Optimized material selection for medical applications</li>
+                        <li>Improved cost-effectiveness of final design</li>
+                        <li>Streamlined assembly process</li>
+                    </ul>
+                </div>
+
+                <div class="project-card">
+                    <h3>Technical Documentation & Compliance</h3>
+                    <div class="project-meta">
+                        <span class="project-tag">Documentation</span>
+                        <span class="project-tag">Regulatory</span>
+                    </div>
+                    <p class="project-description">
+                        Developed comprehensive technical documentation supporting FDA compliance, patent applications, and manufacturing specifications for future commercialization.
+                    </p>
+                    <ul class="project-highlights">
+                        <li>Created detailed design specifications and drawings</li>
+                        <li>Documented testing protocols and validation results</li>
+                        <li>Supported patent application process with technical details</li>
+                        <li>Maintained regulatory compliance records</li>
+                        <li>Developed manufacturing documentation and procedures</li>
+                        <li>Prepared materials for FDA submission</li>
+                    </ul>
+                    <div class="impact-box">
+                        <strong>Impact:</strong> Established robust documentation foundation for regulatory approval and commercialization
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <footer>
+        <div class="container">
+            <p>&copy; 2025 Kyle M. Fisher. All rights reserved.</p>
+        </div>
+    </footer>
+</body>
+</html>
