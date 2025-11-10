@@ -1,0 +1,505 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background: #f0f7f4;
+    color: #2d3748;
+    line-height: 1.6;
+}
+
+.container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 20px;
+}
+
+header {
+    padding: 60px 0 40px;
+    text-align: center;
+    background: white;
+    border-bottom: 2px solid #d4e8e0;
+}
+
+.back-link {
+    display: inline-block;
+    margin-bottom: 20px;
+    color: #2d5a5e;
+    text-decoration: none;
+    font-size: 1.1em;
+    transition: color 0.3s ease;
+}
+
+.back-link:hover {
+    color: #142223;
+}
+
+h1 {
+    font-size: 2.5em;
+    margin-bottom: 10px;
+    color: #142223;
+}
+
+.subtitle {
+    font-size: 1.2em;
+    color: #2d5a5e;
+    margin-bottom: 20px;
+}
+
+h2 {
+    font-size: 2em;
+    margin-bottom: 30px;
+    text-align: center;
+    color: #142223;
+}
+
+section {
+    padding: 60px 0;
+}
+
+/* Profile/Header Specific */
+.profile-img {
+    width: 200px;
+    height: 200px;
+    border-radius: 50%;
+    margin: 0 auto 20px;
+    overflow: hidden;
+    border: 4px solid #142223;
+    box-shadow: 0 10px 40px rgba(20, 34, 35, 0.3);
+    display: block;
+    object-fit: cover;
+}
+
+.social-links {
+    display: flex;
+    gap: 20px;
+    justify-content: center;
+    margin-top: 30px;
+    flex-wrap: wrap;
+}
+
+.social-links a {
+    color: #142223;
+    text-decoration: none;
+    padding: 10px 20px;
+    border: 2px solid #2d5a5e;
+    border-radius: 25px;
+    transition: all 0.3s ease;
+}
+
+.social-links a:hover {
+    background: #142223;
+    color: white;
+}
+
+/* Aircraft Overview */
+.aircraft-overview {
+    background: white;
+    padding: 40px;
+    border-radius: 15px;
+    border: 1px solid #d4e8e0;
+    box-shadow: 0 5px 20px rgba(20, 34, 35, 0.1);
+    margin-bottom: 60px;
+}
+
+.aircraft-overview h2 {
+    color: #142223;
+    font-size: 2em;
+    margin-bottom: 20px;
+}
+
+.aircraft-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 20px;
+    margin-top: 20px;
+}
+
+.aircraft-card {
+    background: #f8fdfb;
+    padding: 20px;
+    border-radius: 10px;
+    border-left: 4px solid #2d5a5e;
+}
+
+.aircraft-card h3 {
+    color: #142223;
+    margin-bottom: 10px;
+}
+
+.aircraft-card ul {
+    list-style: none;
+    margin-top: 10px;
+}
+
+.aircraft-card li {
+    padding: 5px 0;
+    color: #2d3748;
+    position: relative;
+    padding-left: 20px;
+}
+
+.aircraft-card li:before {
+    content: "•";
+    position: absolute;
+    left: 0;
+    color: #2d5a5e;
+    font-weight: bold;
+}
+
+/* Content Cards */
+.about-content,
+.education-card,
+.contact-info {
+    background: white;
+    padding: 40px;
+    border-radius: 15px;
+    border: 1px solid #d4e8e0;
+    box-shadow: 0 5px 20px rgba(20, 34, 35, 0.1);
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.about-content:hover,
+.education-card:hover,
+.contact-info:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 10px 30px rgba(20, 34, 35, 0.15);
+}
+
+.about-content p {
+    font-size: 1.1em;
+    color: #2d3748;
+    margin-bottom: 20px;
+}
+
+/* Experience Section */
+.experience-item {
+    background: white;
+    padding: 30px;
+    border-radius: 15px;
+    margin-bottom: 30px;
+    border: 1px solid #d4e8e0;
+    box-shadow: 0 5px 20px rgba(20, 34, 35, 0.1);
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.experience-item:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 10px 30px rgba(20, 34, 35, 0.15);
+}
+
+.experience-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 15px;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.experience-title {
+    color: #142223;
+    font-size: 1.5em;
+    font-weight: bold;
+}
+
+.experience-company {
+    color: #2d5a5e;
+    font-size: 1.2em;
+}
+
+.experience-date {
+    color: #4a7c7f;
+    font-size: 0.95em;
+}
+
+.experience-item ul {
+    list-style: none;
+    margin-top: 15px;
+}
+
+.experience-item li {
+    padding: 8px 0;
+    color: #2d3748;
+    position: relative;
+    padding-left: 25px;
+}
+
+.experience-item li:before {
+    content: "▹";
+    position: absolute;
+    left: 0;
+    color: #2d5a5e;
+    font-size: 1.2em;
+}
+
+.projects-link {
+    display: inline-block;
+    margin-top: 20px;
+    padding: 12px 24px;
+    background: #2d5a5e;
+    color: white;
+    text-decoration: none;
+    border-radius: 8px;
+    font-weight: 600;
+    transition: all 0.3s ease;
+}
+
+.projects-link:hover {
+    background: #142223;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(20, 34, 35, 0.3);
+}
+
+/* Skills Section */
+.skills-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 20px;
+    margin-top: 30px;
+}
+
+.skill-card {
+    background: white;
+    padding: 30px;
+    border-radius: 15px;
+    border: 1px solid #d4e8e0;
+    box-shadow: 0 5px 20px rgba(20, 34, 35, 0.1);
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.skill-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 10px 30px rgba(20, 34, 35, 0.15);
+}
+
+.skill-card h3 {
+    color: #142223;
+    margin-bottom: 15px;
+    font-size: 1.3em;
+}
+
+.skill-card ul {
+    list-style: none;
+}
+
+.skill-card li {
+    padding: 8px 0;
+    color: #2d3748;
+    position: relative;
+    padding-left: 20px;
+}
+
+.skill-card li:before {
+    content: "▹";
+    position: absolute;
+    left: 0;
+    color: #2d5a5e;
+}
+
+/* Education Section */
+.education-card {
+    max-width: 800px;
+    margin: 0 auto;
+}
+
+.education-card h3 {
+    color: #142223;
+    font-size: 1.8em;
+    margin-bottom: 10px;
+}
+
+.education-card .degree {
+    color: #2d5a5e;
+    font-size: 1.3em;
+    margin-bottom: 15px;
+}
+
+.education-card .honors {
+    color: #2d3748;
+    margin-top: 15px;
+}
+
+/* Contact Section */
+.contact-info {
+    text-align: center;
+    max-width: 600px;
+    margin: 0 auto;
+}
+
+.contact-info a {
+    color: #2d5a5e;
+    text-decoration: none;
+    display: block;
+    margin: 15px 0;
+    font-size: 1.2em;
+}
+
+.contact-info a:hover {
+    color: #142223;
+}
+
+/* Project Grid */
+.project-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 30px;
+    margin-top: 30px;
+}
+
+.project-card {
+    background: white;
+    padding: 35px;
+    border-radius: 15px;
+    border: 1px solid #d4e8e0;
+    box-shadow: 0 5px 20px rgba(20, 34, 35, 0.1);
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+    overflow: auto;
+}
+
+.project-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 10px 30px rgba(20, 34, 35, 0.15);
+}
+
+.project-card h3 {
+    color: #142223;
+    font-size: 1.6em;
+    margin-bottom: 15px;
+}
+
+.project-meta {
+    display: flex;
+    gap: 15px;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+}
+
+.project-tag {
+    background: #d4e8e0;
+    color: #142223;
+    padding: 5px 15px;
+    border-radius: 20px;
+    font-size: 0.9em;
+    font-weight: 600;
+}
+
+.project-description {
+    color: #2d3748;
+    margin-bottom: 20px;
+    line-height: 1.8;
+}
+
+.project-highlights {
+    list-style: none;
+    margin-top: 15px;
+}
+
+.project-highlights li {
+    padding: 8px 0;
+    color: #2d3748;
+    position: relative;
+    padding-left: 25px;
+}
+
+.project-highlights li:before {
+    content: "▹";
+    position: absolute;
+    left: 0;
+    color: #2d5a5e;
+    font-weight: bold;
+    font-size: 1.2em;
+}
+
+.impact-box {
+    background: #e8f4f0;
+    border-left: 4px solid #2d5a5e;
+    padding: 15px 20px;
+    margin-top: 20px;
+    border-radius: 5px;
+}
+
+.impact-box strong {
+    color: #142223;
+}
+
+.tools-section {
+    background: #f8fdfb;
+    padding: 20px;
+    border-radius: 10px;
+    margin-top: 15px;
+}
+
+.tools-section h4 {
+    color: #142223;
+    margin-bottom: 10px;
+}
+
+.tools-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.tool-badge {
+    background: white;
+    padding: 5px 12px;
+    border-radius: 15px;
+    font-size: 0.9em;
+    border: 1px solid #d4e8e0;
+    color: #2d5a5e;
+}
+
+.project-image {
+    width: 350px;
+    height: 250px;
+    object-fit: contain;
+    background: white;
+    border-radius: 10px;
+    border: 1px solid #d4e8e0;
+    float: right;
+    margin-left: 25px;
+    margin-bottom: 15px;
+    padding: 5px;
+}
+
+/* Footer */
+footer {
+    text-align: center;
+    padding: 40px 0;
+    background: white;
+    border-top: 2px solid #d4e8e0;
+    color: #2d5a5e;
+    margin-top: 40px;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    h1 {
+        font-size: 2em;
+    }
+
+    h2 {
+        font-size: 1.8em;
+    }
+
+    .aircraft-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .experience-header {
+        flex-direction: column;
+    }
+
+    .project-image {
+        max-width: 100%;
+        width: 100%;
+        height: 200px;
+        float: none;
+        margin-left: 0;
+        margin-bottom: 15px;
+    }
+}
