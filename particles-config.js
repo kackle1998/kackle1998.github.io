@@ -8,7 +8,7 @@ particlesJS('particles-js', {
             }
         },
         color: {
-            value: '#7b2cbf'
+            value: '#ffffff'
         },
         shape: {
             type: 'circle'
@@ -48,5 +48,6 @@ particlesJS('particles-js', {
     },
     retina_detect: true
 });
+
 
 
