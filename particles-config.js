@@ -1,7 +1,7 @@
 particlesJS('particles-js', {
     particles: {
         number: {
-            value: 32,
+            value: 36,
             density: {
                 enable: true,
                 value_area: 800
@@ -26,7 +26,7 @@ particlesJS('particles-js', {
         },
         move: {
             enable: true,
-            speed: 1.5,
+            speed: 1.65,
             direction: 'none',
             random: true,
             straight: false,
@@ -48,3 +48,4 @@ particlesJS('particles-js', {
     },
     retina_detect: true
 });
+
