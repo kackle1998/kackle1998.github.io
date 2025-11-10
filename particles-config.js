@@ -34,6 +34,17 @@ particlesJS('particles-js', {
             bounce: false
         }
     },
-
-    retina_detect: false
+    interactivity: {
+        detect_on: 'canvas',
+        events: {
+            onhover: {
+                enable: false
+            },
+            onclick: {
+                enable: false
+            },
+            resize: true
+        }
+    },
+    retina_detect: true
 });
