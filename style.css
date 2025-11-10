@@ -181,7 +181,6 @@ section {
 .about-content:hover,
 .education-card:hover,
 .contact-info:hover {
-    transform: translateY(-5px);
     box-shadow: 0 10px 30px rgba(20, 34, 35, 0.15);
 }
 
@@ -203,7 +202,6 @@ section {
 }
 
 .experience-item:hover {
-    transform: translateY(-5px);
     box-shadow: 0 10px 30px rgba(20, 34, 35, 0.15);
 }
 
@@ -266,7 +264,6 @@ section {
 
 .projects-link:hover {
     background: #142223;
-    transform: translateY(-2px);
     box-shadow: 0 4px 12px rgba(20, 34, 35, 0.3);
 }
 
@@ -288,7 +285,6 @@ section {
 }
 
 .skill-card:hover {
-    transform: translateY(-5px);
     box-shadow: 0 10px 30px rgba(20, 34, 35, 0.15);
 }
 
@@ -377,7 +373,6 @@ section {
 }
 
 .project-card:hover {
-    transform: translateY(-5px);
     box-shadow: 0 10px 30px rgba(20, 34, 35, 0.15);
 }
 
@@ -518,4 +513,5 @@ footer {
         margin-left: 0;
         margin-bottom: 15px;
     }
+
 }
