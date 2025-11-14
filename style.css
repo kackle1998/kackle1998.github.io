@@ -477,6 +477,98 @@ section {
     padding: 5px;
 }
 
+/* Tooltip styles */
+.tooltip {
+    position: relative;
+    display: inline-block;
+    border-bottom: 1px dotted #2d5a5e;
+    cursor: help;
+    color: #2d5a5e;
+}
+
+.tooltip .tooltiptext {
+    visibility: hidden;
+    width: 200px;
+    background-color: #142223;
+    color: white;
+    text-align: center;
+    border-radius: 6px;
+    padding: 8px 12px;
+    position: absolute;
+    z-index: 1000;
+    bottom: 125%;
+    left: 50%;
+    margin-left: -100px;
+    opacity: 0;
+    transition: opacity 0.3s;
+    font-size: 0.9em;
+    line-height: 1.4;
+}
+
+.tooltip .tooltiptext::after {
+    content: "";
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    margin-left: -5px;
+    border-width: 5px;
+    border-style: solid;
+    border-color: #142223 transparent transparent transparent;
+}
+
+.tooltip:hover .tooltiptext {
+    visibility: visible;
+    opacity: 1;
+}
+
+/* Image tooltip styles */
+.image-tooltip {
+    position: relative;
+    display: inline-block;
+    border-bottom: 1px dotted #2d5a5e;
+    cursor: pointer;
+    color: #142223;
+}
+
+.image-tooltip .tooltip-image {
+    visibility: hidden;
+    position: absolute;
+    z-index: 1000;
+    bottom: 125%;
+    left: 50%;
+    transform: translateX(-50%);
+    opacity: 0;
+    transition: opacity 0.3s;
+    background: white;
+    padding: 10px;
+    border-radius: 8px;
+    box-shadow: 0 5px 20px rgba(20, 34, 35, 0.3);
+    border: 2px solid #2d5a5e;
+}
+
+.image-tooltip .tooltip-image img {
+    max-width: 400px;
+    max-height: 300px;
+    display: block;
+    border-radius: 4px;
+}
+
+.image-tooltip:hover .tooltip-image {
+    visibility: visible;
+    opacity: 1;
+}
+
+.image-tooltip .tooltip-image::after {
+    content: "";
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    margin-left: -8px;
+    border-width: 8px;
+    border-style: solid;
+    border-color: #2d5a5e transparent transparent transparent;
+}
+
 /* Footer */
 footer {
     text-align: center;
@@ -512,6 +604,25 @@ footer {
         float: none;
         margin-left: 0;
         margin-bottom: 15px;
+    }
+
+    /* Fix image tooltip for mobile */
+    .image-tooltip .tooltip-image {
+        left: 10px;
+        right: 10px;
+        transform: none;
+        width: auto;
+    }
+
+    .image-tooltip .tooltip-image img {
+        max-width: 100%;
+        width: 100%;
+        height: auto;
+    }
+
+    .image-tooltip .tooltip-image::after {
+        left: 20px;
+        margin-left: 0;
     }
 
 }
