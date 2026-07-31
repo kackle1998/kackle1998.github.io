@@ -39,11 +39,9 @@
                         Designed the mechanical and optical hardware for an automated alignment station used in <span class="tooltip">FORJ<span class="tooltiptext">Fiber Optic Rotary Joint</span></span> assembly, covering everything the automated search depends on physically: how the parts are held, how the optics are located, and how the motion axes and measurement instruments are arranged around them.
                     </p>
                     <ul class="project-highlights">
-                        <li>Designed precision <span class="tooltip">collimator<span class="tooltiptext">Optic that shapes light into a parallel beam so it can cross the rotating gap</span></span> holders locating both halves of the optical path</li>
-                        <li>Developed repeatable stage-to-part mounting with hard datums, so results carry between runs and between units</li>
-                        <li>Specified the multi-axis motorized stage stack-up and axis assignment for tilt and translation</li>
-                        <li>Laid out the optical bench, integrating the power meter directly into the measurement loop</li>
-                        <li>Designed for operator load and unload without disturbing established alignment</li>
+                        <li>Developed hard-datum stage-to-part mounting, making alignment results repeatable across runs and units</li>
+                        <li>Designed the optical bench layout and multi-axis stage stack-up, integrating the power meter directly into the measurement loop</li>
+                        <li>Enabled operator load and unload without disturbing established alignment</li>
                     </ul>
                     <div class="tools-section">
                         <h4>Tools Used:</h4>
@@ -59,22 +57,22 @@
                 </div>
 
                 <div class="project-card">
-                    <h3>Automated Collimator Alignment Software</h3>
+                    <h3>Automated Collimator Alignment: Python Software Development</h3>
                     <div class="project-meta">
                         <span class="project-tag">Python</span>
                         <span class="project-tag">Motion Control</span>
                         <span class="project-tag">Algorithm Development</span>
                         <span class="project-tag">Process Automation</span>
                     </div>
+                    <img src="/resources/images/princetel/AlignmentSearch3D.png" alt="3D Optical Alignment Search Plot" class="project-image">
                     <p class="project-description">
-                        Developed a Python application that drives the alignment station's motorized stages across tilt and translation axes, closing the loop on live optical power feedback to bring a collimator pair from no signal to optimized coupling with no operator input. Collimator-to-collimator alignment was previously the most experience-dependent step in assembly, performed entirely by hand.
+                        Developed a Python application that drives the alignment station's motorized stages across tilt and translation axes, closing the loop on live optical power feedback to bring a <span class="tooltip">collimator<span class="tooltiptext">Optic that shapes light into a parallel beam so it can cross the rotating gap</span></span> pair from no signal to optimized coupling with no operator input. Collimator-to-collimator alignment was previously the most experience-dependent step in assembly, performed entirely by hand.
                     </p>
                     <ul class="project-highlights">
-                        <li>Adaptive multi-axis search that locates first light and then converges on peak optical coupling</li>
-                        <li>Rejects back-reflections and false peaks so the routine cannot settle on a spurious signal</li>
-                        <li>Live visualization of the search — 3D scan plots and heatmaps — for process engineering review</li>
-                        <li>Built-in simulation environment enabling reproducible regression testing without occupying the hardware</li>
-                        <li>Validated against production hardware; rollout to the assembly floor in progress</li>
+                        <li>Developed an adaptive multi-axis search routine that locates first light, then converges on peak optical coupling across tilt and translation axes</li>
+                        <li>Designed filters to identify false peaks and stray light, preventing false positives and collimator misalignment</li>
+                        <li>Implemented 3D scan plots that map the collimator surface</li>
+                        <li>Rolled out to the assembly floor across FORJ production</li>
                     </ul>
                     <div class="tools-section">
                         <h4>Tools Used:</h4>
@@ -86,7 +84,7 @@
                         </div>
                     </div>
                     <div class="impact-box">
-                        <strong>Impact:</strong> Reduced a three-hour skilled manual alignment to under five minutes and made the result independent of operator skill, converting the most experience-dependent step in FORJ assembly into a repeatable automated process
+                        <strong>Impact:</strong> Reduced a 3-hour skilled manual alignment to under 5 minutes and made the result independent of operator skill, converting the most experience-dependent step in FORJ assembly into a repeatable automated process
                     </div>
                 </div>
 
@@ -103,7 +101,7 @@
                     <ul class="project-highlights">
                         <li>Defined <span class="tooltip">insertion loss<span class="tooltiptext">Optical power lost through a connection, measured in dB</span></span> and <span class="tooltip">rotational variation<span class="tooltiptext">Change in optical loss as the joint rotates</span></span> test methods with explicit pass/fail criteria</li>
                         <li>Designed dedicated test fixturing to hold units repeatably through full rotation</li>
-                        <li>Enabled consistent measurement across single-mode and multimode channel configurations</li>
+                        <li>Extended the test method across single-mode and multimode builds spanning the full channel-count range</li>
                     </ul>
                     <div class="impact-box">
                         <strong>Impact:</strong> Reduced optical test failures and production scrap by catching loss and rotational variation issues before final assembly
