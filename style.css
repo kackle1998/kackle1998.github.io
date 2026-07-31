@@ -138,7 +138,6 @@ section {
     background: #f8fdfb;
     padding: 20px;
     border-radius: 10px;
-    border-left: 4px solid #2d5a5e;
 }
 
 .aircraft-card h3 {
@@ -427,7 +426,6 @@ section {
 
 .impact-box {
     background: #e8f4f0;
-    border-left: 4px solid #2d5a5e;
     padding: 15px 20px;
     margin-top: 20px;
     border-radius: 5px;
