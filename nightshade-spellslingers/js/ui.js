@@ -1,0 +1,853 @@
+'use strict';
+/* ============================================================
+   NIGHTSHADE SPELLSLINGING — rendering, input, animation, sound, flow
+   ============================================================ */
+
+const $ = (s) => document.querySelector(s);
+const $$ = (s) => document.querySelectorAll(s);
+const stage = $('#stage');
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+let game = null;
+let busy = false;     // true while animations / the Dealer are acting
+let ended = false;
+let sel = { hand: null, attacker: null }; // uids
+let curScale = 1;
+const tapState = new Map(); // uid -> was tapped at last render (to animate tap/untap)
+
+function fit() {
+  curScale = Math.min(window.innerWidth / 1280, window.innerHeight / 720);
+  stage.style.setProperty('--s', curScale);
+}
+window.addEventListener('resize', fit);
+fit();
+
+/* ---------- sound (tiny WebAudio synth) ---------- */
+const Sfx = {
+  ctx: null, muted: false,
+  ensure() {
+    if (!this.ctx) { try { this.ctx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { /* no audio */ } }
+    if (this.ctx && this.ctx.state === 'suspended') this.ctx.resume();
+  },
+  tone(f, d, type = 'square', v = 0.04, f2 = null, delay = 0) {
+    if (this.muted || !this.ctx) return;
+    const t = this.ctx.currentTime + delay;
+    const o = this.ctx.createOscillator(), g = this.ctx.createGain();
+    o.type = type;
+    o.frequency.setValueAtTime(f, t);
+    if (f2) o.frequency.exponentialRampToValueAtTime(f2, t + d);
+    g.gain.setValueAtTime(v, t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + d);
+    o.connect(g).connect(this.ctx.destination);
+    o.start(t); o.stop(t + d + 0.02);
+  },
+  noise(d, v = 0.06) {
+    if (this.muted || !this.ctx) return;
+    const n = Math.floor(this.ctx.sampleRate * d);
+    const buf = this.ctx.createBuffer(1, n, this.ctx.sampleRate);
+    const data = buf.getChannelData(0);
+    for (let i = 0; i < n; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / n);
+    const s = this.ctx.createBufferSource(), g = this.ctx.createGain();
+    s.buffer = buf; g.gain.value = v;
+    s.connect(g).connect(this.ctx.destination);
+    s.start();
+  },
+};
+function sfx(name) {
+  const S = Sfx;
+  switch (name) {
+    case 'select': S.tone(660, 0.04, 'square', 0.025); break;
+    case 'place': S.tone(220, 0.07, 'square', 0.035); S.tone(330, 0.08, 'square', 0.035, null, 0.06); break;
+    // Low triangle waves barely register on small speakers, so the land thump carries a square layer for presence.
+    case 'land': S.noise(0.05, 0.05); S.tone(98, 0.18, 'triangle', 0.1); S.tone(196, 0.1, 'square', 0.035, 160); S.tone(262, 0.12, 'square', 0.03, null, 0.07); break;
+    case 'hit': S.noise(0.12, 0.08); S.tone(160, 0.14, 'square', 0.05, 60); break;
+    case 'direct': S.noise(0.25, 0.1); S.tone(110, 0.3, 'sawtooth', 0.05, 40); break;
+    case 'die': S.tone(320, 0.35, 'square', 0.035, 50); break;
+    case 'heal': S.tone(520, 0.08, 'triangle', 0.05); S.tone(780, 0.1, 'triangle', 0.05, null, 0.07); break;
+    case 'bell': S.tone(880, 0.7, 'triangle', 0.08); S.tone(1320, 0.5, 'sine', 0.03); break;
+    case 'err': S.tone(110, 0.12, 'square', 0.04); break;
+    case 'spell': [440, 554, 659].forEach((f, i) => S.tone(f, 0.12, 'triangle', 0.05, null, i * 0.05)); S.tone(880, 0.25, 'sine', 0.03, 1320, 0.15); break;
+    case 'trap': S.noise(0.08, 0.08); S.tone(740, 0.08, 'square', 0.05); S.tone(196, 0.3, 'sawtooth', 0.05, 98, 0.06); break;
+    case 'win': [523, 659, 784, 1046].forEach((f, i) => S.tone(f, 0.22, 'square', 0.05, null, i * 0.15)); break;
+    case 'lose': [392, 330, 262, 196].forEach((f, i) => S.tone(f, 0.32, 'square', 0.05, null, i * 0.22)); break;
+  }
+}
+/* ---------- ambient music (gapless WebAudio loop) ---------- */
+const Music = {
+  // The file is pre-cut so its end flows straight into its start; looping the decoded
+  // buffer is sample-accurate, unlike <audio loop> which leaves a gap.
+  src: (() => {
+    const ogg = new Audio().canPlayType('audio/ogg; codecs="vorbis"');
+    return 'assets/audio/music/moonlit-circuit-loop.' + (ogg ? 'ogg' : 'mp3');
+  })(),
+  volume: 0.04, gain: null, started: false, bytes: null,
+  // Browsers block audio until the first click/keypress, but downloading isn't blocked,
+  // so fetch the file at page load and the music can begin the moment input arrives.
+  preload() {
+    this.bytes = fetch(this.src).then((r) => r.arrayBuffer()).catch(() => null);
+  },
+  async start() {
+    const ctx = Sfx.ctx;
+    if (this.started || !ctx) return;
+    this.started = true;
+    try {
+      const bytes = await (this.bytes || fetch(this.src).then((r) => r.arrayBuffer()));
+      const buf = await ctx.decodeAudioData(bytes);
+      const s = ctx.createBufferSource();
+      s.buffer = buf; s.loop = true;
+      this.gain = ctx.createGain();
+      this.gain.gain.value = 0;
+      s.connect(this.gain).connect(ctx.destination);
+      s.start();
+      this.setMuted(Sfx.muted, 1.5);
+    } catch (e) { /* music is optional */ }
+  },
+  // Ramp from the last level we set ourselves: reading gain.value right after creating
+  // the node returns the default 1.0, which made the fade-in start at full volume.
+  level: 0,
+  setMuted(muted, fade = 0.4) {
+    if (!this.gain) return;
+    const g = this.gain.gain, t = Sfx.ctx.currentTime;
+    g.cancelScheduledValues(t);
+    g.setValueAtTime(this.level, t);
+    this.level = muted ? 0 : this.volume;
+    g.linearRampToValueAtTime(this.level, t + fade);
+  },
+};
+Music.preload();
+function audioUnlock() { Sfx.ensure(); Music.start(); }
+window.addEventListener('pointerdown', audioUnlock);
+window.addEventListener('keydown', audioUnlock);
+
+/* ---------- small UI helpers ---------- */
+let toastTimer = null;
+function toast(msg) {
+  const t = $('#toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 1400);
+}
+
+function banner(text) {
+  const b = $('#banner');
+  b.textContent = text;
+  b.classList.remove('show');
+  void b.offsetWidth;
+  b.classList.add('show');
+  CRT.glitch();
+  return sleep(1200);
+}
+
+function relRect(el) {
+  const s = stage.getBoundingClientRect(), r = el.getBoundingClientRect();
+  return { x: (r.left - s.left) / curScale, y: (r.top - s.top) / curScale, w: r.width / curScale, h: r.height / curScale };
+}
+
+function cardElByUid(uid) { return document.querySelector(`#board .card[data-uid="${uid}"]`) || document.querySelector(`.card[data-uid="${uid}"]`); }
+function panelOf(idx) { return document.querySelector(`.ppanel[data-player="${idx}"]`); }
+
+async function lunge(a, t) {
+  const ra = relRect(a), rt = relRect(t);
+  const dx = rt.x + rt.w / 2 - (ra.x + ra.w / 2), dy = rt.y + rt.h / 2 - (ra.y + ra.h / 2);
+  a.style.zIndex = 30;
+  a.style.position = 'relative';
+  const anim = a.animate([
+    { transform: 'translate(0,0)' },
+    { transform: `translate(${-dx * 0.06}px, ${-dy * 0.06}px)`, offset: 0.3 },
+    { transform: `translate(${dx * 0.72}px, ${dy * 0.72}px)`, offset: 0.62 },
+    { transform: 'translate(0,0)' },
+  ], { duration: 460, easing: 'steps(10, end)' });
+  await anim.finished.catch(() => {});
+}
+
+function shake(el) {
+  if (!el) return;
+  el.animate([
+    { transform: 'translateX(0)' }, { transform: 'translateX(-5px)' }, { transform: 'translateX(5px)' },
+    { transform: 'translateX(-3px)' }, { transform: 'translateX(0)' },
+  ], { duration: 260, easing: 'steps(5)' });
+}
+
+function flushFx() {
+  const fx = game.fx.splice(0);
+  fx.forEach((f, i) => {
+    let el, shakeEl;
+    if (f.uid != null) { el = cardElByUid(f.uid); shakeEl = el; }
+    else { shakeEl = panelOf(f.player); el = shakeEl && shakeEl.querySelector('.pp-life'); }
+    if (!el) return;
+    const r = relRect(el);
+    const d = document.createElement('div');
+    d.className = 'float ' + f.kind;
+    d.textContent = (f.kind === 'dmg' ? '-' : '+') + f.n;
+    d.style.left = r.x + r.w / 2 + 'px';
+    d.style.top = r.y + r.h / 2 - 18 + 'px';
+    $('#fx').appendChild(d);
+    d.animate([
+      { transform: 'translate(-50%, 0)', opacity: 1 },
+      { transform: 'translate(-50%, -36px)', opacity: 1, offset: 0.7 },
+      { transform: 'translate(-50%, -48px)', opacity: 0 },
+    ], { duration: 1100, delay: i * 70, easing: 'steps(12)', fill: 'forwards' }).finished.then(() => d.remove());
+    if (f.kind === 'dmg') { shake(shakeEl); CRT.pulse(Math.min(1, 0.15 + f.n / 6), f.player != null); }
+    else sfx('heal');
+  });
+}
+
+/* Pop a big copy of a card over the board: a spell being cast or a trap springing. */
+async function popCard(c, label) {
+  const wrap = document.createElement('div');
+  wrap.className = 'popcard ' + c.type;
+  wrap.innerHTML = `<div class="pc-label">${label}</div><div class="card ${c.type}">${cardInnerHTML(c)}</div>`;
+  $('#fx').appendChild(wrap);
+  inspect(c);
+  if (c.type === 'trap') CRT.glitch();
+  const anim = wrap.animate([
+    { transform: 'translate(-50%, -50%) scale(.4)', opacity: 0 },
+    { transform: 'translate(-50%, -50%) scale(1)', opacity: 1, offset: 0.18 },
+    { transform: 'translate(-50%, -50%) scale(1)', opacity: 1, offset: 0.82 },
+    { transform: 'translate(-50%, -60%) scale(.9)', opacity: 0 },
+  ], { duration: 1100, easing: 'steps(14)', fill: 'forwards' });
+  await anim.finished.catch(() => {});
+  wrap.remove();
+}
+
+/* Show every trap that sprang during the last action. */
+async function showReveals() {
+  for (const r of game.reveals.splice(0)) {
+    sfx('trap');
+    await popCard(r.card, r.owner === 0 ? 'YOUR TRAP!' : 'TRAP!');
+  }
+}
+
+/* ---------- card elements ---------- */
+function cardEl(c) {
+  const el = document.createElement('div');
+  el.className = `card ${c.type}${c.token ? ' token' : ''}`;
+  el.dataset.uid = c.uid;
+  el.innerHTML = cardInnerHTML(c, game && c.type === 'creature' ? game.attackOf(c) : c.atk);
+  el.addEventListener('mouseenter', () => inspect(c));
+  return el;
+}
+
+/* ---------- inspector ---------- */
+function inspect(c) {
+  $('#inspector').innerHTML = inspectHTML(c, game && c.type === 'creature' ? game.attackOf(c) : c.atk) +
+    (c.attacked && game && game.onBoard(c) ? '<div class="i-sigil muted">Tapped: it has attacked and untaps at the start of its owner\'s turn. It still fights back if attacked.</div>' : '');
+}
+
+function inspectDefault() {
+  $('#inspector').innerHTML = `
+    <div class="i-help">
+      <b>HOW TO PLAY</b>
+      <p>Click a <b>land</b> in your hand to play it (one per turn).</p>
+      <p>Click a <b>creature</b> you can afford, then an empty slot. Click it twice to drop it in the first free slot.</p>
+      <p>Click a ready creature (blinking white outline), then click an enemy creature, or the Dealer's panel when the way is clear.</p>
+      <p>Spells: click, then a target (or click again). Traps: click twice to set face-down.</p>
+      <p>Ring the bell (Space) to end your turn. Esc or right-click cancels.</p>
+      <p class="muted">Hover any card to inspect it.</p>
+    </div>`;
+}
+
+/* ---------- rendering ---------- */
+function render() {
+  if (!game) return;
+  renderPanel(panelOf(1), game.players[1]);
+  renderPanel(panelOf(0), game.players[0]);
+  renderRow($('#cpuRow'), game.players[1]);
+  renderRow($('#youRow'), game.players[0]);
+  renderTraps($('#cpuTraps'), game.players[1]);
+  renderTraps($('#youTraps'), game.players[0]);
+  renderHand();
+  renderTurn();
+  renderLog();
+}
+
+function selectedAttacker() { return sel.attacker != null ? game.findCreature(sel.attacker) : null; }
+function selectedHand() { return sel.hand != null ? game.players[0].hand.find((x) => x.uid === sel.hand) || null : null; }
+/* True if the selected spell from hand could be aimed at creature `c`. */
+function isSpellTarget(c) {
+  const s = selectedHand();
+  return !!s && s.type === 'spell' && !!s.target && game.spellTargets(game.players[0], s).includes(c);
+}
+function isTarget(t) {
+  const a = selectedAttacker();
+  if (!a) return false;
+  return game.targets(a).some((x) => (t.uid != null ? x.uid === t.uid : x.player === t.player));
+}
+
+function renderPanel(el, p) {
+  const e = game.energy(p);
+  el.classList.toggle('active', game.active === p.idx && !game.over);
+  el.classList.toggle('targetable', p.cpu && isTarget({ player: p.idx }));
+  el.innerHTML = `
+    <div class="pp-head">
+      <img class="portrait" src="${spriteURL(p.cpu ? 'dealer' : 'hero')}" alt="">
+      <div><div class="pp-name">${p.cpu ? 'DEALER' : escapeHTML(heroName().toUpperCase())}</div><div class="pp-deck">${p.deckDef.name}</div></div>
+      <div class="pp-life">${ico('hp')}<b>${Math.max(0, p.life)}</b></div>
+    </div>
+    <div class="pp-stats"><span>DECK ${p.library.length}</span><span>HAND ${p.hand.length}</span><span>GRAVE ${p.grave.length}</span></div>
+    ${COLOR_KEYS.some((k) => e[k].total)
+      ? `<table class="pp-energy">${COLOR_KEYS.filter((k) => e[k].total).map((k) => {
+          const used = e[k].total - e[k].free;
+          return `<tr title="${COLORS[k].land}"><td class="n">${e[k].total}X</td><td>${ico(COLORS[k].icon)}</td><td class="muted">${used ? `${used} USED` : ''}</td></tr>`;
+        }).join('')}</table>`
+      : '<div class="pp-energy muted">no lands yet</div>'}
+    ${p.cpu ? `<div class="pp-hand">${'<span class="mini-back"></span>'.repeat(Math.min(p.hand.length, 12))}</div>` : ''}`;
+}
+
+function renderRow(el, p) {
+  el.innerHTML = '';
+  const myTurn = game.active === 0 && !game.over;
+  p.board.forEach((c, i) => {
+    const slot = document.createElement('div');
+    slot.className = 'slot';
+    if (!c) {
+      if (!p.cpu && selectedHand()?.type === 'creature') slot.classList.add('droppable');
+      slot.addEventListener('click', () => onSlot(p, i));
+    } else {
+      const ce = cardEl(c);
+      if (c.dead) ce.classList.add('dying');
+      if (c.sick && game.active === c.owner) ce.classList.add('sick');
+      // MTG-style tap: a creature turns sideways once it has attacked, and
+      // straightens again when its owner's next turn begins.
+      const was = tapState.get(c.uid);
+      if (c.attacked) ce.classList.add('tapped', 'spent');
+      if (c.attacked && was === false) ce.classList.add('tap-in');
+      if (!c.attacked && was === true) ce.classList.add('tap-out');
+      tapState.set(c.uid, c.attacked);
+      if (!p.cpu && myTurn && !busy && game.canAttack(c)) {
+        ce.classList.add('ready');
+        // Phase the outline blink off the wall clock so re-renders don't restart
+        // it and every ready creature blinks in sync, like a terminal cursor.
+        ce.style.setProperty('--blink-delay', `${-(performance.now() % 1060)}ms`);
+      }
+      if (sel.attacker === c.uid) ce.classList.add('selected');
+      if ((p.cpu && isTarget({ uid: c.uid })) || isSpellTarget(c)) ce.classList.add('targetable');
+      ce.addEventListener('click', () => onBoardCard(p, c));
+      slot.appendChild(ce);
+    }
+    el.appendChild(slot);
+  });
+}
+
+/* Face-down traps: yours show their art, the Dealer's stay hidden. */
+function renderTraps(el, p) {
+  el.innerHTML = '';
+  const settingTrap = !p.cpu && selectedHand()?.type === 'trap';
+  p.traps.forEach((t, i) => {
+    const s = document.createElement('div');
+    s.className = 'tslot';
+    if (t) {
+      s.classList.add('set');
+      if (!p.cpu) { s.classList.add('mine'); s.innerHTML = `<img src="${spriteURL(t.sprite)}" alt="">`; }
+      s.addEventListener('mouseenter', () => {
+        if (!p.cpu) inspect(t);
+        else $('#inspector').innerHTML = '<div class="i-help"><b>FACE-DOWN TRAP</b><p>The Dealer set this on their turn. It will spring by itself when you attack, summon or cast a spell, depending on what it is.</p></div>';
+      });
+    } else {
+      if (settingTrap) s.classList.add('droppable');
+      s.addEventListener('click', () => { const c = selectedHand(); if (settingTrap && c && myTurnReady()) setTrapAt(c, i); });
+    }
+    el.appendChild(s);
+  });
+}
+
+function renderHand() {
+  const h = $('#hand');
+  h.innerHTML = '';
+  const you = game.players[0];
+  const myTurn = game.active === 0 && !game.over;
+  const n = you.hand.length;
+  const overlap = n > 10 ? -Math.ceil((n * 118 - 1220) / (n - 1)) + 4 : 4;
+  // Lands first, then everything else, with a gap between the two groups.
+  const shown = [...you.hand].sort((a, b) => (a.type === 'land' ? 0 : 1) - (b.type === 'land' ? 0 : 1));
+  const lastLand = shown.filter((c) => c.type === 'land').length - 1;
+  shown.forEach((c, i) => {
+    const ce = cardEl(c);
+    const ok = c.type === 'land' ? !you.landPlayed : game.canCast(you, c);
+    ce.classList.add(myTurn && ok ? 'playable' : 'unplayable');
+    if (sel.hand === c.uid) ce.classList.add('selected');
+    const gap = i === lastLand && i < shown.length - 1 ? 22 : 0;
+    ce.style.margin = `0 ${overlap / 2 + gap}px 0 ${overlap / 2}px`;
+    ce.style.setProperty('--i', i);
+    ce.addEventListener('click', () => onHand(c));
+    h.appendChild(ce);
+  });
+}
+
+function renderTurn() {
+  const mine = game.active === 0;
+  const you = game.players[0];
+  $('#turnInfo').innerHTML = `
+    <div class="ti-turn">TURN ${game.turnNum}</div>
+    <div class="ti-who">${game.over ? 'GAME OVER' : mine ? 'YOUR TURN' : "DEALER'S TURN"}</div>
+    <div class="ti-land">${mine ? (you.landPlayed ? 'Land played' : 'Land: ready') : 'Waiting...'}</div>`;
+  $('#bell').disabled = !mine || busy || game.over;
+}
+
+function renderLog() {
+  $('#log').innerHTML = '<div class="log-title">LOG</div><div class="log-lines">' +
+    game.log.slice(-14).map((l) => `<div class="ll ${l.who}">${l.text}</div>`).join('') + '</div>';
+}
+
+/* ---------- player input ---------- */
+function myTurnReady() { return game && !game.over && game.active === 0 && !busy; }
+
+function clearSel() { sel = { hand: null, attacker: null }; }
+
+function onHand(c) {
+  if (!myTurnReady()) return;
+  const you = game.players[0];
+  sel.attacker = null;
+  if (c.type === 'land') {
+    if (you.landPlayed) { toast('Only one land per turn.'); sfx('err'); return; }
+    game.playLand(you, you.hand.indexOf(c));
+    sel.hand = null;
+    sfx('land');
+    render();
+    return;
+  }
+  if (c.type === 'creature' && !you.board.includes(null)) { toast('Your board is full.'); sfx('err'); return; }
+  if (c.type === 'trap' && !you.traps.includes(null)) { toast('Your trap zone is full.'); sfx('err'); return; }
+  if (c.type === 'spell' && !game.spellUsable(you, c)) {
+    toast(c.target ? 'No valid target for that.' : 'Nothing for that spell to do yet.'); sfx('err'); return;
+  }
+  if (!game.payPlan(you, c.cost)) { toast('Not enough energy.'); sfx('err'); return; }
+  if (sel.hand === c.uid) {
+    if (c.type === 'creature') castAt(c, you.board.indexOf(null));
+    else if (c.type === 'trap') setTrapAt(c, -1);
+    else if (!c.target) castSpellAt(c, null);
+    else toast('Click a highlighted creature to aim it.');
+    return;
+  }
+  sel.hand = c.uid;
+  sfx('select');
+  if (c.type === 'spell') toast(c.target ? 'Choose a target.' : 'Click again to cast.');
+  if (c.type === 'trap') toast('Click again or pick a trap slot to set it.');
+  render();
+}
+
+async function castAt(c, slot) {
+  const g = game, you = game.players[0];
+  busy = true;
+  clearSel();
+  if (!game.cast(you, you.hand.indexOf(c), slot)) { busy = false; toast("Can't summon that."); render(); return; }
+  sfx('place');
+  await showReveals();
+  if (abandoned(g)) return;
+  render();
+  const el = cardElByUid(c.uid);
+  if (el) el.classList.add('enter');
+  flushFx();
+  await settle();
+  busy = false;
+  render();
+}
+
+async function castSpellAt(c, targetUid) {
+  const g = game, you = game.players[0];
+  busy = true;
+  clearSel();
+  if (!game.castSpell(you, you.hand.indexOf(c), targetUid)) { busy = false; toast("Can't cast that."); render(); return; }
+  await playSpellFx(c);
+  if (abandoned(g)) return;
+  busy = false;
+  render();
+}
+
+/* Shared by both players: show the spell, any trap that answered it, then its results. */
+async function playSpellFx(c) {
+  const g = game;
+  sfx('spell');
+  render();
+  await popCard(c, 'SPELL');
+  if (game !== g) return;
+  await showReveals();
+  if (game !== g) return;
+  render();
+  flushFx();
+  await settle();
+}
+
+function setTrapAt(c, slot) {
+  const you = game.players[0];
+  clearSel();
+  if (!game.setTrap(you, you.hand.indexOf(c), slot)) { toast("Can't set that."); render(); return; }
+  sfx('place');
+  render();
+}
+
+function onSlot(p, i) {
+  if (!myTurnReady() || p.cpu) return;
+  const c = selectedHand();
+  if (c && c.type === 'creature') castAt(c, i);
+}
+
+function onBoardCard(p, c) {
+  if (!myTurnReady()) return;
+  const s = selectedHand();
+  if (s && s.type === 'spell' && s.target) {
+    if (isSpellTarget(c)) castSpellAt(s, c.uid);
+    else { toast('Not a valid target for ' + s.name + '.'); sfx('err'); }
+    return;
+  }
+  if (!p.cpu) {
+    if (game.canAttack(c)) {
+      sel.attacker = sel.attacker === c.uid ? null : c.uid;
+      sel.hand = null;
+      sfx('select');
+      render();
+    } else if (c.sick) toast(`${c.name} is not ready to attack yet.`);
+    else if (c.attacked) toast(`${c.name} has already attacked.`);
+    else if (game.attackOf(c) <= 0) toast(`${c.name} has no attack.`);
+    return;
+  }
+  if (sel.attacker == null) return;
+  if (isTarget({ uid: c.uid })) playerAttack({ uid: c.uid });
+  else { toast('A Guardian blocks the way!'); sfx('err'); }
+}
+
+function onEnemyPanel() {
+  if (!myTurnReady() || sel.attacker == null) return;
+  if (isTarget({ player: 1 })) playerAttack({ player: 1 });
+  else { toast('Clear the Dealer\'s creatures first (Airborne ignores this).'); sfx('err'); }
+}
+
+async function playerAttack(t) {
+  const a = selectedAttacker();
+  if (!a) return;
+  busy = true;
+  clearSel();
+  await performAttack(a, t);
+  busy = false;
+  render();
+}
+
+async function performAttack(a, t) {
+  const g = game;
+  // The defender's traps get the first word.
+  if (!game.declareAttack(a, t) || game.reveals.length) {
+    await showReveals();
+    if (abandoned(g)) return;
+    render();
+    flushFx();
+    await settle();
+    if (abandoned(g) || a.attacked || a.dead || !game.onBoard(a)) return;
+  }
+  render();
+  const ae = cardElByUid(a.uid);
+  const te = t.player != null ? panelOf(t.player) : cardElByUid(t.uid);
+  if (ae && te) await lunge(ae, te);
+  if (abandoned(g)) return;
+  game.resolveAttack(a, t);
+  sfx(t.player != null ? 'direct' : 'hit');
+  render();
+  flushFx();
+  await settle();
+}
+
+/* Let dying creatures fade out, then clear them away. */
+async function settle() {
+  const g = game;
+  if (game.hasDying()) {
+    sfx('die');
+    await sleep(480);
+    if (abandoned(g)) return;
+    game.cleanup();
+    render();
+    flushFx();
+  }
+  if (game.over) endGame();
+}
+
+async function playerEndTurn() {
+  if (!myTurnReady()) return;
+  clearSel();
+  busy = true;
+  sfx('bell');
+  const b = $('#bell');
+  b.classList.remove('ring'); void b.offsetWidth; b.classList.add('ring');
+  game.endTurn();
+  render();
+  flushFx();
+  if (game.over) return endGame();
+  await cpuTurn();
+}
+
+/* ---------- the Dealer's turn ---------- */
+async function cpuTurn() {
+  const g = game;
+  busy = true;
+  render();
+  await banner("DEALER'S TURN");
+  if (abandoned(g)) return;
+  const p = game.players[1];
+
+  const li = AI.chooseLand(game, p);
+  if (li >= 0) {
+    game.playLand(p, li);
+    sfx('land');
+    render();
+    await sleep(550);
+    if (abandoned(g)) return;
+  }
+
+  for (let guard = 0; guard < 12; guard++) {
+    const play = AI.chooseCast(game, p);
+    if (!play) break;
+    const c = p.hand[play.i];
+    if (c.type === 'spell') {
+      game.castSpell(p, play.i, play.target);
+      await playSpellFx(c);
+      if (abandoned(g)) return;
+      continue;
+    }
+    game.cast(p, play.i, AI.chooseSlot(game, p));
+    sfx('place');
+    await showReveals();
+    if (abandoned(g)) return;
+    render();
+    inspect(c);
+    const el = cardElByUid(c.uid);
+    if (el) el.classList.add('enter');
+    flushFx();
+    await sleep(650);
+    if (abandoned(g)) return;
+    await settle();
+    if (abandoned(g)) return;
+  }
+
+  for (let guard = 0; guard < 12; guard++) {
+    const m = AI.chooseAttack(game, p);
+    if (!m) break;
+    await sleep(250);
+    if (abandoned(g)) return;
+    await performAttack(m.a, m.t);
+    if (abandoned(g)) return;
+  }
+
+  // Whatever energy is left goes into face-down traps.
+  for (let guard = 0; guard < TRAP_SLOTS; guard++) {
+    const ti = AI.chooseTrap(game, p);
+    if (ti < 0) break;
+    game.setTrap(p, ti);
+    sfx('place');
+    render();
+    await sleep(450);
+    if (abandoned(g)) return;
+  }
+
+  await sleep(400);
+  if (abandoned(g)) return;
+  game.endTurn();
+  render();
+  flushFx();
+  if (game.over) return endGame();
+  await banner('YOUR TURN');
+  busy = false;
+  render();
+}
+
+/* ---------- screens ---------- */
+const RULES_HTML = `
+  <h3>HOW TO PLAY</h3>
+  <ul>
+    <li>You and the Dealer each start with <b>20 life</b> and a <b>30-card</b> deck. Reduce the Dealer to 0.</li>
+    <li>Each turn: draw a card, play up to <b>one land</b>, then summon creatures by spending energy from your lands.</li>
+    <li>Costs: a number can be paid by any land; a symbol (${ico('paw')} ${ico('bone')} ${ico('gem')} ${ico('hat')}) needs that land type.</li>
+    <li>New creatures must wait a turn before attacking. Each creature attacks once per turn.</li>
+    <li>Attack by choosing an enemy creature: both strike each other at once. <b>Damage stays</b> on creatures.</li>
+    <li><b>Spells</b> are cast on your own turn only: they take effect at once, then go to the grave.</li>
+    <li><b>Traps</b> are paid for and set face-down on your turn (up to 3). They spring by themselves on the enemy's turn when they attack, summon or cast a spell.</li>
+    <li>You may only hit the Dealer <b>directly</b> when they have no creatures, unless your attacker is <b>Airborne</b>. <b>Guardians</b> must be attacked first.</li>
+    <li>Ring the <b>bell</b> to end your turn. Drawing from an empty deck hurts, more each time.</li>
+  </ul>`;
+
+function showScreen(html, dim = false) {
+  const s = $('#screen');
+  s.innerHTML = html;
+  s.classList.toggle('dim', dim);
+  s.classList.remove('hidden');
+}
+function hideScreen() { $('#screen').classList.add('hidden'); }
+
+function showTitle() {
+  const parade = ['wolf', 'bat', 'golem', 'owl', 'grizzly', 'draugr', 'drake', 'archmage']
+    .map((n) => `<img src="${spriteURL(n)}" alt="">`).join('');
+  showScreen(`
+    <div class="title">
+      <div class="logo">NIGHTSHADE<span>SPELLSLINGING</span></div>
+      <div class="sub">a duel of beasts, bones, gems &amp; arcana</div>
+      <div class="parade">${parade}</div>
+      <div class="title-btns">
+        <button class="btn big" id="startBtn">START</button>
+        <button class="btn big" id="builderBtn">DECK BUILDER</button>
+        <a class="btn big" href="cardmaker.html" target="_blank" rel="noopener">CARD MAKER &#8599;</a>
+        <a class="btn big" href="charmaker.html" target="_blank" rel="noopener">CHARACTER &#8599;</a>
+      </div>
+      <div class="rules panel">${RULES_HTML}</div>
+    </div>`);
+  $('#startBtn').onclick = () => { sfx('select'); showDeckSelect(); };
+  $('#builderBtn').onclick = () => { sfx('select'); showDeckBuilder(); };
+}
+
+function showDeckSelect() {
+  $('#game').classList.add('hidden');
+  const saved = getSavedDecks().map((d) => ({ d, def: savedDeckToDef(d) }));
+  showScreen(`
+    <div class="ds">
+      <div class="ds-title">CHOOSE YOUR DECK</div>
+      <div class="tablets">${DECKS.map((d, i) => `
+        <div class="tablet" data-i="${i}">
+          <div class="t-art"><img src="${spriteURL(d.feature)}" alt=""></div>
+          <div class="t-icons">${d.colors.map((c) => ico(COLORS[c].icon)).join('')}</div>
+          <div class="t-name">${d.name.toUpperCase()}</div>
+          <div class="t-desc">${d.desc}</div>
+        </div>`).join('')}
+      </div>
+      <div class="my-decks panel">
+        <div class="md-title">MY DECKS</div>
+        <div class="md-list">${saved.map(({ d, def }) => {
+          const n = deckCount(def.list);
+          return `<button class="md-deck" data-id="${escapeHTML(d.id)}" ${n === DECK_SIZE ? '' : 'disabled'} title="${n === DECK_SIZE ? 'Play this deck' : 'Needs exactly 30 cards - open the Deck Builder'}">
+            <img src="${spriteURL(def.feature)}" alt=""><span class="md-name">${escapeHTML(def.name)}</span>
+            <span class="md-meta">${def.colors.map((c) => ico(COLORS[c].icon)).join('')} ${n}/${DECK_SIZE}</span></button>`;
+        }).join('') || '<span class="muted">No saved decks yet. Build one in the Deck Builder.</span>'}</div>
+        <div class="md-btns">
+          <button class="btn" id="dsBuilder">DECK BUILDER</button>
+          <button class="btn" id="dsBack">BACK</button>
+        </div>
+      </div>
+    </div>`);
+  $$('.tablet').forEach((t) => {
+    t.onclick = () => startGame(DECKS[+t.dataset.i]);
+    t.onmouseenter = () => sfx('select');
+  });
+  $$('.md-deck').forEach((b) => {
+    b.onclick = () => { const s = saved.find((x) => x.d.id === b.dataset.id); if (s) startGame(s.def); };
+  });
+  $('#dsBuilder').onclick = () => { sfx('select'); showDeckBuilder(); };
+  $('#dsBack').onclick = () => { sfx('select'); showTitle(); };
+}
+
+function showRules() {
+  if (!$('#screen').classList.contains('hidden')) return;
+  showScreen(`<div class="rules panel">${RULES_HTML}<div class="rules-close"><button class="btn" id="closeRules">BACK</button></div></div>`, true);
+  $('#closeRules').onclick = hideScreen;
+}
+
+async function startGame(deckDef) {
+  const others = DECKS.filter((d) => d !== deckDef);
+  const cpuDeck = others[Math.floor(Math.random() * others.length)];
+  const g = game = new Game(deckDef, cpuDeck);
+  tapState.clear();
+  ended = false;
+  busy = true;
+  clearSel();
+  hideScreen();
+  $('#game').classList.remove('hidden');
+  inspectDefault();
+  game.startTurn();
+  render();
+  await banner(game.active === 0 ? 'YOU GO FIRST' : 'THE DEALER GOES FIRST');
+  if (abandoned(g)) return;
+  if (game.active === 1) await cpuTurn();
+  else { busy = false; render(); }
+}
+
+/* True once a match was conceded or replaced, so in-flight async steps stop touching it. */
+function abandoned(g) { return game !== g || g.over; }
+
+function showConcede() {
+  if (!game || ended || !$('#screen').classList.contains('hidden')) return;
+  sfx('select');
+  showScreen(`
+    <div class="result panel">
+      <div class="r-title">CONCEDE?</div>
+      <div class="r-sub">You will lose this match and return to the main menu.</div>
+      <div class="concede-btns">
+        <button class="btn" id="concedeYes">CONCEDE</button>
+        <button class="btn" id="concedeNo">KEEP PLAYING</button>
+      </div>
+    </div>`, true);
+  $('#concedeYes').onclick = concede;
+  $('#concedeNo').onclick = () => { sfx('select'); hideScreen(); };
+}
+
+function concede() {
+  if (game && !ended) {
+    game.over = true;
+    game.winner = 1;
+    ended = true;
+    busy = true;
+    clearSel();
+    sfx('lose');
+  }
+  $('#banner').classList.remove('show');
+  $('#game').classList.add('hidden');
+  showTitle();
+}
+
+function endGame() {
+  if (ended) return;
+  ended = true;
+  busy = true;
+  render();
+  const won = game.winner === 0;
+  sfx(won ? 'win' : 'lose');
+  CRT.pulse(1.2, true);
+  const [you, cpu] = game.players;
+  setTimeout(() => {
+    showScreen(`
+      <div class="result panel">
+        <img class="r-art" src="${spriteURL(won ? 'hero' : 'dealer')}" alt="">
+        <div class="r-title">${won ? 'VICTORY' : 'DEFEAT'}</div>
+        <div class="r-sub">${won ? "The Dealer's life is spent." : 'Your life is spent. The Dealer collects your card.'}</div>
+        <div class="r-stats">Turn ${game.turnNum} &middot; Your life ${Math.max(0, you.life)} &middot; Dealer ${Math.max(0, cpu.life)}</div>
+        <button class="btn" id="againBtn">PLAY AGAIN</button>
+      </div>`, true);
+    $('#againBtn').onclick = () => { sfx('select'); showDeckSelect(); };
+  }, 1000);
+}
+
+/* ---------- global input ---------- */
+$('#bellImg').src = spriteURL('bell');
+$('#bell').addEventListener('click', playerEndTurn);
+panelOf(1).addEventListener('click', onEnemyPanel);
+$('#helpBtn').addEventListener('click', showRules);
+$('#concedeBtn').addEventListener('click', showConcede);
+$('#muteBtn').addEventListener('click', () => {
+  Sfx.muted = !Sfx.muted;
+  Music.setMuted(Sfx.muted);
+  $('#muteBtn').classList.toggle('off', Sfx.muted);
+});
+document.addEventListener('keydown', (e) => {
+  const inGame = game && !$('#game').classList.contains('hidden') && $('#screen').classList.contains('hidden');
+  if (!inGame) return;
+  if (e.key === 'Escape') { clearSel(); render(); }
+  if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); playerEndTurn(); }
+});
+stage.addEventListener('contextmenu', (e) => {
+  e.preventDefault();
+  if (game) { clearSel(); render(); }
+});
+$('#board').addEventListener('mouseleave', () => { if (game && !busy) inspectDefault(); });
+
+/* Live sync with the Card Maker / Character Maker (another tab on the same address). */
+onSharedChange((key) => {
+  if (key === HERO_KEY) {
+    if (game) render();
+    toast('Character updated.');
+    return;
+  }
+  const s = $('#screen');
+  if (!s.classList.contains('hidden')) {
+    if (s.querySelector('.db')) refreshDeckBuilder();
+    else if (s.querySelector('.ds')) showDeckSelect();
+  }
+  if (key !== DECKS_KEY) toast(`Synced ${customIds.length} custom card${customIds.length === 1 ? '' : 's'}.`);
+});
+
+$('#crtBtn').addEventListener('click', () => toast(`CRT effect: ${CRT.cycle().toUpperCase()}`));
+CRT.init();
+showTitle();
