@@ -79,7 +79,6 @@ function cardInnerHTML(c, atk = c.atk, hpNow = c.hp - (c.dmg || 0)) {
     <img class="c-art" src="${spriteURL(c.sprite)}" alt="">
     <div class="c-cost">${costHTML(c.cost)}</div>
     <div class="c-sigils">${c.sigils.map((s) => ico(SIGILS[s].icon)).join('')}</div>
-    ${c.custom ? '<div class="c-custom">NEW!</div>' : ''}
     <div class="c-stats">
       <span class="c-atk${c.wither ? ' hurt' : atk > c.atk ? ' buff' : ''}">${ico('atk')}${atk}</span>
       <span class="c-hp${hpNow < c.hp || c.wither ? ' hurt' : ''}">${hpNow}${ico('hp')}</span>

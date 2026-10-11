@@ -100,22 +100,26 @@ const Backdrop = {
     const vs = 'attribute vec2 p; void main(){ gl_Position = vec4(p, 0.0, 1.0); }';
     const fs = `
       precision mediump float;
-      uniform vec2 res; uniform float t;
+      uniform vec2 res; uniform float t; uniform float warp;
       void main() {
         vec2 uv = (gl_FragCoord.xy - 0.5 * res) / min(res.x, res.y);
-        float r = length(uv);
-        float ang = atan(uv.y, uv.x) + t * 0.06 - r * 1.6 + sin(t * 0.21) * 0.4;
+        float r = length(uv) + 1e-4;
+        // warp (0..1) winds the paint into a Bejeweled 2 style hyperspace tunnel.
+        float ang = atan(uv.y, uv.x) + t * 0.06 - r * (1.6 + warp * 10.0) + sin(t * 0.21) * 0.4;
         vec2 p = vec2(cos(ang), sin(ang)) * r * 2.6;
         for (int i = 0; i < 5; i++) {
           p += 0.55 * vec2(sin(p.y * 1.35 + t * 0.33 + float(i)), cos(p.x * 1.15 - t * 0.27 - float(i) * 0.7));
         }
         float v = 0.5 + 0.5 * sin(p.x * 1.3 + p.y * 1.1 + t * 0.25);
         v = v * 0.85 + 0.15 * (1.0 - smoothstep(0.2, 1.3, r));
+        float tunnel = 0.5 + 0.5 * sin(log(r) * 9.0 + t * 1.4 + ang * 3.0);
+        v = mix(v, tunnel, warp);
         float q = floor(clamp(v, 0.0, 0.999) * 4.0);
         vec3 c = vec3(0.561, 0.604, 0.424);                 // #8f9a6c
         if (q > 0.5) c = vec3(0.639, 0.678, 0.498);         // #a3ad7f
         if (q > 1.5) c = vec3(0.702, 0.737, 0.541);         // #b3bc8a
         if (q > 2.5) c = vec3(0.765, 0.796, 0.608);         // #c3cb9b
+        if (warp > 0.6 && r < 0.09 * warp) c = vec3(0.231, 0.267, 0.188); // #3b4430 core
         gl_FragColor = vec4(c, 1.0);
       }`;
     const sh = (type, src) => { const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s); return s; };
@@ -133,6 +137,7 @@ const Backdrop = {
     gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
     this.uRes = gl.getUniformLocation(prog, 'res');
     this.uT = gl.getUniformLocation(prog, 't');
+    this.uWarp = gl.getUniformLocation(prog, 'warp');
     this.resize();
     window.addEventListener('resize', () => this.resize());
   },
@@ -149,9 +154,32 @@ const Backdrop = {
   draw(t) {
     if (!this.gl) return;
     this.gl.uniform2f(this.uRes, this.w, this.h);
-    this.gl.uniform1f(this.uT, t);
+    this.gl.uniform1f(this.uT, t + this.boost);
+    this.gl.uniform1f(this.uWarp, this.warp);
     this.gl.drawArrays(this.gl.TRIANGLES, 0, 3);
   },
-  frame(t) { if (++this.tick % 2 === 0) this.draw(t); }, // 30fps is plenty for slow paint
+  // 30fps is plenty for slow paint; the vortex gets every frame.
+  frame(t) { if (this.warp > 0 || ++this.tick % 2 === 0) this.draw(t); },
   drawOnce() { this.draw((performance.now() - CRT.t0) / 1000); },
+
+  /* Victory warp: wind up 1.2s, spin 1.2s, settle 1s. Time runs up to 15x faster
+     while it spins; `boost` keeps the extra time so the paint doesn't snap back.
+     Resolves as it starts to settle, so the result can arrive with the calm. */
+  warp: 0, boost: 0,
+  vortex() {
+    return new Promise((done) => {
+      if (!this.gl || CRT.level === 'off') { done(); return; }
+      const t0 = performance.now();
+      let last = t0, settled = false;
+      const step = (now) => {
+        const e = (now - t0) / 1000;
+        this.boost += ((now - last) / 1000) * this.warp * 14;
+        last = now;
+        this.warp = e < 1.2 ? e / 1.2 : e < 2.4 ? 1 : Math.max(0, 1 - (e - 2.4));
+        if (e >= 2.4 && !settled) { settled = true; done(); }
+        if (this.warp > 0 || e < 2.4) requestAnimationFrame(step);
+      };
+      requestAnimationFrame(step);
+    });
+  },
 };

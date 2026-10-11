@@ -203,6 +203,15 @@ body[data-crt="off"] .crt-tube { background: radial-gradient(ellipse at center, 
   mix-blend-mode: soft-light;
 }
 .card.tilting .c-glare { opacity: 1; }
+/* Rare (4+ cost) cards: a stepped glint sweeps across now and then. */
+.card.rare:not(.tilting) .c-glare {
+  opacity: 1; transition: none; mix-blend-mode: normal;
+  background: linear-gradient(115deg, transparent 42%, rgba(255,255,240,.5) 42%, rgba(255,255,240,.5) 47%, transparent 47%, transparent 49%, rgba(255,255,240,.35) 49%, rgba(255,255,240,.35) 51%, transparent 51%) no-repeat;
+  background-size: 300% 100%;
+  animation: rareShine 3.2s steps(14) infinite;
+}
+@keyframes rareShine { 0% { background-position: 100% 0; } 45%, 100% { background-position: 0 0; } }
+body[data-crt="off"] .card.rare:not(.tilting) .c-glare { animation: none; opacity: 0; }
 
 /* MTG-style tapping: sideways once it has attacked. */
 .card.tapped { rotate: 90deg; scale: .7; }
@@ -301,14 +310,17 @@ body[data-crt="off"] .crt-tube { background: radial-gradient(ellipse at center, 
 #stage.dragging, #stage.dragging * { cursor: grabbing !important; }
 #dragArrow { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 155; display: none; overflow: visible; }
 #dragArrow.on { display: block; }
-#dragArrow path { fill: none; stroke-linecap: round; }
-#dragArrow .da-back { stroke: var(--ink); stroke-width: 11; }
-#dragArrow .da-line { stroke: var(--accent); stroke-width: 5; stroke-dasharray: 12 8; animation: daMarch .4s linear infinite; }
-#dragArrow .da-head { fill: var(--accent); stroke: var(--ink); stroke-width: 3; stroke-linejoin: round; }
-@keyframes daMarch { to { stroke-dashoffset: -20; } }
+/* Trail of pixel dots that gently swell and shrink, the pulse rippling along the trail. */
+#dragArrow .da-dot {
+  fill: var(--light); stroke: var(--ink); stroke-width: 3; paint-order: stroke; /* outline keeps it visible over light cards */
+  transform-box: fill-box; transform-origin: center;
+  animation: daPulse .9s ease-in-out infinite alternate;
+}
+@keyframes daPulse { from { transform: scale(.7); } to { transform: scale(1.15); } }
+/* Hovered targets keep the game's own outlines, held steady instead of blinking. */
 .slot.drop-hover, .tslot.drop-hover { border: 2px solid var(--white); background: rgba(217,122,43,.35); animation: none; }
 .slot.drop-hover .card { outline: 3px solid var(--white); animation: none; }
-.ppanel.drop-hover { outline: 3px solid var(--white); animation: none; }
+.ppanel.drop-hover { animation: none; }
 
 /* ---------- fx ---------- */
 #fx { position: absolute; inset: 0; pointer-events: none; z-index: 150; }
@@ -318,6 +330,8 @@ body[data-crt="off"] .crt-tube { background: radial-gradient(ellipse at center, 
   transform: translate(-50%, 0); white-space: nowrap;
 }
 .float.heal { color: var(--white); }
+.spark { position: absolute; width: 6px; height: 6px; background: var(--ink); }
+.spark.hot { background: var(--accent); }
 
 #toast {
   position: absolute; left: 605px; top: 452px; transform: translateX(-50%);
@@ -402,6 +416,10 @@ body[data-crt="off"] .crt-tube { background: radial-gradient(ellipse at center, 
 .r-title { font-family: var(--pixel); font-size: 64px; letter-spacing: 6px; }
 .r-sub { font-size: 26px; }
 .r-stats { font-size: 22px; color: var(--mid); margin-bottom: 8px; }
+.r-tally { width: 340px; font-size: 22px; line-height: 24px; color: var(--mid); margin: -4px 0 8px; }
+.r-tally div { display: flex; justify-content: space-between; }
+.r-tally b { font-weight: normal; color: var(--ink); }
+.r-tally .r-score { border-top: 2px solid var(--light); margin-top: 4px; padding-top: 4px; font-family: var(--pixel); font-size: 15px; color: var(--ink); }
 .r-art { width: 96px; height: 96px; background: var(--artbg); border: 3px solid var(--ink); }
 
 /* ---------- opening dice roll ---------- */
@@ -532,7 +550,6 @@ a.btn { text-decoration: none; display: inline-block; }
 .db-actions { display: flex; gap: 8px; }
 .db-actions .btn { flex: 1; padding: 8px 4px; }
 
-<<<<<<< HEAD
 /* deck art button + picker */
 #dbArt { display: flex; align-items: center; gap: 6px; padding: 2px 10px 2px 2px; }
 #dbArt img { width: 32px; height: 32px; image-rendering: pixelated; background: var(--paper); border: 2px solid var(--ink); }
@@ -580,8 +597,6 @@ a.btn { text-decoration: none; display: inline-block; }
 #pix { width: 352px; height: 352px; align-self: center; border: 3px solid var(--ink); cursor: crosshair; image-rendering: pixelated; touch-action: none; }
 .cm-template { width: 100%; font-size: 19px; cursor: pointer; }
 
-=======
->>>>>>> origin/main
 /* ---------- online account (js/cloud.js) ---------- */
 .acct { display: flex; align-items: center; gap: 8px; padding: 3px 4px 3px 10px; background: var(--paper); border: 2px solid var(--ink); font-family: var(--pixel); font-size: 11px; color: var(--ink); white-space: nowrap; }
 .acct b { font-size: 12px; }
@@ -605,7 +620,6 @@ a.btn { text-decoration: none; display: inline-block; }
 .com-item { display: flex; flex-direction: column; align-items: center; gap: 4px; }
 .com-item .card { position: relative; cursor: default; }
 .com-by { max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 16px; }
-<<<<<<< HEAD
 
 /* ---------- online play (js/netplay.js) ---------- */
 .title-acct { display: flex; align-items: center; gap: 12px; }
@@ -628,5 +642,3 @@ a.btn { text-decoration: none; display: inline-block; }
 .ol-dots span:nth-child(2) { animation-delay: .4s; }
 .ol-dots span:nth-child(3) { animation-delay: .8s; }
 @keyframes olDot { 50% { opacity: .2; } }
-=======
->>>>>>> origin/main

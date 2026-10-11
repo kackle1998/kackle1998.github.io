@@ -88,10 +88,16 @@ const Sfx = {
     s.start();
   },
 };
-function sfx(name) {
+function sfx(name, n = 1) {
   if (FAST) return;
   const S = Sfx;
   switch (name) {
+    // Combo hits climb a semitone per link; the callout chime climbs with them.
+    case 'chain': S.tone(330 * 2 ** ((n - 1) / 12), 0.12, 'square', 0.045); break;
+    case 'callout': [0, 4, 7].forEach((st, i) => S.tone(523 * 2 ** ((n - 2 + st) / 12), 0.2, 'triangle', 0.05, null, i * 0.07)); break;
+    case 'warp': S.tone(70, 2.4, 'sawtooth', 0.04, 1300); S.tone(105, 2.4, 'square', 0.025, 1900); S.noise(0.6, 0.05); break;
+    case 'tick': S.tone(900, 0.02, 'square', 0.015); break;
+    case 'tally': S.tone(1320, 0.15, 'triangle', 0.04); break;
     case 'select': S.tone(660, 0.04, 'square', 0.025); break;
     case 'place': S.tone(220, 0.07, 'square', 0.035); S.tone(330, 0.08, 'square', 0.035, null, 0.06); break;
     // Low triangle waves barely register on small speakers, so the land thump carries a square layer for presence.
@@ -167,8 +173,10 @@ function toast(msg) {
   toastTimer = setTimeout(() => t.classList.remove('show'), 1400);
 }
 
+let bannerUntil = 0; // combo callouts never cover a banner that's still showing
 function banner(text) {
   if (FAST) return sleep(0);
+  bannerUntil = performance.now() + 1200;
   const b = $('#banner');
   b.textContent = text;
   b.classList.remove('show');
@@ -209,9 +217,59 @@ function shake(el) {
   ], { duration: 260, easing: 'steps(5)' });
 }
 
+/* ---------- combos (Bejeweled 2 style) ----------
+   Each action in a turn that damages the other side is one link in the chain. */
+const CALLOUTS = [null, null, 'GOOD!', 'EXCELLENT!', 'AWESOME!', 'SPECTACULAR!', 'EXTRAORDINARY!', 'UNBELIEVABLE!'];
+const calloutFor = (n) => CALLOUTS[Math.min(n, CALLOUTS.length - 1)];
+let combo = { game: null, turn: -1, n: 0 };
+
+function matchStats() { return game.stats || (game.stats = { dmg: 0, summons: 0, bestChain: 0 }); }
+function ownerOf(uid) {
+  const p = game.players.find((pl) => pl.board.some((c) => c && c.uid === uid) || pl.grave.some((c) => c.uid === uid));
+  return p ? p.idx : -1;
+}
+
+/* Count this action's hits on the inactive player; returns the chain length, or 0 if it dealt none. */
+function countCombo(fx) {
+  const foe = 1 - game.active;
+  const hits = fx.filter((f) => f.kind === 'dmg' && (f.player != null ? f.player === foe : ownerOf(f.uid) === foe));
+  if (!hits.length) return 0;
+  if (combo.game !== game || combo.turn !== game.turnNum) combo = { game, turn: game.turnNum, n: 0 };
+  combo.n++;
+  if (game.active === ME) {
+    const st = matchStats();
+    st.dmg += hits.reduce((s, f) => s + f.n, 0);
+    st.bestChain = Math.max(st.bestChain, combo.n);
+  }
+  return combo.n;
+}
+
+function sparks(r) {
+  if (document.body.dataset.crt === 'off') return;
+  for (let i = 0; i < 8; i++) {
+    const p = document.createElement('div');
+    p.className = 'spark' + (i % 2 ? ' hot' : '');
+    p.style.left = r.x + r.w / 2 + 'px';
+    p.style.top = r.y + r.h / 2 + 'px';
+    $('#fx').appendChild(p);
+    const a = (i / 8) * Math.PI * 2, d = 34;
+    p.animate([
+      { transform: 'translate(-50%, -50%)', opacity: 1 },
+      { transform: `translate(calc(-50% + ${Math.round(Math.cos(a) * d)}px), calc(-50% + ${Math.round(Math.sin(a) * d)}px))`, opacity: 0 },
+    ], { duration: 380, easing: 'steps(5)', fill: 'forwards' }).finished.then(() => p.remove());
+  }
+}
+
 function flushFx() {
   const fx = game.fx.splice(0);
+  const chain = countCombo(fx);
   if (FAST) return;
+  if (chain) {
+    sfx('chain', chain);
+    const word = calloutFor(chain);
+    if (word && !game.over && performance.now() > bannerUntil) { banner(word); sfx('callout', chain); }
+  }
+  let tagged = false;
   fx.forEach((f, i) => {
     let el, shakeEl;
     if (f.uid != null) { el = cardElByUid(f.uid); shakeEl = el; }
@@ -229,8 +287,25 @@ function flushFx() {
       { transform: 'translate(-50%, -36px)', opacity: 1, offset: 0.7 },
       { transform: 'translate(-50%, -48px)', opacity: 0 },
     ], { duration: 1100, delay: i * 70, easing: 'steps(12)', fill: 'forwards' }).finished.then(() => d.remove());
-    if (f.kind === 'dmg') { shake(shakeEl); CRT.pulse(Math.min(1, 0.15 + f.n / 6), f.player != null); }
-    else sfx('heal');
+    if (f.kind === 'dmg') {
+      shake(shakeEl); CRT.pulse(Math.min(1, 0.15 + f.n / 6), f.player != null);
+      sparks(r);
+      // The first hit of a chained action also shows the link count.
+      if (chain >= 2 && !tagged) {
+        tagged = true;
+        const x = document.createElement('div');
+        x.className = 'float heal';
+        x.textContent = 'x' + chain;
+        x.style.left = r.x + r.w / 2 + 44 + 'px';
+        x.style.top = r.y + r.h / 2 + 'px';
+        $('#fx').appendChild(x);
+        x.animate([
+          { transform: 'translate(-50%, 0)', opacity: 1 },
+          { transform: 'translate(-50%, -30px)', opacity: 1, offset: 0.7 },
+          { transform: 'translate(-50%, -40px)', opacity: 0 },
+        ], { duration: 1100, delay: i * 70 + 120, easing: 'steps(12)', fill: 'forwards' }).finished.then(() => x.remove());
+      }
+    } else sfx('heal');
   });
 }
 
@@ -264,7 +339,9 @@ async function showReveals() {
 /* ---------- card elements ---------- */
 function cardEl(c) {
   const el = document.createElement('div');
-  el.className = `card ${c.type}${c.token ? ' token' : ''}`;
+  // Pricey cards catch the light now and then, like a special gem.
+  const rare = c.cost && Object.values(c.cost).reduce((s, n) => s + n, 0) >= 4;
+  el.className = `card ${c.type}${c.token ? ' token' : ''}${rare ? ' rare' : ''}`;
   el.dataset.uid = c.uid;
   el.innerHTML = cardInnerHTML(c, game && c.type === 'creature' ? game.attackOf(c) : c.atk);
   el.addEventListener('mouseenter', () => inspect(c));
@@ -484,6 +561,7 @@ async function castAt(c, slot) {
   busy = true;
   clearSel();
   if (!game.cast(you, you.hand.indexOf(c), slot)) { busy = false; toast("Can't summon that."); render(); return; }
+  matchStats().summons++;
   sfx('place');
   await showReveals();
   if (abandoned(g)) return;
@@ -574,17 +652,19 @@ function onEnemyPanel() {
 }
 
 /* ---------- drag to target ----------
-   Press a hand card or a ready creature and drag: an arrow follows the pointer,
-   and letting go over a target does what the two clicks would. A press that
-   doesn't move stays a plain click. */
-const DRAG_MIN = 6; // px of movement before a press becomes a drag
-let drag = null;    // { c, fromHand, x0, y0, kind, from, hover }
+   Press a hand card or a ready creature and drag: a trail of pixel dots follows
+   the pointer, and letting go over a target does what the two clicks would.
+   A press that doesn't move stays a plain click. */
+const DRAG_MIN = 6;  // px of movement before a press becomes a drag
+const DOT_GAP = 14;  // stage px between trail dots
+let drag = null;     // { c, fromHand, x0, y0, kind, from, hover }
 let swallowClick = false;
 const dragArrow = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
 dragArrow.id = 'dragArrow';
 dragArrow.setAttribute('viewBox', '0 0 1280 720');
-dragArrow.innerHTML = '<path class="da-back"/><path class="da-line"/><polygon class="da-head"/>';
+dragArrow.setAttribute('shape-rendering', 'crispEdges');
 $('#screenWrap').appendChild(dragArrow);
+const dragDots = []; // reused between moves so each dot's pulse keeps running
 
 function toStage(x, y) {
   const s = stage.getBoundingClientRect();
@@ -638,12 +718,30 @@ function drawArrow(x, y) {
   const a = drag.from, b = toStage(x, y);
   // Bow the arrow upward a little, like a thrown line.
   const cx = (a.x + b.x) / 2, cy = Math.min(a.y, b.y) - Math.min(120, Math.hypot(b.x - a.x, b.y - a.y) * 0.3);
-  const d = `M${a.x},${a.y} Q${cx},${cy} ${b.x},${b.y}`;
-  dragArrow.querySelector('.da-back').setAttribute('d', d);
-  dragArrow.querySelector('.da-line').setAttribute('d', d);
-  const ang = Math.atan2(b.y - cy, b.x - cx), L = 22, W = 14;
-  const pt = (dx, dy) => `${b.x + dx * Math.cos(ang) - dy * Math.sin(ang)},${b.y + dx * Math.sin(ang) + dy * Math.cos(ang)}`;
-  dragArrow.querySelector('.da-head').setAttribute('points', `${pt(6, 0)} ${pt(-L, -W)} ${pt(-L, W)}`);
+  const at = (t) => { const u = 1 - t; return { x: u * u * a.x + 2 * u * t * cx + t * t * b.x, y: u * u * a.y + 2 * u * t * cy + t * t * b.y }; };
+  // Walk the curve, dropping a dot every DOT_GAP px, snapped to a 2px grid.
+  const pts = [];
+  let last = at(0);
+  for (let t = 0.01; t <= 1; t += 0.004) {
+    const p = at(t);
+    if (Math.hypot(p.x - last.x, p.y - last.y) >= DOT_GAP) { pts.push(p); last = p; }
+  }
+  pts.forEach((p, i) => {
+    let dot = dragDots[i];
+    if (!dot) {
+      dot = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+      dot.setAttribute('class', 'da-dot');
+      dot.setAttribute('width', 6);
+      dot.setAttribute('height', 6);
+      dot.style.animationDelay = `${-i * 90}ms`; // the pulse ripples along the trail
+      dragArrow.appendChild(dot);
+      dragDots.push(dot);
+    }
+    dot.setAttribute('x', Math.round(p.x / 2) * 2 - 3);
+    dot.setAttribute('y', Math.round(p.y / 2) * 2 - 3);
+    dot.style.display = '';
+  });
+  for (let i = pts.length; i < dragDots.length; i++) dragDots[i].style.display = 'none';
 }
 
 function dragEnd() {
@@ -878,7 +976,6 @@ function showTitle() {
         <a class="btn big" href="cardmaker.html">CARD MAKER</a>
         <a class="btn big" href="charmaker.html">CHARACTER</a>
       </div>
-<<<<<<< HEAD
       <div class="title-acct">
         ${Cloud.enabled ? '<button class="btn" id="onlineBtn" title="Play another person (needs an account)">PLAY ONLINE</button>' : ''}
         <div id="acctSlot"></div>
@@ -887,12 +984,6 @@ function showTitle() {
     </div>`);
   Cloud.mount($('#acctSlot'));
   if ($('#onlineBtn')) $('#onlineBtn').onclick = () => { sfx('select'); Net.showOnline(); };
-=======
-      <div id="acctSlot"></div>
-      <div class="rules panel">${RULES_HTML}</div>
-    </div>`);
-  Cloud.mount($('#acctSlot'));
->>>>>>> origin/main
   $('#startBtn').onclick = () => { sfx('select'); showDeckSelect(); };
   $('#builderBtn').onclick = () => { sfx('select'); showDeckBuilder(); };
 }
@@ -1042,10 +1133,7 @@ async function startGame(deckDef) {
   const others = DECKS.filter((d) => d !== deckDef);
   const cpuDeck = others[Math.floor(Math.random() * others.length)];
   const { first, you, cpu } = await rollForFirst();
-<<<<<<< HEAD
   setSeats(0);
-=======
->>>>>>> origin/main
   const g = game = new Game(deckDef, cpuDeck, first);
   g.log.unshift({ text: `You rolled ${you}, the Dealer rolled ${cpu}.`, who: '' });
   tapState.clear();
@@ -1104,22 +1192,87 @@ function endGame() {
   const won = game.winner === ME;
   sfx(won ? 'win' : 'lose');
   CRT.pulse(1.2, true);
-  const you = game.players[ME], opp = game.players[OPP];
+  const g = game, you = g.players[ME], opp = g.players[OPP];
   const net = online() ? Net.result() : null; // also reports the result to the server
-  setTimeout(() => {
+  const st = matchStats();
+  const show = (dim) => {
+    if (game !== g) return;
     showScreen(`
       <div class="result panel">
         <img class="r-art" src="${spriteURL(won ? 'hero' : oppSprite())}" alt="">
         <div class="r-title">${net ? net.title : won ? 'VICTORY' : 'DEFEAT'}</div>
         <div class="r-sub">${net ? escapeHTML(net.sub) : won ? "The Dealer's life hit zero. You beat the house." : 'Your life hit zero. The house wins this one.'}</div>
-        <div class="r-stats">Turn ${game.turnNum} &middot; Your life ${Math.max(0, you.life)} &middot; ${escapeHTML(net ? Net.oppName : 'Dealer')} ${Math.max(0, opp.life)}</div>
+        <div class="r-stats">Turn ${g.turnNum} &middot; Your life ${Math.max(0, you.life)} &middot; ${escapeHTML(net ? Net.oppName : 'Dealer')} ${Math.max(0, opp.life)}</div>
+        <div class="r-tally">
+          <div><span>DAMAGE DEALT</span><b>${st.dmg}</b></div>
+          <div><span>CREATURES SUMMONED</span><b>${st.summons}</b></div>
+          <div><span>BEST CHAIN</span><b>${st.bestChain}</b></div>
+          <div class="r-score"><span>SCORE</span><b>${st.dmg * 100 + st.summons * 50 + st.bestChain * 200}</b></div>
+        </div>
         <button class="btn" id="againBtn">PLAY AGAIN</button>
-      </div>`, true);
+      </div>`, dim);
     $('#againBtn').onclick = () => {
       sfx('select');
       if (net) { Net.leave(); Net.showOnline(); } else showDeckSelect();
     };
-  }, 1000);
+    if (!FAST) {
+      $('.result').animate([{ transform: 'translateY(-30px) scale(.6)', opacity: 0 }, { transform: 'none', opacity: 1 }], { duration: 360, easing: 'steps(6)' });
+      tallyUp($$('.r-tally b'));
+    }
+  };
+  if (!won || FAST || CRT.level === 'off') { setTimeout(() => show(true), FAST ? 0 : 1000); return; }
+
+  // Victory: the board spirals into the middle and the backdrop warps, Bejeweled 2 style.
+  setTimeout(() => {
+    if (game !== g) return;
+    banner(calloutFor(Math.max(3, combo.game === g && combo.turn === g.turnNum ? combo.n : 0)));
+    sfx('callout', 3);
+  }, 300);
+  setTimeout(async () => {
+    if (game !== g) return;
+    const b = relRect($('#board'));
+    const cx = b.x + b.w / 2, cy = b.y + b.h / 2;
+    $$('#board .card').forEach((c, i) => {
+      const r = relRect(c), dx = cx - (r.x + r.w / 2), dy = cy - (r.y + r.h / 2), spin = i % 2 ? 540 : -540;
+      const keys = [];
+      for (let s = 0; s <= 10; s++) {
+        const p = s / 10;
+        keys.push({ transform: `translate(${dx * p * p}px, ${dy * p * p}px) rotate(${spin * p}deg) scale(${1 - p})` });
+      }
+      c.animate(keys, { duration: 1100, delay: i * 60, easing: 'steps(16)', fill: 'forwards' });
+    });
+    sfx('warp');
+    const vortex = Backdrop.vortex();
+    await sleep(900);
+    if (game !== g) return;
+    const gameEl = $('#game');
+    await gameEl.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 400, easing: 'steps(4)', fill: 'forwards' }).finished;
+    gameEl.classList.add('hidden');
+    gameEl.getAnimations().forEach((a) => a.cancel());
+    await vortex;
+    show(false);
+  }, 1500);
+}
+
+/* Results count up one row at a time, Mario-time-bonus style. Click to skip. */
+function tallyUp(els) {
+  const goals = [...els].map((e) => +e.textContent);
+  els.forEach((e) => (e.textContent = '0'));
+  let row = 0, timer = null, skip = false;
+  const finish = () => { skip = true; clearInterval(timer); els.forEach((e, i) => (e.textContent = goals[i])); };
+  $('.result').addEventListener('click', finish, { once: true });
+  const next = () => {
+    if (skip || row >= els.length) return;
+    const el = els[row], goal = goals[row], stepBy = Math.max(1, Math.ceil(goal / 20));
+    let v = 0;
+    timer = setInterval(() => {
+      v = Math.min(goal, v + stepBy);
+      el.textContent = v;
+      sfx('tick');
+      if (v >= goal) { clearInterval(timer); sfx('tally'); row++; setTimeout(next, 220); }
+    }, 40);
+  };
+  setTimeout(next, 500);
 }
 
 /* ---------- global input ---------- */

@@ -339,7 +339,7 @@ function dbInfoDefault() {
     <b>BUILDING A DECK</b>
     <p>Click a card to add it, right-click to remove it. Up to ${MAX_COPIES} copies of each creature, spell or trap; lands are unlimited.</p>
     <p>A deck needs exactly ${DECK_SIZE} cards. Around 12 lands is a good start. AUTO-COMPLETE fills the rest for you.</p>
-    <p>Cards marked <span class="c-custom inline">NEW!</span> come from your Card Maker and update live while you edit them.</p></div>`;
+    <p>Cards from your Card Maker update live while you edit them.</p></div>`;
 }
 
 function dbInfo(c) {
