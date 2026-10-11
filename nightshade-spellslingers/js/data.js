@@ -180,6 +180,7 @@ const ICONS = {
   meteor:    ['#......', '.#.....', '..#.##.', '...####', '..#####', '...###.', '.......'],
   might:     ['...#...', '..###..', '.#####.', '...#...', '...#...', '.#####.', '.......'],
   howl:      ['..###..', '.##....', '##.....', '##..#..', '##.....', '.##....', '..###..'],
+  massacre:  ['.####..', '#....#.', '......#', '.....#.', '....#..', '...#...', '..#....'],
   drain:     ['...#...', '...#...', '..###..', '.#####.', '.##.##.', '.#####.', '..###..'],
   raise:     ['.#.#.#.', '.#.#.#.', '.#####.', '.#####.', '..###..', '#######', '#.#.#.#'],
   restore:   ['...#...', '..###..', '#######', '..###..', '...#...', '.#...#.', '#.....#'],
@@ -229,6 +230,12 @@ const SIGILS = {
   mend:       { name: 'Mend',       icon: 'mend',       text: (c) => `When summoned, gain ${c.mend} life.` },
   rally:      { name: 'Rally',      icon: 'rally',      text: () => 'Your other creatures get +1 attack.' },
 };
+
+/* Sigils with an amount show it in their name: 'Snipe 2', 'Mend 3'. */
+function sigilName(k, c) {
+  const n = c && c[k];
+  return typeof n === 'number' ? `${SIGILS[k].name} ${n}` : SIGILS[k].name;
+}
 
 /* '2PP' -> {g:2, paw:2}.  P=paw K=bone G=gem H=hat */
 function parseCost(s) {
@@ -293,6 +300,7 @@ function spell(id, name, color, cost, fx, n, target, short, text) {
 spell('might',    'Feral Might', 'paw',  '1P',  'buff',    2, 'ally',  'Ally gets +2/+2',      'Your target creature gets +2 attack and +2 health for good.');
 spell('howl',     'Pack Howl',   'paw',  '2PP', 'howl',    1, null,    'All allies +1/+1',     'Every creature you control gets +1 attack and +1 health for good.');
 spell('drain',    'Soul Drain',  'bone', '1K',  'drain',   2, null,    'Enemy -2, you +2',     'Deal 2 damage to the enemy and gain 2 life.');
+spell('massacre', 'Massacre',    'bone', '3KK', 'massacre', 2, null,  'Foes -2/-2, drain 2',  'Every enemy creature gets -2/-2 until end of turn. If any perish, the enemy loses 2 life and you gain 2.');
 spell('raise',    'Raise Dead',  'bone', '2K',  'raise',   1, null,    'Grave creature to hand', 'Return a random creature from your grave to your hand.');
 spell('restore',  'Crystal Mend','gem',  '1G',  'restore', 2, 'ally',  'Heal ally, +2 life',   'Fully heal your target creature and gain 2 life.');
 spell('shatter',  'Shatter',     'gem',  '2GG', 'shatter', 3, 'enemy', 'Kill foe, 3 atk or less', 'Destroy target enemy creature with 3 or less attack.');

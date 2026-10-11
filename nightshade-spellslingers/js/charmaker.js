@@ -23,7 +23,7 @@ function toast(msg) {
 function setSync(state) {
   const el = $('#sync');
   el.className = 'cm-sync ' + state;
-  el.innerHTML = state === 'saving' ? 'SAVING...' : state === 'error' ? 'COULD NOT SAVE (storage blocked)' : 'SAVED &middot; SYNCED TO GAME';
+  el.innerHTML = state === 'saving' ? 'SAVING...' : state === 'error' ? 'NOT SAVED: STORAGE BLOCKED' : 'SAVED &middot; SYNCED TO GAME';
 }
 
 function scheduleSave() {
@@ -57,8 +57,8 @@ PixelEditor.init({ onChange: () => { renderPreview(); scheduleSave(); }, onToast
 $('#fName').addEventListener('input', (e) => { name = e.target.value; renderPreview(); scheduleSave(); });
 
 $('#resetBtn').onclick = () => {
-  name = '';
-  $('#fName').value = '';
+  name = Cloud.user() || '';
+  $('#fName').value = name;
   PixelEditor.apply(expandSprite(SPRITES.hero_default));
   toast('Back to the default character. UNDO restores your art.');
 };
@@ -72,7 +72,7 @@ document.addEventListener('keydown', (e) => {
 /* Another Character Maker tab saved: pick up its version. */
 function loadFromStore() {
   const d = getHeroRecord();
-  name = (d && d.name) || '';
+  name = Cloud.user() || (d && d.name) || '';
   $('#fName').value = name;
   PixelEditor.load(expandSprite(SPRITES.hero));
   renderPreview();
@@ -82,3 +82,9 @@ onSharedChange((key) => { if (key === HERO_KEY || key === null) loadFromStore();
 /* ---------- boot ---------- */
 setSync('ok');
 loadFromStore();
+Cloud.mount($('#acctSlot'));
+// Logged in: the character's name is the account's username.
+if (Cloud.user()) {
+  $('#fName').readOnly = true;
+  $('#fName').title = 'Your name is your account username.';
+}

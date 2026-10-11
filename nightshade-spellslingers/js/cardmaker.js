@@ -35,7 +35,7 @@ function records() { return getCustomRecords(); }
 function setSync(state) {
   const el = $('#sync');
   el.className = 'cm-sync ' + state;
-  el.innerHTML = state === 'saving' ? 'SAVING...' : state === 'error' ? 'COULD NOT SAVE (storage blocked)' : 'SAVED &middot; SYNCED TO GAME';
+  el.innerHTML = state === 'saving' ? 'SAVING...' : state === 'error' ? 'NOT SAVED: STORAGE BLOCKED' : 'SAVED &middot; SYNCED TO GAME';
 }
 
 function scheduleSave() {
@@ -246,6 +246,70 @@ $('#importFile').addEventListener('change', async (e) => {
     toast('Could not read that file.');
   }
 });
+
+/* ---------- community: browse everyone's cards, copy one into yours ---------- */
+const COM = { page: 0, search: '', cards: [] };
+
+function openCommunity() {
+  const wrap = document.createElement('div');
+  wrap.className = 'acct-modal';
+  wrap.innerHTML = `<div class="com-box panel">
+    <div class="com-top"><div class="cm-h">COMMUNITY CARDS</div>
+      <input class="db-input" id="comSearch" placeholder="Search names..." spellcheck="false" aria-label="Search community cards">
+      <button class="btn sm" id="comPrev">&#9664;</button><span id="comPage"></span><button class="btn sm" id="comNext">&#9654;</button>
+      <button class="btn sm" id="comClose">CLOSE</button></div>
+    <div class="com-grid" id="comGrid"></div></div>`;
+  document.body.appendChild(wrap);
+  const close = () => wrap.remove();
+  $('#comClose').onclick = close;
+  wrap.addEventListener('mousedown', (e) => { if (e.target === wrap) close(); });
+  wrap.addEventListener('keydown', (e) => { if (e.key === 'Escape') close(); });
+  let t = null;
+  $('#comSearch').value = COM.search;
+  $('#comSearch').addEventListener('input', (e) => { clearTimeout(t); t = setTimeout(() => { COM.search = e.target.value; COM.page = 0; loadCommunity(); }, 300); });
+  $('#comPrev').onclick = () => { COM.page--; loadCommunity(); };
+  $('#comNext').onclick = () => { COM.page++; loadCommunity(); };
+  $('#comSearch').focus();
+  loadCommunity();
+}
+
+async function loadCommunity() {
+  const grid = $('#comGrid');
+  grid.innerHTML = '<div class="muted">Loading...</div>';
+  try {
+    const res = await Cloud.browseCards({ page: COM.page, search: COM.search });
+    if (!$('#comGrid')) return;
+    COM.cards = res.cards;
+    $('#comPage').textContent = `PAGE ${COM.page + 1}`;
+    $('#comPrev').disabled = COM.page === 0;
+    $('#comNext').disabled = !res.more;
+    const me = Cloud.user();
+    grid.innerHTML = res.cards.map((r, i) => {
+      const c = customToCard(r);
+      if (!c) return '';
+      if (c.sprite === 'spr_' + c.id) SPRITES[c.sprite] = r.pixels.map((row) => String(row).replace(/[^.#+\-w]/g, '.'));
+      const mine = me && r.author === me;
+      return `<div class="com-item"><div class="card creature">${cardInnerHTML(c)}</div>
+        <div class="com-by muted">by ${escapeHTML(r.author)}</div>
+        <button class="btn sm" data-i="${i}" ${mine ? 'disabled title="This is your card"' : ''}>COPY</button></div>`;
+    }).join('') || `<div class="muted">${COM.search ? 'No matches.' : 'No cards shared yet.'}</div>`;
+    grid.querySelectorAll('button[data-i]').forEach((b) => (b.onclick = () => copyCommunityCard(COM.cards[+b.dataset.i])));
+  } catch (e) {
+    grid.innerHTML = '<div class="muted">Could not reach the server.</div>';
+  }
+}
+
+function copyCommunityCard(r) {
+  const { author, ...data } = r;
+  createCard({ ...data, author, name: String(data.name).slice(0, 16) });
+  toast(`Copied ${data.name} by ${author}.`);
+}
+
+if (Cloud.enabled) {
+  $('#communityBtn').classList.remove('hidden');
+  $('#communityBtn').onclick = () => { saveNow(); openCommunity(); };
+}
+Cloud.mount($('#acctSlot'));
 
 document.addEventListener('keydown', (e) => {
   const typing = /INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName);

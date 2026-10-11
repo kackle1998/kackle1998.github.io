@@ -64,6 +64,11 @@ const AI = {
         const kills = g.livingBoard(o).filter((e) => hpLeft(e) <= c.n);
         return kills.length >= 2 ? { score: kills.reduce((a, e) => a + this.value(g, e), 0) } : null;
       }
+      case 'massacre': {
+        const kills = g.livingBoard(o).filter((e) => hpLeft(e) <= c.n);
+        if (!kills.length) return null;
+        return { score: o.life <= c.n ? 99 : kills.reduce((a, e) => a + this.value(g, e), 0) + 3 };
+      }
       case 'howl': return g.livingBoard(p).length >= 2 ? { score: g.livingBoard(p).length * 3 } : null;
       case 'draw': return p.hand.length <= 3 ? { score: 4 } : null;
       case 'drain': return { score: o.life <= c.n ? 99 : 3 };

@@ -88,6 +88,8 @@ function sfx(name) {
     case 'spell': [440, 554, 659].forEach((f, i) => S.tone(f, 0.12, 'triangle', 0.05, null, i * 0.05)); S.tone(880, 0.25, 'sine', 0.03, 1320, 0.15); break;
     case 'trap': S.noise(0.08, 0.08); S.tone(740, 0.08, 'square', 0.05); S.tone(196, 0.3, 'sawtooth', 0.05, 98, 0.06); break;
     case 'win': [523, 659, 784, 1046].forEach((f, i) => S.tone(f, 0.22, 'square', 0.05, null, i * 0.15)); break;
+    case 'dice': S.noise(0.025, 0.05); S.tone(900 + Math.random() * 500, 0.025, 'square', 0.018); break;
+    case 'diceLand': S.noise(0.07, 0.09); S.tone(140, 0.09, 'square', 0.045, 70); break;
     case 'lose': [392, 330, 262, 196].forEach((f, i) => S.tone(f, 0.32, 'square', 0.05, null, i * 0.22)); break;
   }
 }
@@ -709,8 +711,10 @@ function showTitle() {
         <a class="btn big" href="cardmaker.html">CARD MAKER</a>
         <a class="btn big" href="charmaker.html">CHARACTER</a>
       </div>
+      <div id="acctSlot"></div>
       <div class="rules panel">${RULES_HTML}</div>
     </div>`);
+  Cloud.mount($('#acctSlot'));
   $('#startBtn').onclick = () => { sfx('select'); showDeckSelect(); };
   $('#builderBtn').onclick = () => { sfx('select'); showDeckBuilder(); };
 }
@@ -760,10 +764,107 @@ function showRules() {
   $('#closeRules').onclick = hideScreen;
 }
 
+/* ---------- opening dice roll: high roll picks who goes first ---------- */
+const PIPS = { 1: [4], 2: [0, 8], 3: [0, 4, 8], 4: [0, 2, 6, 8], 5: [0, 2, 4, 6, 8], 6: [0, 2, 3, 5, 6, 8] };
+const d6 = () => 1 + Math.floor(Math.random() * 6);
+function setDie(el, n) {
+  el.dataset.n = n;
+  el.innerHTML = Array.from({ length: 9 }, (_, i) => `<i class="${PIPS[n].includes(i) ? 'on' : ''}"></i>`).join('');
+}
+
+/* Flickers through faces, slowing down, then lands on `final`. */
+async function tumble(el, final, frames) {
+  el.classList.remove('land');
+  el.classList.add('rolling');
+  let n = +el.dataset.n || 1;
+  for (let i = 0; i < frames; i++) {
+    let next;
+    do next = d6(); while (next === n);
+    setDie(el, (n = next));
+    el.style.setProperty('--tilt', `${(Math.random() < 0.5 ? -1 : 1) * (6 + Math.floor(Math.random() * 4) * 6)}deg`);
+    el.style.setProperty('--hop', `${-6 - Math.floor(Math.random() * 3) * 6}px`);
+    sfx('dice');
+    await sleep(45 + i * i * 1.5);
+  }
+  setDie(el, final);
+  el.classList.remove('rolling');
+  void el.offsetWidth;
+  el.classList.add('land');
+  sfx('diceLand');
+}
+
+/* Shows the roll-off. Resolves to { first, you, cpu }: first is 0 if you go first, 1 if the Dealer does. */
+function rollForFirst() {
+  showScreen(`
+    <div class="roll panel">
+      <div class="roll-title">ROLL FOR THE FIRST TURN</div>
+      <div class="roll-duel">
+        <div class="roller" id="rollerYou">
+          <img class="r-art" src="${spriteURL('hero')}" alt="">
+          <div class="roll-name">${escapeHTML(heroName()).toUpperCase()}</div>
+          <div class="die" id="dieYou"></div>
+        </div>
+        <div class="roll-vs">VS</div>
+        <div class="roller" id="rollerCpu">
+          <img class="r-art" src="${spriteURL('dealer')}" alt="">
+          <div class="roll-name">THE DEALER</div>
+          <div class="die" id="dieCpu"></div>
+        </div>
+      </div>
+      <div class="roll-msg" id="rollMsg">High roll chooses who goes first.</div>
+      <div class="roll-btns" id="rollBtns"><button class="btn big" id="rollBtn">ROLL</button></div>
+    </div>`, true);
+  const dieYou = $('#dieYou'), dieCpu = $('#dieCpu'), msg = $('#rollMsg'), btns = $('#rollBtns');
+  setDie(dieYou, 6);
+  setDie(dieCpu, 6);
+
+  return new Promise((resolve) => {
+    const roll = async () => {
+      btns.innerHTML = '';
+      msg.textContent = 'Rolling...';
+      $$('.roller').forEach((r) => r.classList.remove('win', 'lose'));
+      const you = d6(), cpu = d6();
+      // The Dealer's die settles a beat later for a little suspense.
+      await Promise.all([tumble(dieYou, you, 14), tumble(dieCpu, cpu, 17)]);
+      await sleep(350);
+      if (you === cpu) {
+        msg.textContent = `Both rolled ${you}. A tie - roll again!`;
+        CRT.glitch();
+        btns.innerHTML = '<button class="btn big" id="rollBtn">ROLL AGAIN</button>';
+        $('#rollBtn').onclick = roll;
+        return;
+      }
+      const youWon = you > cpu;
+      $('#rollerYou').classList.add(youWon ? 'win' : 'lose');
+      $('#rollerCpu').classList.add(youWon ? 'lose' : 'win');
+      const done = (first) => resolve({ first, you, cpu });
+      if (youWon) {
+        sfx('heal');
+        msg.textContent = 'You rolled high! Go first or second?';
+        btns.innerHTML = '<button class="btn big accent" id="goFirst">GO FIRST</button><button class="btn big" id="goSecond">GO SECOND</button>';
+        $('#goFirst').onclick = () => { sfx('select'); done(0); };
+        $('#goSecond').onclick = () => { sfx('select'); done(1); };
+      } else {
+        sfx('err');
+        msg.textContent = 'The Dealer rolled high...';
+        await sleep(900);
+        // Tempo usually beats the skipped draw, so the Dealer nearly always takes the first turn.
+        const cpuFirst = Math.random() < 0.85;
+        msg.textContent = `The Dealer chooses to go ${cpuFirst ? 'first' : 'second'}.`;
+        await sleep(1400);
+        done(cpuFirst ? 1 : 0);
+      }
+    };
+    $('#rollBtn').onclick = roll;
+  });
+}
+
 async function startGame(deckDef) {
   const others = DECKS.filter((d) => d !== deckDef);
   const cpuDeck = others[Math.floor(Math.random() * others.length)];
-  const g = game = new Game(deckDef, cpuDeck);
+  const { first, you, cpu } = await rollForFirst();
+  const g = game = new Game(deckDef, cpuDeck, first);
+  g.log.unshift({ text: `You rolled ${you}, the Dealer rolled ${cpu}.`, who: '' });
   tapState.clear();
   ended = false;
   busy = true;
@@ -826,7 +927,7 @@ function endGame() {
       <div class="result panel">
         <img class="r-art" src="${spriteURL(won ? 'hero' : 'dealer')}" alt="">
         <div class="r-title">${won ? 'VICTORY' : 'DEFEAT'}</div>
-        <div class="r-sub">${won ? "The Dealer's life is spent." : 'Your life is spent. The Dealer collects your card.'}</div>
+        <div class="r-sub">${won ? "The Dealer's life hit zero. You beat the house." : 'Your life hit zero. The house wins this one.'}</div>
         <div class="r-stats">Turn ${game.turnNum} &middot; Your life ${Math.max(0, you.life)} &middot; Dealer ${Math.max(0, cpu.life)}</div>
         <button class="btn" id="againBtn">PLAY AGAIN</button>
       </div>`, true);

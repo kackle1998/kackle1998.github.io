@@ -1,10 +1,11 @@
 """Local server for Nightshade Spellslinging that tells the browser not to cache files,
 so changes to the game show up on a normal refresh."""
 import http.server
+import os
 import socketserver
 import sys
 
-PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 8765
+PORT = int(sys.argv[1]) if len(sys.argv) > 1 else int(os.environ.get("PORT", 8765))
 
 
 class NoCacheHandler(http.server.SimpleHTTPRequestHandler):

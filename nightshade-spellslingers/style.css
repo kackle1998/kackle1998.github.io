@@ -219,7 +219,7 @@ body[data-crt="off"] .crt-tube { background: radial-gradient(ellipse at center, 
 .c-stats span { display: inline-flex; align-items: center; gap: 2px; padding: 0 2px; }
 .c-stats .ico { width: 12px; height: 12px; }
 .c-atk.buff { background: var(--light); }
-.c-hp.hurt { background: var(--ink); color: var(--accent); }
+.c-atk.hurt, .c-hp.hurt { background: var(--ink); color: var(--accent); }
 /* Lands: dark, striped cards with a LAND ribbon, so they never read as creatures. */
 .card.land {
   background: repeating-linear-gradient(135deg, var(--dark) 0 6px, #343c2a 6px 12px);
@@ -387,6 +387,31 @@ body[data-crt="off"] .crt-tube { background: radial-gradient(ellipse at center, 
 .r-stats { font-size: 22px; color: var(--mid); margin-bottom: 8px; }
 .r-art { width: 96px; height: 96px; background: var(--artbg); border: 3px solid var(--ink); }
 
+/* ---------- opening dice roll ---------- */
+.roll { padding: 26px 56px 30px; display: flex; flex-direction: column; align-items: center; gap: 18px; min-width: 640px; }
+.roll-title { font-family: var(--pixel); font-size: 34px; letter-spacing: 3px; }
+.roll-duel { display: flex; align-items: center; gap: 56px; }
+.roller { display: flex; flex-direction: column; align-items: center; gap: 10px; transition: opacity .2s steps(2); }
+.roller.lose { opacity: .45; }
+.roller.win .r-art { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent); }
+.roller.win .roll-name { color: var(--accent); }
+.roll-name { font-family: var(--pixel); font-size: 18px; letter-spacing: 2px; }
+.roll-vs { font-family: var(--pixel); font-size: 40px; color: var(--mid); }
+.die {
+  width: 96px; height: 96px; padding: 12px; margin-top: 6px;
+  display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(3, 1fr); place-items: center;
+  background: var(--white); border: 4px solid var(--ink);
+  box-shadow: inset -5px -5px 0 var(--light), 5px 5px 0 rgba(0,0,0,.35);
+}
+.die i { width: 16px; height: 16px; }
+.die i.on { background: var(--ink); box-shadow: inset -3px -3px 0 var(--dark); }
+.die.rolling { transform: translateY(var(--hop, -8px)) rotate(var(--tilt, 12deg)); }
+.die.land { animation: dieLand .32s steps(4); }
+.roller.win .die { border-color: var(--accent); box-shadow: inset -5px -5px 0 var(--light), 0 0 0 3px var(--accent), 5px 5px 0 rgba(0,0,0,.35); }
+@keyframes dieLand { 0% { transform: translateY(-14px); } 50% { transform: translateY(0) scale(1.12, .86); } 75% { transform: translateY(-4px); } }
+.roll-msg { font-size: 28px; min-height: 30px; text-align: center; }
+.roll-btns { display: flex; gap: 18px; min-height: 60px; align-items: center; }
+
 /* ---------- custom card badge ---------- */
 .c-custom {
   position: absolute; right: 4px; top: 98px; font-family: var(--pixel); font-size: 9px; line-height: 11px;
@@ -489,3 +514,27 @@ a.btn { text-decoration: none; display: inline-block; }
 .db-ln { width: 22px; text-align: center; font-family: var(--pixel); font-size: 13px; }
 .db-actions { display: flex; gap: 8px; }
 .db-actions .btn { flex: 1; padding: 8px 4px; }
+
+/* ---------- online account (js/cloud.js) ---------- */
+.acct { display: flex; align-items: center; gap: 8px; padding: 3px 4px 3px 10px; background: var(--paper); border: 2px solid var(--ink); font-family: var(--pixel); font-size: 11px; color: var(--ink); white-space: nowrap; }
+.acct b { font-size: 12px; }
+.acct-state { color: var(--mid); }
+.acct.synced .acct-state::before { content: '\25CF '; color: #4a7a2a; }
+.acct.error .acct-state { color: var(--accent); }
+.acct-modal { position: fixed; inset: 0; z-index: 1000; display: flex; align-items: center; justify-content: center; padding: 16px; background: rgba(0, 0, 0, .6); user-select: text; -webkit-user-select: text; }
+.acct-box { width: min(360px, 100%); padding: 18px; display: flex; flex-direction: column; gap: 10px; font-size: 18px; }
+.acct-box h2 { margin: 0; font-family: var(--pixel); font-size: 16px; }
+.acct-box label { display: flex; flex-direction: column; gap: 4px; font-family: var(--pixel); font-size: 11px; }
+.acct-box .db-input { width: 100%; font-size: 20px; }
+.acct-note { font-size: 16px; line-height: 1.1; }
+.acct-err { min-height: 1.1em; color: var(--accent); }
+.acct-btns { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+
+/* community browser (card maker) */
+.com-box { width: min(980px, 100%); max-height: 100%; padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+.com-top { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-family: var(--pixel); font-size: 12px; }
+.com-top .cm-h { margin: 0 auto 0 0; }
+.com-grid { display: flex; flex-wrap: wrap; gap: 14px; overflow-y: auto; min-height: 120px; padding: 4px; }
+.com-item { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.com-item .card { position: relative; cursor: default; }
+.com-by { max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 16px; }
