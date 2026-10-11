@@ -1,0 +1,768 @@
+'use strict';
+/* ============================================================
+   BRIMSTONE SLINGSHOT — the Dealer's Run: one short region against
+   the Dealer, Inscryption style. Your deck changes as you go and your
+   life carries over between battles. js/runmap.js draws the map;
+   this file keeps the run state and runs each stop.
+   ============================================================ */
+
+const RUN_KEY = 'cardgrave.run.v1';
+const RUN_RECORD_KEY = 'cardgrave.runRecord.v1';
+const RUN_MAX_LIFE = 20;
+const RUN_MIN_DECK = 15;                                // BURN A CARD can't go below this
+const RUN_ROW_Y = [840, 710, 580, 450, 320, 190, 70];   // map units: start, rows 1-5, boss
+const DEALER_LIFE = [0, 8, 8, 12, 12, 14];              // a battle's Dealer life, by row
+const DEALER_COST_CAP = [0, 3, 3, 4, 4, 99];            // the Dealer's priciest card, by row
+const BOSS_LIFE = 16;
+/* The Dealer's hand in a run battle is named by its two colours (shown on the VS splash). */
+const DEALER_DECK_NAMES = {
+  'bone+paw': 'Wild Hunt', 'bone+hat': 'Crypt Arcana', 'gem+paw': 'Crystal Wilds',
+  'gem+hat': 'Prism Sorcery', 'hat+paw': 'Feral Arcana', 'bone+gem': 'Grave Geodes',
+};
+
+const STOPS = {
+  start:  { name: 'START',       icon: 'ri_chip',   desc: 'Where you came in.' },
+  battle: { name: 'BATTLE',      icon: 'ri_battle', desc: "Battle: duel one of the Dealer's hands." },
+  fire:   { name: 'CAMPFIRE',    icon: 'ri_fire',   desc: 'Campfire: warm a creature. Push your luck.' },
+  altar:  { name: 'SIGIL ALTAR', icon: 'ri_altar',  desc: 'Sigil altar: sacrifice a creature to move its sigil.' },
+  trade:  { name: 'TRADER',      icon: 'ri_tooth',  desc: 'Trader: spend teeth on cards and tonic.' },
+  event:  { name: '???',         icon: 'ri_event',  desc: 'Unknown: something hums under the board.' },
+  boss:   { name: 'THE DEALER',  icon: 'ri_chip',   desc: 'The Dealer: the house always plays last.' },
+};
+
+const BOSS_RULES = {
+  gale:    { name: 'GALE',        text: "Every creature on the Dealer's side takes flight." },
+  ossuary: { name: 'OSSUARY',     text: "Skeletons fill every empty slot on the Dealer's side." },
+  dice:    { name: 'LOADED DICE', text: 'All your face-down traps are swept away.' },
+};
+
+const runRand = (R, n) => Math.floor(R() * n);
+function runShuffle(R, a) {
+  for (let i = a.length - 1; i > 0; i--) { const j = runRand(R, i + 1); [a[i], a[j]] = [a[j], a[i]]; }
+  return a;
+}
+/* Up to n distinct picks from `arr`, weighted. */
+function runPickN(R, arr, n, weight = () => 1) {
+  const left = arr.slice(), out = [];
+  while (out.length < n && left.length) {
+    const ws = left.map(weight), sum = ws.reduce((a, b) => a + b, 0);
+    let r = R() * sum, i = 0;
+    while (i < left.length - 1 && (r -= ws[i]) > 0) i++;
+    out.push(left.splice(i, 1)[0]);
+  }
+  return out;
+}
+
+/* Built-in cards a run can hand out: no lands, tokens, custom or run cards, and payable from `colors`. */
+function runPool(colors, maxCost = 99) {
+  return Object.values(CARDS).filter((c) => c.type !== 'land' && !c.token && !c.custom && !c.runCard
+    && colors.includes(c.color) && COLOR_KEYS.every((k) => !c.cost[k] || colors.includes(k))
+    && costTotal(c.cost) <= maxCost);
+}
+const runPrice = (c) => Math.min(4, Math.max(2, costTotal(c.cost)));
+function getRunRecord() { return { wins: 0, losses: 0, ...Store.read(RUN_RECORD_KEY, {}) }; }
+
+/* Start, 5 rows of 2-3 stops, then the boss. Links run in sorted order, so traces never cross. */
+function genRunMap(R) {
+  const even = (v) => Math.round(v / 2) * 2;
+  const nodes = [{ id: 0, row: 0, x: 380, y: RUN_ROW_Y[0], t: 'start' }];
+  const rows = [[0]];
+  for (let r = 1; r <= 5; r++) {
+    const k = R() < 0.5 ? 2 : 3;
+    const xs = k === 2 ? [280, 480] : [210, 380, 550];
+    let types;
+    if (r === 1 || r === 3) types = Array(k).fill('battle');
+    else if (r === 5) { types = Array(k).fill('battle'); types[runRand(R, k)] = 'fire'; }
+    else types = runShuffle(R, ['fire', 'trade', 'altar', 'event']).slice(0, k);
+    rows.push(xs.map((x, i) => {
+      const n = { id: nodes.length, row: r, x: even(x + (R() - 0.5) * 40), y: even(RUN_ROW_Y[r] + (R() - 0.5) * 20), t: types[i] };
+      nodes.push(n);
+      return n.id;
+    }));
+  }
+  nodes.push({ id: nodes.length, row: 6, x: 380, y: RUN_ROW_Y[6], t: 'boss' });
+  rows.push([nodes.length - 1]);
+
+  const edges = [];
+  const at = (row, i) => (row.length === 1 ? 0.5 : i / (row.length - 1));
+  for (let r = 0; r < 6; r++) {
+    const A = rows[r], B = rows[r + 1];
+    let i = 0, j = 0;
+    edges.push([A[0], B[0]]);
+    while (i < A.length - 1 || j < B.length - 1) {
+      if (i === A.length - 1) j++;
+      else if (j === B.length - 1) i++;
+      else {
+        const da = at(A, i + 1), db = at(B, j + 1);
+        if (Math.abs(da - db) < 0.2 && R() < 0.5) { i++; j++; } else if (da < db) i++; else j++;
+      }
+      edges.push([A[i], B[j]]);
+    }
+  }
+  return { nodes, edges };
+}
+
+/* ---------- events at ? stops ----------
+   A choice may `pick` a creature first (filter), copy a sigil (`transfer`), or just `act`.
+   `ok` and `pick` decide whether it can be chosen; `need` says why not. `act` returns the outcome text. */
+const RUN_EVENTS = [
+  {
+    id: 'cracked', title: 'CRACKED CHIP', art: 'ri_chip',
+    text: 'A cracked chip hums in the dirt. It offers power, at a price: +2 attack, but the creature forgets one of its sigils.',
+    choices: [
+      { label: 'TAKE THE POWER', pick: (d) => d.sigils.length > 0, need: 'Needs a creature with a sigil.',
+        act: (run, d) => {
+          const rc = run.rc(d.rid), k = rc.sigils.splice(Math.floor(Math.random() * rc.sigils.length), 1)[0];
+          rc.atk += 2;
+          delete rc[k];
+          return `${d.name} gained +2 attack and forgot ${SIGILS[k].name}.`;
+        } },
+      { label: 'LEAVE IT', act: () => 'You leave the chip humming to itself.' },
+    ],
+  },
+  {
+    id: 'spring', title: 'SULFUR SPRING', art: 'ri_spring',
+    text: 'A spring bubbles up, yellow and warm. It smells terrible. It might be good for you.',
+    choices: [
+      { label: 'DRINK (+6 LIFE)', act: (run) => `You drink deep and recover ${run.heal(6)} life.` },
+      { label: 'BOTTLE IT (+2 TEETH)', act: (run) => { run.gainTeeth(2); return 'A trader will pay 2 teeth for this.'; } },
+    ],
+  },
+  {
+    id: 'pool', title: 'MOLTEN POOL', art: 'ri_pool',
+    text: 'A pool of slow fire. Dip a creature in: it may come out faster than ever, or not come out at all.',
+    choices: [
+      { label: 'DIP A CREATURE', pick: (d) => !d.sigils.includes('haste') && d.sigils.length < 4, need: 'Needs a creature without Haste.',
+        act: (run, d) => {
+          if ((run.debugRoll ?? Math.random()) < 0.5) { run.remove(d.rid); return `${d.name} melted away.`; }
+          run.rc(d.rid).sigils.push('haste');
+          return `${d.name} came out with Haste.`;
+        } },
+      { label: 'LEAVE', act: () => 'You step around the pool.' },
+    ],
+  },
+  {
+    id: 'bones', title: 'BONE PILE', art: 'skeleton',
+    text: 'A heap of bones. One of them is still twitching.',
+    choices: [
+      { label: 'TAKE A SKELETON', act: (run) => { run.add('skeleton'); return 'A Skeleton (0-cost 1/1) joins your deck.'; } },
+      { label: 'PRY OUT A TOOTH', act: (run) => { run.gainTeeth(1); return 'You pocket 1 tooth.'; } },
+    ],
+  },
+  {
+    id: 'offer', title: "THE DEALER'S OFFER", art: 'dealer',
+    text: 'The Dealer slides a card across the table. "A gift. I\'ll take my due at the next hand."',
+    choices: [
+      { label: 'ACCEPT', ok: (run) => runPool(run.s.colors).some((c) => costTotal(c.cost) >= 4), need: 'Nothing on offer for your colours.',
+        act: (run) => {
+          const pool = runPool(run.s.colors).filter((c) => costTotal(c.cost) >= 4);
+          const c = pool[Math.floor(Math.random() * pool.length)];
+          run.add(c.id);
+          run.s.dealerBonus = 5;
+          return `You take ${c.name}. The Dealer's next hand starts with +5 life.`;
+        } },
+      { label: 'REFUSE', act: () => 'The Dealer shrugs and pockets the card.' },
+    ],
+  },
+  {
+    id: 'rune', title: 'RUNE CIRCLE', art: 'stasisrune',
+    text: 'A rune circle turns slowly in the ground. For 3 life it will copy a sigil from one creature to another.',
+    choices: [
+      { label: 'PAY 3 LIFE', transfer: true, cost: 3, ok: (run) => run.s.life > 3 && run.givers().length > 0,
+        need: 'Needs more than 3 life and a sigil to copy.' },
+      { label: 'LEAVE', act: () => 'The circle turns on without you.' },
+    ],
+  },
+  {
+    id: 'moth', title: 'WANDERING MOTH', art: 'moth',
+    text: 'A moth made of glass circles your light. For 4 life it will lend a creature its wings.',
+    choices: [
+      { label: 'PAY 4 LIFE', ok: (run) => run.s.life > 4, pick: (d) => !d.sigils.includes('airborne') && d.sigils.length < 4,
+        need: 'Needs more than 4 life and a creature without Airborne.',
+        act: (run, d) => { run.s.life -= 4; run.rc(d.rid).sigils.push('airborne'); return `${d.name} gained Airborne.`; } },
+      { label: 'LEAVE', act: () => 'The moth drifts off into the dark.' },
+    ],
+  },
+  {
+    id: 'ghost', title: 'LOST SPELLSLINGER', art: 'apprentice',
+    text: 'A spellslinger who never left the table offers a trade: your weakest card for one of theirs.',
+    choices: [
+      { label: 'TRADE', ok: (run) => run.s.deck.length > 0, need: 'You have no card to trade.',
+        act: (run) => {
+          const out = run.cards().sort((a, b) => costTotal(a.cost) - costTotal(b.cost))[0];
+          const pool = runPool(run.s.colors).filter((c) => c.id !== out.base);
+          const c = pool[Math.floor(Math.random() * pool.length)];
+          run.remove(out.rid);
+          run.add(c.id);
+          return `You gave up ${out.name} and got ${c.name}.`;
+        } },
+      { label: 'WALK PAST', act: () => 'They go back to shuffling.' },
+    ],
+  },
+];
+
+const Run = {
+  s: null,           // the saved run, or null
+  ids: [],           // CARDS ids registered for the current run
+  debugRoll: null,   // console: force the 50% rolls (0 = the bad outcome)
+  debugEvent: null,  // console: force the next ? stop's event id
+
+  load() {
+    const s = Store.read(RUN_KEY, null);
+    this.s = s && s.map && s.deck ? s : null;
+    this.register();
+    return this.s;
+  },
+  save() { if (this.s) Store.write(RUN_KEY, this.s); },
+  rand(salt) { return mulberry32((this.s.seed + salt * 7919) >>> 0); },
+
+  /* ---------- run cards: CARDS['run_<rid>'] built from the base card plus the run's changes ---------- */
+  def(rc) {
+    const b = CARDS[rc.base];
+    const d = { ...b, id: 'run_' + rc.rid, rid: rc.rid, base: rc.base, runCard: true, sigils: [...(rc.sigils || b.sigils)] };
+    if (b.type === 'creature') {
+      d.atk = rc.atk; d.hp = rc.hp;
+      for (const k of ['snipe', 'mend']) if (d.sigils.includes(k)) d[k] = rc[k] || b[k] || 1;
+    }
+    return d;
+  },
+  register() {
+    for (const id of this.ids) delete CARDS[id];
+    this.ids = [];
+    if (!this.s) return;
+    for (const rc of this.s.deck) {
+      const d = this.def(rc);
+      CARDS[d.id] = d;
+      this.ids.push(d.id);
+    }
+  },
+  add(base) {
+    const b = CARDS[base], rc = { rid: this.s.nextRid++, base };
+    if (b.type === 'creature') {
+      Object.assign(rc, { atk: b.atk, hp: b.hp, sigils: [...b.sigils] });
+      if (b.snipe) rc.snipe = b.snipe;
+      if (b.mend) rc.mend = b.mend;
+    }
+    this.s.deck.push(rc);
+    this.register();
+    return rc;
+  },
+  remove(rid) { this.s.deck = this.s.deck.filter((r) => r.rid !== rid); this.register(); },
+  rc(rid) { return this.s.deck.find((r) => r.rid === rid); },
+  card(rid) { return CARDS['run_' + rid]; },
+  cards() { return this.s.deck.map((r) => this.card(r.rid)); },
+  creatures() { return this.cards().filter((d) => d.type === 'creature'); },
+  landCount() { return Object.values(this.s.lands).reduce((a, b) => a + b, 0); },
+  deckSize() { return this.s.deck.length + this.landCount(); },
+  heal(n) { const h = Math.max(0, Math.min(n, this.s.maxLife - this.s.life)); this.s.life += h; return h; },
+  gainTeeth(n) { this.s.teeth += n; this.s.stats.teeth += n; },
+
+  deckDef() {
+    const list = {};
+    for (const rc of this.s.deck) list['run_' + rc.rid] = 1;
+    for (const [k, n] of Object.entries(this.s.lands)) if (n) list['land_' + k] = n;
+    const top = this.creatures().sort((a, b) => costTotal(b.cost) - costTotal(a.cost))[0];
+    return { name: this.s.name, colors: this.s.colors, feature: top ? top.sprite : 'hero', list };
+  },
+
+  /* ---------- starting, resuming, leaving ---------- */
+  open() {
+    if (!this.load()) return this.pickDeck();
+    const s = this.s;
+    showScreen(`
+      <div class="result panel">
+        <img class="r-art" src="${spriteURL('hero')}" alt="">
+        <div class="r-title rn-big">RUN IN PROGRESS</div>
+        <div class="r-sub">${escapeHTML(s.name)} &middot; ${ico('hp')} ${s.life}/${s.maxLife} &middot; ${ico('tooth')} ${s.teeth} &middot; ${s.stats.stops} stop${s.stats.stops === 1 ? '' : 's'} cleared</div>
+        <div class="concede-btns">
+          <button class="btn" id="runGo">CONTINUE RUN</button>
+          <button class="btn" id="runQuit">ABANDON RUN</button>
+          <button class="btn" id="runBack">BACK</button>
+        </div>
+      </div>`, true);
+    $('#runGo').onclick = () => { sfx('place'); this.resume(); };
+    $('#runQuit').onclick = () => this.confirmAbandon(() => this.open());
+    $('#runBack').onclick = () => { sfx('select'); showOfflineMenu(); };
+  },
+
+  pickDeck() {
+    showScreen(`
+      <div class="ds">
+        <div class="ds-title">CHOOSE YOUR STARTING DECK</div>
+        <div class="tablets">${DECKS.map((d, i) => `
+          <div class="tablet" data-i="${i}">
+            <div class="t-art"><img src="${spriteURL(d.feature)}" alt=""></div>
+            <div class="t-icons">${d.colors.map((c) => ico(COLORS[c].icon)).join('')}</div>
+            <div class="t-name">${d.name.toUpperCase()}</div>
+            <div class="t-desc">${d.desc}</div>
+          </div>`).join('')}
+        </div>
+        <div class="ds-foot">You start with its 11 cheapest cards and 9 lands. Your life carries over between battles.</div>
+        <button class="btn" id="rdBack">BACK</button>
+      </div>`);
+    $$('.tablet').forEach((t) => {
+      t.onclick = () => { sfx('place'); this.start(DECKS[+t.dataset.i]); };
+      t.onmouseenter = () => sfx('select');
+    });
+    $('#rdBack').onclick = () => { sfx('select'); showOfflineMenu(); };
+  },
+
+  start(def) {
+    const colors = def.colors.slice(0, 2);
+    const ids = Object.entries(def.list).filter(([id]) => CARDS[id] && CARDS[id].type !== 'land').flatMap(([id, n]) => Array(n).fill(id));
+    const pick = ids.sort((a, b) => costTotal(CARDS[a].cost) - costTotal(CARDS[b].cost)).slice(0, 11);
+    // Split the 9 lands by how many of each symbol the starting cards ask for.
+    const demand = colors.map((k) => 1 + pick.reduce((a, id) => a + (CARDS[id].cost[k] || 0), 0));
+    const first = Math.max(3, Math.min(6, Math.round((9 * demand[0]) / (demand[0] + demand[1]))));
+    this.s = {
+      v: 1, seed: (Math.random() * 2 ** 31) >>> 0, name: def.name, colors, deck: [], nextRid: 1,
+      lands: { [colors[0]]: first, [colors[1]]: 9 - first },
+      life: RUN_MAX_LIFE, maxLife: RUN_MAX_LIFE, teeth: 0,
+      cur: 0, done: [], visited: [0], node: null, events: [], dealerBonus: 0,
+      stats: { stops: 0, battles: 0, teeth: 0 },
+    };
+    this.s.map = genRunMap(this.rand(1));
+    this.s.bossRule = Object.keys(BOSS_RULES)[runRand(this.rand(2), 3)];
+    pick.forEach((id) => this.add(id));
+    this.save();
+    RunMap.show();
+  },
+
+  resume() {
+    this.register();
+    if (this.s.node) this.enter(this.s.node.id);
+    else RunMap.show();
+  },
+
+  reach() {
+    const s = this.s, n = s.map.nodes[s.cur];
+    return n.t === 'boss' ? [] : s.map.edges.filter((e) => e[0] === s.cur).map((e) => e[1]);
+  },
+
+  /* The figurine arrived at stop `id` (js/runmap.js). */
+  go(id) {
+    const s = this.s, ei = s.map.edges.findIndex((e) => e[0] === s.cur && e[1] === id);
+    if (ei < 0) return;
+    s.done.push(ei);
+    s.cur = id;
+    s.visited.push(id);
+    s.stats.stops++;
+    s.node = { id };
+    this.save();
+    this.enter(id);
+  },
+
+  enter(id) {
+    const n = this.s.map.nodes[id], node = this.s.node;
+    if (node.result) return this.outcome(node.icon, node.title, node.result);
+    switch (n.t) {
+      case 'battle': case 'boss': return this.battle(n);
+      case 'fire': return this.campfire(n);
+      case 'altar': return this.transfer({ icon: 'ri_altar', title: 'SIGIL ALTAR', consume: true });
+      case 'trade': return this.trader(n);
+      case 'event': return this.event(n);
+      default: return this.leave();
+    }
+  },
+
+  leave() {
+    this.s.node = null;
+    this.save();
+    RunMap.show();
+  },
+
+  /* Apply an outcome, remember it (so a reload can't apply it twice), and show it. */
+  finishStop(icon, title, text) {
+    Object.assign(this.s.node, { icon, title, result: text });
+    this.register();
+    this.save();
+    this.outcome(icon, title, text);
+  },
+  outcome(icon, title, text) {
+    this.screen(icon, title, escapeHTML(text), '', '<button class="btn" id="rnOk">CONTINUE</button>');
+    $('#rnOk').onclick = () => { sfx('select'); this.leave(); };
+  },
+
+  confirmAbandon(back) {
+    sfx('select');
+    showScreen(`
+      <div class="result panel">
+        <div class="r-title rn-big">ABANDON RUN?</div>
+        <div class="r-sub">Your deck and progress in this run will be lost.</div>
+        <div class="concede-btns">
+          <button class="btn" id="abYes">ABANDON</button>
+          <button class="btn" id="abNo">KEEP GOING</button>
+        </div>
+      </div>`, true);
+    $('#abYes').onclick = () => {
+      sfx('lose');
+      const rec = getRunRecord(); rec.losses++; Store.write(RUN_RECORD_KEY, rec);
+      this.clear();
+      showTitle();
+    };
+    $('#abNo').onclick = () => { sfx('select'); back(); };
+  },
+
+  clear() {
+    this.s = null;
+    Store.write(RUN_KEY, null);
+    this.register();
+  },
+
+  /* ---------- shared screen pieces ---------- */
+  screen(icon, title, sub, body = '', btns = '') {
+    const s = this.s;
+    showScreen(`
+      <div class="rn panel">
+        <div class="rn-head">
+          <img class="rn-icon" src="${spriteURL(icon)}" alt="">
+          <div class="rn-headtext"><div class="rn-title">${title}</div><div class="rn-sub">${sub}</div></div>
+          <div class="rn-stat">${ico('hp')}<b>${s.life}/${s.maxLife}</b>${ico('tooth')}<b>${s.teeth}</b></div>
+        </div>
+        <div class="rn-body" id="rnBody">${body}</div>
+        <div class="rn-btns">${btns}</div>
+      </div>`, true);
+  },
+
+  /* Card faces you can click; `small` shrinks them to fit a whole deck. */
+  cardGrid(el, defs, onPick, small = false) {
+    el.classList.add('rn-cards');
+    el.classList.toggle('small', small);
+    for (const d of defs) {
+      const c = document.createElement('div');
+      c.className = `card ${d.type}${d.token ? ' token' : ''}`;
+      c.innerHTML = cardInnerHTML(d);
+      if (onPick) c.onclick = () => { sfx('select'); onPick(d); };
+      else c.classList.add('still');
+      el.appendChild(c);
+    }
+    if (!defs.length) el.innerHTML = '<span class="muted">Nothing here.</span>';
+  },
+
+  /* ---------- battle ---------- */
+  /* The opponent's hand: a rival plays their own deck's colours, the boss Dealer a random pair. */
+  dealerDeck(n, rival) {
+    const boss = n.t === 'boss', R = this.rand(100 + n.id);
+    const home = rival && DECKS[rival.deck];
+    const colors = home ? home.colors.slice(0, 2) : runShuffle(R, COLOR_KEYS.slice()).slice(0, 2);
+    const pool = runPool(colors, boss ? 99 : DEALER_COST_CAP[n.row]);
+    const list = {}, lands = boss ? 5 : 4;
+    colors.forEach((k) => (list['land_' + k] = lands));
+    for (let k = 0, guard = 0; k < (boss ? 10 : 10) && guard < 200; guard++) {
+      const open = pool.filter((c) => (list[c.id] || 0) < 2);
+      if (!open.length) break;
+      const c = runPickN(R, open, 1, (x) => (x.type === 'creature' ? 3 : 1) * (1 + costTotal(x.cost)))[0];
+      list[c.id] = (list[c.id] || 0) + 1;
+      k++;
+    }
+    const feature = Object.keys(list).filter((id) => CARDS[id].type === 'creature').sort((a, b) => costTotal(CARDS[b].cost) - costTotal(CARDS[a].cost))[0];
+    const name = boss ? 'House Rules' : home ? home.name : DEALER_DECK_NAMES[colors.slice().sort().join('+')];
+    return { name, colors, feature: feature || 'dealer', list };
+  },
+
+  /* Every battle on the map but the boss is against one of the Dealer's rivals, picked at random
+     and not repeated within a run. Kept on the stop so a reload brings back the same one. */
+  rival(n) {
+    const s = this.s, node = s.node;
+    if (n.t === 'boss') return null;
+    if (!node.rival || !RIVALS.some((r) => r.id === node.rival)) {
+      s.rivals = s.rivals || [];
+      const fresh = RIVALS.filter((r) => !s.rivals.includes(r.id));
+      const from = fresh.length ? fresh : RIVALS;
+      node.rival = from[runRand(this.rand(500 + n.id), from.length)].id;
+      s.rivals.push(node.rival);
+    }
+    return RIVALS.find((r) => r.id === node.rival);
+  },
+
+  battle(n) {
+    const s = this.s, node = s.node;
+    if (node.phase === 'reward') return this.reward(n);
+    const boss = n.t === 'boss';
+    const life = boss ? BOSS_LIFE : DEALER_LIFE[n.row] + (s.dealerBonus || 0);
+    const rival = this.rival(n);
+    const cpuDeck = this.dealerDeck(n, rival);
+    node.phase = 'battle';
+    this.save();
+    const them = rival ? { name: rival.name, deck: cpuDeck.name, sprite: rival.sprite } : { name: 'DEALER', deck: cpuDeck.name, sprite: 'dealer' };
+    vsSplash({ name: heroName(), deck: s.name, sprite: 'hero' }, them)
+      .then(() => startGame(this.deckDef(), { cpuDeck, life: [s.life, life], boss: boss ? s.bossRule : null, run: true, foe: rival }));
+  },
+
+  /* Called by js/ui.js when a run battle ends (or is conceded). */
+  afterBattle(won, youLife, oppLife) {
+    $('#game').classList.add('hidden');
+    const s = this.s;
+    if (!s) return showTitle();
+    const n = s.map.nodes[s.cur];
+    if (!won) { s.life = 0; return this.finish(false); }
+    s.stats.battles++;
+    if (n.t === 'boss') return this.finish(true);
+    s.dealerBonus = 0;
+    s.life = Math.max(1, Math.min(s.maxLife, youLife));
+    const teeth = Math.max(1, -oppLife);
+    this.gainTeeth(teeth);
+    s.node = { id: n.id, phase: 'reward', teeth };
+    this.save();
+    this.reward(n);
+  },
+
+  reward(n) {
+    const s = this.s, node = s.node, R = this.rand(200 + n.id);
+    const want = 2 + Math.floor(n.row / 2); // later rows lean toward pricier cards
+    const offers = runPickN(R, runPool(s.colors), 3, (c) => (costTotal(c.cost) >= want ? 3 : 1));
+    this.screen('ri_battle', 'SPOILS',
+      `The Dealer pays ${node.teeth} ${node.teeth === 1 ? 'tooth' : 'teeth'} for the overkill. Take one card for your deck.`,
+      '', '<button class="btn" id="rnSkip">SKIP (+1 TOOTH)</button>');
+    this.cardGrid($('#rnBody'), offers, (c) => {
+      this.add(c.id);
+      this.finishStop('ri_battle', 'SPOILS', `${c.name} joins your deck.`);
+    });
+    $('#rnSkip').onclick = () => {
+      sfx('select');
+      this.gainTeeth(1);
+      this.finishStop('ri_battle', 'SPOILS', 'You pocket 1 more tooth instead.');
+    };
+  },
+
+  /* ---------- campfire: push your luck ---------- */
+  campfire() {
+    const node = this.s.node;
+    if (node.rid != null && !this.rc(node.rid)) node.rid = null;
+    if (node.rid == null) {
+      const mons = this.creatures();
+      this.screen('ri_fire', 'CAMPFIRE', mons.length ? 'Pick a creature to warm by the fire.' : 'You have no creatures to warm.',
+        '', '<button class="btn" id="rnLeave">LEAVE</button>');
+      this.cardGrid($('#rnBody'), mons, (d) => { node.rid = d.rid; node.n = 0; this.save(); this.campfire(); }, mons.length > 7);
+    } else {
+      const d = this.card(node.rid), k = node.n || 0;
+      this.screen('ri_fire', 'CAMPFIRE',
+        k ? `It has taken the heat ${k} time${k > 1 ? 's' : ''}. Again? There's a 50% chance the fire takes it.` : 'The first warmth is free. After that, each boost risks the fire taking it.',
+        '', `<button class="btn" id="rnAtk">+1 ATTACK</button><button class="btn" id="rnHp">+2 HEALTH</button><button class="btn" id="rnLeave">LEAVE</button>`);
+      this.cardGrid($('#rnBody'), [d], null);
+      const boost = (stat, by) => {
+        if (k >= 1 && (this.debugRoll ?? Math.random()) < 0.5) {
+          sfx('die');
+          CRT.pulse(0.8, true);
+          this.remove(d.rid);
+          return this.finishStop('ri_fire', 'CAMPFIRE', `The fire took your ${d.name}. It burns a little brighter.`);
+        }
+        this.rc(d.rid)[stat] += by;
+        node.n = k + 1;
+        this.register();
+        this.save();
+        sfx('heal');
+        this.campfire();
+      };
+      $('#rnAtk').onclick = () => boost('atk', 1);
+      $('#rnHp').onclick = () => boost('hp', 2);
+    }
+    $('#rnLeave').onclick = () => { sfx('select'); this.leave(); };
+  },
+
+  /* ---------- sigils: the altar (sacrifice) and the rune circle (copy) ---------- */
+  canTake(d, k, from) { return d.rid !== from && !d.sigils.includes(k) && d.sigils.length < 4; },
+  givers() {
+    const mons = this.creatures();
+    return mons.filter((g) => g.sigils.some((k) => mons.some((r) => this.canTake(r, k, g.rid))));
+  },
+
+  /* o: { icon, title, consume (sacrifice the giver), cost (life paid on success) } */
+  transfer(o) {
+    const node = this.s.node, mons = this.creatures();
+    if (node.from != null && !this.rc(node.from)) node.from = null;
+    const leaveBtn = '<button class="btn" id="rnLeave">LEAVE</button>';
+    const wire = () => { $('#rnLeave').onclick = () => { sfx('select'); this.leave(); }; };
+
+    if (node.from == null) {
+      const givers = this.givers();
+      this.screen(o.icon, o.title,
+        givers.length ? (o.consume ? 'Pick a creature to sacrifice. One of its sigils will pass to another.' : 'Pick a creature whose sigil you want to copy.')
+          : 'None of your creatures can pass on a sigil.', '', leaveBtn);
+      this.cardGrid($('#rnBody'), givers, (d) => { node.from = d.rid; node.sigil = null; this.save(); this.transfer(o); }, givers.length > 7);
+      return wire();
+    }
+    const from = this.card(node.from);
+    if (node.sigil == null) {
+      const ks = from.sigils.filter((k) => mons.some((r) => this.canTake(r, k, from.rid)));
+      this.screen(o.icon, o.title, `Which of ${escapeHTML(from.name)}'s sigils?`,
+        `<div class="rn-sigils">${ks.map((k) => `
+          <button class="rn-sig" data-k="${k}">${ico(SIGILS[k].icon)}<span><b>${escapeHTML(sigilName(k, from))}</b>${escapeHTML(SIGILS[k].text(from))}</span></button>`).join('')}
+        </div>`, `<button class="btn" id="rnBack">BACK</button>${leaveBtn}`);
+      $$('.rn-sig').forEach((b) => (b.onclick = () => { sfx('select'); node.sigil = b.dataset.k; this.save(); this.transfer(o); }));
+      $('#rnBack').onclick = () => { sfx('select'); node.from = null; this.save(); this.transfer(o); };
+      return wire();
+    }
+    const k = node.sigil, takers = mons.filter((r) => this.canTake(r, k, from.rid));
+    this.screen(o.icon, o.title, `Which creature receives ${escapeHTML(sigilName(k, from))}?${o.consume ? ` ${escapeHTML(from.name)} will be sacrificed.` : ` It costs ${o.cost} life.`}`,
+      '', `<button class="btn" id="rnBack">BACK</button>${leaveBtn}`);
+    this.cardGrid($('#rnBody'), takers, (d) => {
+      const rc = this.rc(d.rid);
+      rc.sigils.push(k);
+      if (k === 'snipe' || k === 'mend') rc[k] = from[k];
+      if (o.consume) this.remove(from.rid);
+      if (o.cost) this.s.life -= o.cost;
+      sfx('spell');
+      this.finishStop(o.icon, o.title, `${d.name} gained ${sigilName(k, from)}.${o.consume ? ` ${from.name} is gone.` : ''}`);
+    }, takers.length > 7);
+    $('#rnBack').onclick = () => { sfx('select'); node.sigil = null; this.save(); this.transfer(o); };
+    wire();
+  },
+
+  /* ---------- trader ---------- */
+  trader(n) {
+    const s = this.s, node = s.node;
+    if (!node.offers) {
+      node.offers = runPickN(this.rand(400 + n.id), runPool(s.colors), 3).map((c) => ({ id: c.id, price: runPrice(c), sold: false }));
+      node.tonic = false;
+      this.save();
+    }
+    if (node.burn) return this.burn();
+    const teeth = (p) => `${p} ${ico('tooth')}`;
+    this.screen('ri_tooth', 'TRADER', `Teeth for cards. You have ${s.teeth}.`,
+      `<div class="rn-shop">
+        ${node.offers.map((o, i) => `<div class="rn-offer" data-i="${i}"><div class="rn-slot"></div>
+          <button class="btn" data-buy="${i}" ${o.sold ? 'disabled' : ''}>${o.sold ? 'SOLD' : teeth(o.price)}</button></div>`).join('')}
+        <div class="rn-offer"><div class="rn-tonic panel"><img src="${spriteURL('ri_spring')}" alt=""><b>SULFUR TONIC</b><span>+5 life, up to ${s.maxLife}</span></div>
+          <button class="btn" id="rnTonic" ${node.tonic ? 'disabled' : ''}>${node.tonic ? 'SOLD' : teeth(3)}</button></div>
+      </div>`,
+      `<button class="btn" id="rnBurn">BURN A CARD (3 ${ico('tooth')})</button><button class="btn" id="rnLeave">LEAVE</button>`);
+    node.offers.forEach((o, i) => this.cardGrid($(`.rn-offer[data-i="${i}"] .rn-slot`), [CARDS[o.id]], null));
+    const pay = (p) => {
+      if (s.teeth < p) { toast(`You need ${p} teeth.`); sfx('err'); return false; }
+      s.teeth -= p;
+      sfx('place');
+      return true;
+    };
+    $$('[data-buy]').forEach((b) => (b.onclick = () => {
+      const o = node.offers[+b.dataset.buy];
+      if (o.sold || !pay(o.price)) return;
+      o.sold = true;
+      this.add(o.id);
+      this.save();
+      toast(`${CARDS[o.id].name} joins your deck.`);
+      this.trader(n);
+    }));
+    $('#rnTonic').onclick = () => {
+      if (node.tonic) return;
+      if (s.life >= s.maxLife) { toast('You are already at full life.'); sfx('err'); return; }
+      if (!pay(3)) return;
+      node.tonic = true;
+      toast(`You recover ${this.heal(5)} life.`);
+      sfx('heal');
+      this.save();
+      this.trader(n);
+    };
+    $('#rnBurn').onclick = () => {
+      if (this.deckSize() <= RUN_MIN_DECK) { toast(`Your deck can't go below ${RUN_MIN_DECK} cards.`); sfx('err'); return; }
+      if (s.teeth < 3) { toast('You need 3 teeth.'); sfx('err'); return; }
+      sfx('select');
+      node.burn = true;
+      this.save();
+      this.burn();
+    };
+    $('#rnLeave').onclick = () => { sfx('select'); this.leave(); };
+  },
+
+  burn() {
+    const s = this.s, node = s.node, cards = this.cards();
+    this.screen('ri_tooth', 'BURN A CARD', `Pick a card to burn for 3 teeth. Your deck has ${this.deckSize()} cards.`,
+      '', '<button class="btn" id="rnBack">BACK</button>');
+    this.cardGrid($('#rnBody'), cards, (d) => {
+      s.teeth -= 3;
+      this.remove(d.rid);
+      node.burn = false;
+      this.save();
+      sfx('die');
+      toast(`${d.name} burned away.`);
+      this.trader(s.map.nodes[node.id]);
+    }, true);
+    $('#rnBack').onclick = () => { sfx('select'); node.burn = false; this.save(); this.trader(s.map.nodes[node.id]); };
+  },
+
+  /* ---------- ? stops ---------- */
+  canChoose(ch) {
+    return (!ch.ok || ch.ok(this)) && (!ch.pick || this.creatures().some(ch.pick));
+  },
+
+  event(n) {
+    const s = this.s, node = s.node;
+    if (!node.ev) {
+      const fresh = RUN_EVENTS.filter((e) => !s.events.includes(e.id));
+      const from = fresh.length ? fresh : RUN_EVENTS;
+      const forced = RUN_EVENTS.find((e) => e.id === this.debugEvent);
+      node.ev = forced ? forced.id : from[runRand(this.rand(300 + n.id), from.length)].id;
+      this.debugEvent = null;
+      s.events.push(node.ev);
+      this.save();
+    }
+    const ev = RUN_EVENTS.find((e) => e.id === node.ev);
+    if (node.choice != null) {
+      const ch = ev.choices[node.choice];
+      if (ch.transfer) return this.transfer({ icon: ev.art, title: ev.title, consume: false, cost: ch.cost });
+      this.screen(ev.art, ev.title, 'Pick a creature.', '', '<button class="btn" id="rnBack">BACK</button>');
+      const mons = this.creatures().filter(ch.pick);
+      this.cardGrid($('#rnBody'), mons, (d) => this.finishStop(ev.art, ev.title, ch.act(this, d)), mons.length > 7);
+      $('#rnBack').onclick = () => { sfx('select'); node.choice = null; this.save(); this.event(n); };
+      return;
+    }
+    this.screen(ev.art, ev.title, '',
+      `<div class="rn-event"><img class="rn-art" src="${spriteURL(ev.art)}" alt=""><p>${escapeHTML(ev.text)}</p></div>`,
+      ev.choices.map((ch, i) => {
+        const ok = this.canChoose(ch);
+        return `<button class="btn" data-ch="${i}" ${ok ? '' : `disabled title="${escapeHTML(ch.need || '')}"`}>${escapeHTML(ch.label)}</button>`;
+      }).join('') + (ev.choices.some((ch) => !this.canChoose(ch)) ? `<div class="rn-need">${escapeHTML(ev.choices.find((ch) => !this.canChoose(ch)).need || '')}</div>` : ''));
+    $$('[data-ch]').forEach((b) => (b.onclick = () => {
+      const ch = ev.choices[+b.dataset.ch];
+      if (!this.canChoose(ch)) return;
+      sfx('select');
+      if (ch.pick || ch.transfer) { node.choice = +b.dataset.ch; this.save(); this.event(n); }
+      else this.finishStop(ev.art, ev.title, ch.act(this));
+    }));
+  },
+
+  /* ---------- the deck, as seen from the map ---------- */
+  showDeck(host) {
+    const s = this.s, wrap = document.createElement('div');
+    wrap.className = 'rn-deckwrap';
+    wrap.innerHTML = `
+      <div class="rn panel rn-deck">
+        <div class="rn-head"><img class="rn-icon" src="${spriteURL('hero')}" alt="">
+          <div class="rn-headtext"><div class="rn-title">YOUR DECK</div>
+          <div class="rn-sub">${this.deckSize()} cards &middot; lands: ${Object.entries(s.lands).map(([k, n]) => `${n} ${ico(COLORS[k].icon)}`).join(' ')}</div></div></div>
+        <div class="rn-body" id="rnDeckBody"></div>
+        <div class="rn-btns"><button class="btn" id="rnDeckClose">CLOSE</button></div>
+      </div>`;
+    host.appendChild(wrap);
+    this.cardGrid($('#rnDeckBody'), this.cards().sort((a, b) => COLOR_KEYS.indexOf(a.color) - COLOR_KEYS.indexOf(b.color) || costTotal(a.cost) - costTotal(b.cost)), null, true);
+    $('#rnDeckClose').onclick = () => { sfx('select'); wrap.remove(); };
+  },
+
+  /* ---------- end of the run ---------- */
+  finish(won) {
+    const s = this.s, size = this.deckSize();
+    const rec = getRunRecord(); rec[won ? 'wins' : 'losses']++; Store.write(RUN_RECORD_KEY, rec);
+    this.clear();
+    sfx(won ? 'win' : 'lose');
+    showScreen(`
+      <div class="result panel">
+        <img class="r-art" src="${spriteURL(won ? 'hero' : 'dealer')}" alt="">
+        <div class="r-title">${won ? 'RUN CLEARED' : 'RUN OVER'}</div>
+        <div class="r-sub">${won ? 'You beat the Dealer at the end of the circuit.' : 'The circuit claims another spellslinger.'}</div>
+        <div class="r-tally">
+          <div><span>STOPS CLEARED</span><b>${s.stats.stops}</b></div>
+          <div><span>BATTLES WON</span><b>${s.stats.battles}</b></div>
+          <div><span>TEETH EARNED</span><b>${s.stats.teeth}</b></div>
+          <div class="r-score"><span>FINAL DECK</span><b>${size}</b></div>
+        </div>
+        <div class="concede-btns">
+          <button class="btn" id="runAgain">NEW RUN</button>
+          <button class="btn" id="runMenu">MAIN MENU</button>
+        </div>
+      </div>`, true);
+    $('.result').animate([{ transform: 'translateY(-30px) scale(.6)', opacity: 0 }, { transform: 'none', opacity: 1 }], { duration: 360, easing: 'steps(6)' });
+    tallyUp($$('.r-tally b'));
+    $('#runAgain').onclick = () => { sfx('select'); this.pickDeck(); };
+    $('#runMenu').onclick = () => { sfx('select'); showTitle(); };
+  },
+};

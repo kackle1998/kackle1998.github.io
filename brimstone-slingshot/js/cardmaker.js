@@ -350,7 +350,7 @@ const CardMaker = (() => {
             <button class="tool" data-shift="-1,0" title="Shift left">&#9664;</button>
             <button class="tool" data-shift="1,0" title="Shift right">&#9654;</button>
           </div>
-          <select class="db-input cm-template" id="template" aria-label="Start from built-in art"></select>
+          <button class="btn sm cm-template" id="template" title="Copy any existing art onto the canvas">START FROM ART...</button>
         </section>
 
         <section class="cm-col cm-preview panel">

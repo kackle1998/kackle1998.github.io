@@ -275,6 +275,7 @@ const Net = (() => {
     const oppDeck = seat === 0 ? m.guest_deck : m.host_deck;
     SPRITES.opp_hero = Array.isArray(oppDeck.portrait) && oppDeck.portrait.length === 16 ? oppDeck.portrait : SPRITES.hero_default;
     setSeats(seat);
+    Music.play('battle');
 
     let dice = null;
     if (fresh && !rows.length) dice = await rollOnline(m);
@@ -372,6 +373,7 @@ const Net = (() => {
     ended = true;
     busy = true;
     sfx('lose');
+    Music.play('menu');
     $('#banner').classList.remove('show');
     $('#game').classList.add('hidden');
     leave();

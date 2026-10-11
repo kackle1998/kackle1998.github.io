@@ -7,6 +7,8 @@ const BOARD_SLOTS = 5;
 const TRAP_SLOTS = 3;
 const START_LIFE = 20;
 const START_HAND = 5;
+const BOSS_PHASE_AT = 8;    // a boss Dealer at or below this much life raises the stakes, once
+const BOSS_PHASE_LIFE = 12; // ...healing back up to this
 
 let _uid = 1;
 
@@ -56,10 +58,13 @@ function buildLibrary(deck, owner) {
 class Game {
   /* opts.viewer is the seat whose point of view the log is written from ("You"). */
   constructor(deck0, deck1, first = Math.random() < 0.5 ? 0 : 1, opts = {}) {
-    const { names = ['You', 'Dealer'], cpu = [false, true], viewer = 0 } = opts;
+    const { names = ['You', 'Dealer'], cpu = [false, true], viewer = 0, life = [START_LIFE, START_LIFE], boss = null, cpuName = 'the Dealer' } = opts;
     _uid = 1; // both browsers in an online match must hand out the same uids
     this.viewer = viewer;
-    this.players = [this.mkPlayer(0, names[0], deck0, cpu[0]), this.mkPlayer(1, names[1], deck1, cpu[1])];
+    this.boss = boss; // Dealer's Run boss rule: 'gale' | 'ossuary' | 'dice'
+    this.cpuName = cpuName; // who the computer player is in sentences: the Dealer, or a run rival
+    this.phase2 = false;
+    this.players = [this.mkPlayer(0, names[0], deck0, cpu[0], life[0]), this.mkPlayer(1, names[1], deck1, cpu[1], life[1])];
     this.active = first;
     this.turnNum = 0;
     this.over = false;
@@ -71,9 +76,9 @@ class Game {
     this.say(`${this.subj(this.cur)} ${this.isViewer(this.cur) ? 'go' : 'goes'} first.`);
   }
 
-  mkPlayer(idx, name, deck, cpu) {
+  mkPlayer(idx, name, deck, cpu, life = START_LIFE) {
     return {
-      idx, name, cpu, deckDef: deck, life: START_LIFE,
+      idx, name, cpu, deckDef: deck, life,
       library: buildLibrary(deck, idx), hand: [], board: Array(BOARD_SLOTS).fill(null), traps: Array(TRAP_SLOTS).fill(null),
       lands: [], grave: [], landPlayed: false, fatigue: 0,
     };
@@ -83,9 +88,9 @@ class Game {
   opp(p) { return this.players[1 - p.idx]; }
   isViewer(p) { return p.idx === this.viewer; }
   say(text, p) { this.log.push({ text, who: p ? (this.isViewer(p) ? 'you' : 'cpu') : '' }); if (this.log.length > 80) this.log.shift(); }
-  subj(p) { return this.isViewer(p) ? 'You' : p.cpu ? 'The Dealer' : p.name; }
-  obj(p) { return this.isViewer(p) ? 'you' : p.cpu ? 'the Dealer' : p.name; }
-  possessive(p) { return this.isViewer(p) ? 'your' : p.cpu ? "the Dealer's" : `${p.name}'s`; }
+  subj(p) { return this.isViewer(p) ? 'You' : p.cpu ? this.cpuName[0].toUpperCase() + this.cpuName.slice(1) : p.name; }
+  obj(p) { return this.isViewer(p) ? 'you' : p.cpu ? this.cpuName : p.name; }
+  possessive(p) { return this.isViewer(p) ? 'your' : p.cpu ? `${this.cpuName}'s` : `${p.name}'s`; }
 
   concede(p) {
     if (this.over) return;
@@ -453,7 +458,25 @@ class Game {
     if (n <= 0) return;
     p.life -= n;
     this.fx.push({ kind: 'dmg', player: p.idx, n });
+    if (this.boss && p.cpu && !this.phase2 && p.life > 0 && p.life <= BOSS_PHASE_AT) this.bossPhase(p);
     this.checkOver();
+  }
+
+  /* The boss Dealer raises the stakes, once: heals, draws 2, and its rule kicks in. */
+  bossPhase(p) {
+    this.phase2 = true;
+    this.healPlayer(p, BOSS_PHASE_LIFE - p.life);
+    const foe = this.opp(p);
+    if (this.boss === 'gale') {
+      for (const c of this.livingBoard(p)) if (!has(c, 'airborne')) c.sigils.push('airborne');
+    } else if (this.boss === 'ossuary') {
+      p.board.forEach((c, i) => { if (!c) p.board[i] = instantiate('skeleton', p.idx); });
+    } else if (this.boss === 'dice') {
+      foe.traps.forEach((t, i) => { if (t) { foe.grave.push(t); foe.traps[i] = null; } });
+    }
+    this.say('The Dealer raised the stakes!', p);
+    for (let i = 0; i < 2; i++) this.drawCard(p);
+    this.fx.push({ kind: 'boss', rule: this.boss });
   }
 
   healPlayer(p, n) {

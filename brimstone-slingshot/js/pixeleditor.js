@@ -2,7 +2,7 @@
 /* ============================================================
    BRIMSTONE SLINGSHOT — 16x16 pixel editor (card maker + character maker)
    Expects the standard markup: #pix canvas, #palette, #tools, #undoBtn,
-   #clearBtn, #flipBtn, [data-shift] buttons and the #template select.
+   #clearBtn, #flipBtn, [data-shift] buttons and the #template button.
    ============================================================ */
 
 const PixelEditor = (() => {
@@ -31,17 +31,19 @@ const PixelEditor = (() => {
   function draw() {
     for (let y = 0; y < SIZE; y++) for (let x = 0; x < SIZE; x++) {
       const ch = grid[y][x];
-      ctx.fillStyle = PAL[ch] || ((x + y) % 2 ? '#cdd4a4' : '#c3cb98');
+      ctx.fillStyle = PAL[ch] || ((x + y) % 2 ? Palette.cur.artbg : Palette.cur.bd[3]);
       ctx.fillRect(x * CELL, y * CELL, CELL, CELL);
     }
-    ctx.strokeStyle = 'rgba(31,36,24,.12)';
+    ctx.strokeStyle = Palette.cur.ink;
+    ctx.globalAlpha = 0.12;
     ctx.lineWidth = 1;
     for (let i = 1; i < SIZE; i++) {
       ctx.beginPath(); ctx.moveTo(i * CELL + 0.5, 0); ctx.lineTo(i * CELL + 0.5, SIZE * CELL); ctx.stroke();
       ctx.beginPath(); ctx.moveTo(0, i * CELL + 0.5); ctx.lineTo(SIZE * CELL, i * CELL + 0.5); ctx.stroke();
     }
+    ctx.globalAlpha = 1;
     if (mirror) {
-      ctx.strokeStyle = '#d97a2b';
+      ctx.strokeStyle = Palette.cur.accent;
       ctx.lineWidth = 2;
       ctx.beginPath(); ctx.moveTo(8 * CELL, 0); ctx.lineTo(8 * CELL, SIZE * CELL); ctx.stroke();
     }
@@ -98,10 +100,63 @@ const PixelEditor = (() => {
   /* Apply art from outside (e.g. "reset to default") as an undoable edit. */
   function apply(src) { pushHistory(); setRows(src); changed(); }
 
-  function renderTemplates() {
-    const names = Object.keys(SPRITES).filter((k) => !k.startsWith('spr_') && !k.startsWith('deck_') && !k.endsWith('_default'));
-    q('#template').innerHTML = `<option value="">START FROM BUILT-IN ART...</option>` +
-      names.map((n) => `<option value="${n}">${(CARDS[n] && CARDS[n].name) || n.replace('land_', 'land: ')}</option>`).join('');
+  /* ---------- "start from art" picker (same tile grid as the deck art picker) ---------- */
+  function artLabel(key) {
+    if (key === 'hero') return 'Hero';
+    if (key.startsWith('land_')) return COLORS[key.slice(5)] ? COLORS[key.slice(5)].land : key;
+    const c = Object.values(CARDS).find((x) => x.sprite === key);
+    return c ? c.name : key;
+  }
+
+  function artTile(key, label = artLabel(key), on = false) {
+    return `<button class="da-tile${on ? ' on' : ''}" data-art="${escapeHTML(key)}" title="${escapeHTML(label)}">
+      <img src="${spriteURL(key)}" alt=""><span>${escapeHTML(label)}</span></button>`;
+  }
+
+  function artSection(title, keys) {
+    return keys.length ? `<div class="da-h">${title}</div><div class="da-grid">${keys.map((k) => artTile(k)).join('')}</div>` : '';
+  }
+
+  function closePicker() {
+    const w = q('#tplWrap');
+    if (w) w.remove();
+    document.removeEventListener('keydown', pickerKey, true);
+  }
+
+  function pickerKey(e) {
+    if (e.key !== 'Escape' || !q('#tplWrap')) return;
+    e.stopPropagation();
+    closePicker();
+  }
+
+  function openPicker() {
+    sfx('select');
+    closePicker();
+    const mine = customIds.map((id) => CARDS[id].sprite).filter((k) => k.startsWith('spr_') && SPRITES[k]);
+    const builtIn = Object.keys(SPRITES).filter((k) => !k.startsWith('spr_') && !k.startsWith('deck_') && !k.endsWith('_default'));
+    const wrap = document.createElement('div');
+    wrap.className = 'da-wrap tpl-wrap';
+    wrap.id = 'tplWrap';
+    wrap.innerHTML = `<div class="da panel">
+      <div class="da-head">
+        <div class="db-title">START FROM ART</div>
+        <div class="da-curname">Replaces the canvas. UNDO brings your drawing back.</div>
+      </div>
+      <div class="da-body">
+        ${artSection('MY CARD MAKER ART', mine)}
+        ${artSection('ALL ART', builtIn)}
+      </div>
+      <div class="da-foot"><button class="btn sm" id="tplCancel">CANCEL</button></div>
+    </div>`;
+    wrap.addEventListener('pointerdown', (e) => { if (e.target === wrap) closePicker(); });
+    wrap.querySelectorAll('[data-art]').forEach((b) => (b.onclick = () => {
+      closePicker();
+      sfx('place');
+      apply(expandSprite(SPRITES[b.dataset.art]));
+    }));
+    wrap.querySelector('#tplCancel').onclick = () => { sfx('select'); closePicker(); };
+    q('#screen').appendChild(wrap);
+    document.addEventListener('keydown', pickerKey, true);
   }
 
   function init(opts = {}) {
@@ -149,17 +204,12 @@ const PixelEditor = (() => {
       changed();
     }));
 
-    renderTemplates();
-    q('#template').addEventListener('change', (e) => {
-      const n = e.target.value;
-      if (!n) return;
-      e.target.value = '';
-      apply(expandSprite(SPRITES[n]));
-    });
+    closePicker();
+    q('#template').onclick = openPicker;
 
     renderTools();
     draw();
   }
 
-  return { SIZE, BLANK_ROW, init, load, apply, rows, undo, draw };
+  return { SIZE, BLANK_ROW, init, load, apply, rows, undo, draw, artLabel, artTile };
 })();

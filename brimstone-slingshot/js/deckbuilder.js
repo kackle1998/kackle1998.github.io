@@ -88,7 +88,7 @@ function refreshDeckBuilder() {
 function dbPool() {
   const order = (c) => COLOR_KEYS.indexOf(c.color);
   return Object.values(CARDS)
-    .filter((c) => c.type !== 'land' && !c.token)
+    .filter((c) => c.type !== 'land' && !c.token && !c.runCard)
     .filter((c) => DB.tab === 'all' || c.color === DB.tab)
     .filter((c) => DB.source === 'all' || (DB.source === 'custom') === !!c.custom)
     .sort((a, b) => order(a) - order(b) || costTotal(a.cost) - costTotal(b.cost) || a.name.localeCompare(b.name));
@@ -121,7 +121,7 @@ function dbAutoComplete() {
   colors = colors.slice(0, 2);
 
   const fits = (c) => COLOR_KEYS.every((k) => !c.cost[k] || colors.includes(k));
-  const pool = Object.values(CARDS).filter((c) => c.type === 'creature' && !c.token && fits(c));
+  const pool = Object.values(CARDS).filter((c) => c.type === 'creature' && !c.token && !c.runCard && fits(c));
   let creatures = count((c) => c.type !== 'land');
   const lands = count((c) => c.type === 'land');
   let room = DECK_SIZE - deckCount(list) - Math.max(0, 12 - lands);
@@ -208,18 +208,6 @@ function dbPlay() {
 }
 
 /* ---------- deck art picker ---------- */
-function dbArtLabel(key) {
-  if (key === 'hero') return 'Hero';
-  if (key.startsWith('land_')) return COLORS[key.slice(5)] ? COLORS[key.slice(5)].land : key;
-  const c = Object.values(CARDS).find((x) => x.sprite === key);
-  return c ? c.name : key;
-}
-
-function dbArtTile(key, label, on) {
-  return `<button class="da-tile${on ? ' on' : ''}" data-art="${escapeHTML(key)}" title="${escapeHTML(label)}">
-    <img src="${spriteURL(key)}" alt=""><span>${escapeHTML(label)}</span></button>`;
-}
-
 function dbArtOpen(mode = 'choose') {
   sfx('select');
   let wrap = $('#daWrap');
@@ -261,7 +249,7 @@ function dbArtChoose(wrap) {
   const mine = customIds.map((id) => CARDS[id].sprite).filter((k) => k.startsWith('spr_') && !inDeck.includes(k));
   const builtIn = Object.keys(SPRITES).filter((k) => !k.startsWith('spr_') && !k.startsWith('deck_') && !k.endsWith('_default') && !inDeck.includes(k));
   const section = (title, keys) => keys.length
-    ? `<div class="da-h">${title}</div><div class="da-grid">${keys.map((k) => dbArtTile(k, dbArtLabel(k), pick === k)).join('')}</div>` : '';
+    ? `<div class="da-h">${title}</div><div class="da-grid">${keys.map((k) => PixelEditor.artTile(k, PixelEditor.artLabel(k), pick === k)).join('')}</div>` : '';
 
   wrap.innerHTML = `<div class="da panel">
     ${dbArtHead(cur)}
@@ -306,13 +294,13 @@ function dbArtDraw(wrap) {
           <button class="tool" data-shift="-1,0" title="Shift left">&#9664;</button>
           <button class="tool" data-shift="1,0" title="Shift right">&#9654;</button>
         </div>
-        <select class="db-input cm-template" id="template" aria-label="Start from built-in art"></select>
+        <button class="btn sm cm-template" id="template" title="Copy any existing art onto the canvas">START FROM ART...</button>
       </section>
       <div class="da-side">
         <div class="da-h">PREVIEW</div>
         <div class="da-sizes" id="daSizes"></div>
         <p class="muted">Draw a 16 x 16 picture for this deck. It shows on the deck list when you choose a deck to play.</p>
-        <p class="muted">Left-click paints, right-click erases. Start from any built-in art with the menu under the canvas.</p>
+        <p class="muted">Left-click paints, right-click erases. Start from any existing art with the button under the canvas.</p>
       </div>
     </div>
     <div class="da-foot">

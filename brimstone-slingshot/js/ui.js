@@ -14,19 +14,23 @@ let game = null;
 let ME = 0, OPP = 1;
 const mine = (p) => p.idx === ME;
 const online = () => typeof Net !== 'undefined' && Net.on;
-function oppName() { return online() ? Net.oppName : 'DEALER'; }       // panel / banner text
-function oppTitle() { return online() ? Net.oppName : 'the Dealer'; }  // in sentences
-function oppSprite() { return online() ? 'opp_hero' : 'dealer'; }
+/* A Dealer's Run battle may be against one of the Dealer's rivals (data.js RIVALS) instead. */
+let foe = null; // { name: 'MORT SPADE', short: 'Mort Spade', sprite } or null for the Dealer
+function oppName() { return online() ? Net.oppName : foe ? foe.name : 'DEALER'; }       // panel / banner text
+function oppTitle() { return online() ? Net.oppName : foe ? foe.short : 'the Dealer'; }  // in sentences
+function oppSprite() { return online() ? 'opp_hero' : foe ? foe.sprite : 'dealer'; }
+function OppTitle() { const t = oppTitle(); return t[0].toUpperCase() + t.slice(1); }    // starting a sentence
 
 function setSeats(me) {
   ME = me;
   OPP = 1 - me;
   $('#youPanel').dataset.player = ME;
   $('#cpuPanel').dataset.player = OPP;
-  $('#board .row-label:not(.bottom)').textContent = online() ? Net.oppName.toUpperCase() : 'THE DEALER';
+  $('#board .row-label:not(.bottom)').textContent = online() ? Net.oppName.toUpperCase() : foe ? foe.name : 'THE DEALER';
 }
 let busy = false;     // true while animations / the Dealer are acting
 let ended = false;
+let runBattle = false; // this game is a battle in a Dealer's Run (js/run.js)
 let sel = { hand: null, attacker: null }; // uids
 let curScale = 1;
 const tapState = new Map(); // uid -> was tapped at last render (to animate tap/untap)
@@ -58,8 +62,9 @@ for (const ev of ['gesturestart', 'gesturechange']) document.addEventListener(ev
 fit();
 
 /* ---------- sound (tiny WebAudio synth) ---------- */
+const SOUND_KEY = 'cardgrave.sound.v1';
 const Sfx = {
-  ctx: null, muted: false,
+  ctx: null, muted: Store.read(SOUND_KEY, 'on') === 'off',
   ensure() {
     if (!this.ctx) { try { this.ctx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { /* no audio */ } }
     if (this.ctx && this.ctx.state === 'suspended') this.ctx.resume();
@@ -94,6 +99,8 @@ function sfx(name, n = 1) {
   switch (name) {
     // Combo hits climb a semitone per link; the callout chime climbs with them.
     case 'chain': S.tone(330 * 2 ** ((n - 1) / 12), 0.12, 'square', 0.045); break;
+    case 'vs': S.tone(110, 0.3, 'sawtooth', 0.05); break;
+    case 'vsGo': S.tone(n === 3 ? 1046 : n === 2 ? 523 : 440, n === 3 ? 0.25 : 0.1, 'square', 0.045); break;
     case 'callout': [0, 4, 7].forEach((st, i) => S.tone(523 * 2 ** ((n - 2 + st) / 12), 0.2, 'triangle', 0.05, null, i * 0.07)); break;
     case 'warp': S.tone(70, 2.4, 'sawtooth', 0.04, 1300); S.tone(105, 2.4, 'square', 0.025, 1900); S.noise(0.6, 0.05); break;
     case 'tick': S.tone(900, 0.02, 'square', 0.015); break;
@@ -116,50 +123,78 @@ function sfx(name, n = 1) {
     case 'lose': [392, 330, 262, 196].forEach((f, i) => S.tone(f, 0.32, 'square', 0.05, null, i * 0.22)); break;
   }
 }
-/* ---------- ambient music (gapless WebAudio loop) ---------- */
+/* ---------- music (gapless WebAudio loops) ---------- */
+// Moonlit Circuit plays on every non-battle screen; BATTLE takes over while a match is on.
+// Each file is pre-cut so its end flows straight into its start; looping the decoded
+// buffer is sample-accurate, unlike <audio loop> which leaves a gap.
 const Music = {
-  // The file is pre-cut so its end flows straight into its start; looping the decoded
-  // buffer is sample-accurate, unlike <audio loop> which leaves a gap.
-  src: (() => {
-    const ogg = new Audio().canPlayType('audio/ogg; codecs="vorbis"');
-    return 'assets/audio/music/moonlit-circuit-loop.' + (ogg ? 'ogg' : 'mp3');
-  })(),
-  volume: 0.04, gain: null, started: false, bytes: null,
+  files: { menu: 'moonlit-circuit-loop', battle: 'battle-loop' },
+  ext: new Audio().canPlayType('audio/ogg; codecs="vorbis"') ? 'ogg' : 'mp3',
+  volume: 0.04,
+  want: 'menu', // the track the current screen calls for
+  cur: null,    // the playing (or loading) track: { name, src, gain, level }
+  unlocked: false, bytes: {}, buffers: {},
   // Browsers block audio until the first click/keypress, but downloading isn't blocked,
-  // so fetch the file at page load and the music can begin the moment input arrives.
+  // so fetch the files at page load and the music can begin the moment input arrives.
   preload() {
-    this.bytes = fetch(this.src).then((r) => r.arrayBuffer()).catch(() => null);
+    for (const name in this.files) {
+      this.bytes[name] = fetch(`assets/audio/music/${this.files[name]}.${this.ext}`).then((r) => r.arrayBuffer());
+      this.bytes[name].catch(() => {});
+    }
   },
-  async start() {
+  buffer(name) {
+    return this.buffers[name] || (this.buffers[name] = this.bytes[name].then((b) => Sfx.ctx.decodeAudioData(b)));
+  },
+  start() {
+    if (this.unlocked || !Sfx.ctx) return;
+    this.unlocked = true;
+    this.switchTo(this.want, 1.5);
+  },
+  /* Ask for a track: the current one fades out while the new one fades in from its start. */
+  play(name, fade = 1.5) {
+    this.want = name;
+    if (this.unlocked) this.switchTo(name, fade);
+  },
+  async switchTo(name, fade) {
+    if (this.cur && this.cur.name === name) return;
+    const old = this.cur, t = { name, level: 0 };
+    this.cur = t;
+    if (old && old.src) { this.ramp(old, 0, fade); old.src.stop(Sfx.ctx.currentTime + fade + 0.05); }
+    let buf;
+    try { buf = await this.buffer(name); } catch (e) { return; /* music is optional */ }
+    if (this.cur !== t) return; // switched again while this one was decoding
     const ctx = Sfx.ctx;
-    if (this.started || !ctx) return;
-    this.started = true;
-    try {
-      const bytes = await (this.bytes || fetch(this.src).then((r) => r.arrayBuffer()));
-      const buf = await ctx.decodeAudioData(bytes);
-      const s = ctx.createBufferSource();
-      s.buffer = buf; s.loop = true;
-      this.gain = ctx.createGain();
-      this.gain.gain.value = 0;
-      s.connect(this.gain).connect(ctx.destination);
-      s.start();
-      this.setMuted(Sfx.muted, 1.5);
-    } catch (e) { /* music is optional */ }
+    t.src = ctx.createBufferSource();
+    t.src.buffer = buf; t.src.loop = true;
+    t.gain = ctx.createGain();
+    t.gain.gain.setValueAtTime(0, ctx.currentTime);
+    t.src.connect(t.gain).connect(ctx.destination);
+    t.src.start();
+    this.ramp(t, Sfx.muted ? 0 : this.volume, fade);
   },
-  // Ramp from the last level we set ourselves: reading gain.value right after creating
-  // the node returns the default 1.0, which made the fade-in start at full volume.
-  level: 0,
+  // Ramp from wherever the gain is now. gain.value isn't reliable mid-ramp (or right after
+  // the node is made, when it reports 1.0), so hold the curve where the browser can and
+  // otherwise start from the last level we set ourselves.
+  ramp(t, to, fade) {
+    const g = t.gain.gain, now = Sfx.ctx.currentTime;
+    if (g.cancelAndHoldAtTime) g.cancelAndHoldAtTime(now);
+    else { g.cancelScheduledValues(now); g.setValueAtTime(t.level, now); }
+    t.level = to;
+    g.linearRampToValueAtTime(to, now + fade);
+  },
   setMuted(muted, fade = 0.4) {
-    if (!this.gain) return;
-    const g = this.gain.gain, t = Sfx.ctx.currentTime;
-    g.cancelScheduledValues(t);
-    g.setValueAtTime(this.level, t);
-    this.level = muted ? 0 : this.volume;
-    g.linearRampToValueAtTime(this.level, t + fade);
+    if (this.cur && this.cur.gain) this.ramp(this.cur, muted ? 0 : this.volume, fade);
   },
 };
 Music.preload();
 function audioUnlock() { Sfx.ensure(); Music.start(); }
+
+/* Sound effects and music together, set from OPTIONS and saved. */
+function setSound(on) {
+  Sfx.muted = !on;
+  Music.setMuted(Sfx.muted);
+  Store.write(SOUND_KEY, on ? 'on' : 'off');
+}
 window.addEventListener('pointerdown', audioUnlock);
 window.addEventListener('keydown', audioUnlock);
 
@@ -276,6 +311,14 @@ function flushFx() {
   const fx = game.fx.splice(0);
   const chain = countCombo(fx);
   if (FAST) return;
+  // A boss Dealer in a run raising the stakes (engine.js bossPhase).
+  const stakes = fx.find((f) => f.kind === 'boss');
+  if (stakes) {
+    const rule = BOSS_RULES[stakes.rule];
+    sfx('trap');
+    CRT.pulse(1, true);
+    banner('THE STAKES RISE').then(() => { if (rule && !game.over) { callout(rule.name); toast(rule.text); } });
+  }
   if (chain) {
     sfx('chain', chain);
     const word = calloutFor(chain);
@@ -882,7 +925,7 @@ async function cpuTurn() {
   const g = game;
   busy = true;
   render();
-  await banner("DEALER'S TURN");
+  await banner(`${oppName().toUpperCase()}'S TURN`);
   if (abandoned(g)) return;
   const p = game.players[1];
 
@@ -982,16 +1025,17 @@ function getRecord() { return { wins: 0, losses: 0, ...Store.read(RECORD_KEY, {}
 
 function titleMenu() {
   return [
-    { label: 'OFFLINE PLAY', desc: "Sit at the Dealer's table and play a hand.", go: () => showDeckSelect() },
+    { label: 'OFFLINE PLAY', desc: "Sit at the Dealer's table: a quick match, or a run along the circuit.", go: showOfflineMenu },
     Cloud.enabled && { label: 'ONLINE ARENA', desc: 'Duel another spellslinger in real time. Needs an account.', go: () => Net.showOnline() },
     { label: 'DECK BUILDER', desc: 'Bind 30 cards into a spellbook of your own.', go: () => showDeckBuilder() },
     { label: 'CARD MAKER', desc: 'Draw and enchant a card of your own.', go: () => CardMaker.show() },
     { label: 'CHARACTER', desc: 'Change the face you bring to the table.', go: () => CharMaker.show() },
-    { label: 'HOW TO PLAY', desc: 'Learn the rules of the table.', go: showTitleRules },
+    { label: 'OPTIONS', desc: 'Sound, screen and colours. How to play lives here too.', go: () => openOptions(false) },
   ].filter(Boolean);
 }
 
 function showTitle() {
+  Music.play('menu');
   const menu = titleMenu(), rec = getRecord();
   showScreen(`
     <div class="ttl">
@@ -1031,7 +1075,7 @@ let titleSel = 0;
 
 /* Arrow keys move the highlighted bar, Enter picks it. */
 document.addEventListener('keydown', (e) => {
-  if (!$('.ttl') || $('#screen').classList.contains('hidden')) return;
+  if (e.defaultPrevented || !$('.ttl') || $('#screen').classList.contains('hidden')) return;
   const bars = $$('.ttl-bar');
   if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
     e.preventDefault();
@@ -1053,22 +1097,93 @@ function titleRune(cv) {
   (function draw() {
     if (!cv.isConnected) return;
     const t = (performance.now() - t0) / 1000;
+    const p = Palette.cur;
     x.clearRect(0, 0, W, H);
-    ring(60, 18, 180, '#1f2418');
-    ring(46, 13, 120, '#3b4430');
+    ring(60, 18, 180, p.ink);
+    ring(46, 13, 120, p.dark);
     for (let k = 0; k < 10; k++) {
       const a = (k / 10) * Math.PI * 2 + t * 0.6, front = Math.sin(a) > 0;
       const px = Math.round(cx + Math.cos(a) * 53), py = Math.round(cy + Math.sin(a) * 15.5);
-      x.fillStyle = front ? '#d97a2b' : '#6e7a52';
+      x.fillStyle = front ? p.accent : p.mid;
       x.fillRect(px - 1, py, 3, 1); x.fillRect(px, py - 1, 1, 3);
     }
     if (document.body.dataset.crt !== 'off') setTimeout(draw, 83);
   })();
 }
 
-function showTitleRules() {
-  showScreen(`<div class="rules panel">${RULES_HTML}<div class="rules-close"><button class="btn" id="closeRules">BACK</button></div></div>`);
-  $('#closeRules').onclick = () => { sfx('select'); showTitle(); };
+/* Opened from OPTIONS; `dim` when that was opened over a match. */
+function showTitleRules(dim = false) {
+  showScreen(`<div class="rules panel">${RULES_HTML}<div class="rules-close"><button class="btn" id="closeRules">BACK</button></div></div>`, dim);
+  $('#closeRules').onclick = () => { sfx('select'); showOptions(); };
+}
+
+/* OFFLINE PLAY: a Dealer's Run on the left, a single quick match on the right.
+   Left/Right pick, Enter chooses, Esc goes back to the title. */
+function showOfflineMenu() {
+  const run = Run.load();
+  const modes = [
+    { name: "DEALER'S RUN", art: 'dealer', go: () => Run.open(),
+      desc: 'Walk the brimstone circuit to the Dealer. Your deck grows and changes, and your life carries over.',
+      note: run ? `RUN IN PROGRESS &middot; ${ico('hp')} ${run.life}/${run.maxLife}` : 'ONE REGION &middot; ABOUT 10 MINUTES' },
+    { name: 'QUICK MATCH', art: 'ri_battle', go: () => showDeckSelect(),
+      desc: 'One hand against the Dealer with any deck you like.', note: 'PREMADE OR YOUR OWN DECKS' },
+  ];
+  showScreen(`
+    <div class="ds om">
+      <div class="ds-title">OFFLINE PLAY</div>
+      <div class="tablets">${modes.map((m, i) => `
+        <div class="tablet om-mode" data-i="${i}">
+          <div class="t-art"><img src="${spriteURL(m.art)}" alt=""></div>
+          <div class="t-name">${m.name}</div>
+          <div class="t-desc">${m.desc}</div>
+          <div class="om-note">${m.note}</div>
+        </div>`).join('')}
+      </div>
+      <button class="btn" id="omBack">BACK</button>
+    </div>`);
+  const cards = [...$$('.om-mode')];
+  const pick = (i) => { offlineSel = i; cards.forEach((c, j) => c.classList.toggle('on', j === i)); };
+  cards.forEach((c, i) => {
+    c.onmouseenter = () => { if (offlineSel !== i) { pick(i); sfx('select'); } };
+    c.onclick = () => { sfx('place'); modes[i].go(); };
+  });
+  pick(Math.min(offlineSel, 1));
+  $('#omBack').onclick = () => { sfx('select'); showTitle(); };
+}
+let offlineSel = 0;
+document.addEventListener('keydown', (e) => {
+  if (!$('.om') || $('#screen').classList.contains('hidden')) return;
+  const cards = $$('.om-mode');
+  if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') { e.preventDefault(); cards[e.key === 'ArrowLeft' ? 0 : 1].onmouseenter(); }
+  else if (e.key === 'Enter' && document.activeElement === document.body) { e.preventDefault(); cards[offlineSel].onclick(); }
+  else if (e.key === 'Escape') $('#omBack').onclick();
+});
+
+/* Fighting-game VS splash before a fight (Dealer's Run): you slide in from the left,
+   your foe from the right, then VS, READY..., GO!. Click to skip. Resolves when done.
+   you / foe: { name, deck, sprite } */
+function vsSplash(you, foe) {
+  const side = (p, cls) => `
+    <div class="vs-side ${cls}">
+      <div class="vs-port"><img src="${spriteURL(p.sprite)}" alt=""></div>
+      <div class="vs-who"><div class="vs-name">${escapeHTML(p.name.toUpperCase())}</div><div class="vs-deck">${escapeHTML(p.deck.toUpperCase())}</div></div>
+    </div>`;
+  showScreen(`<div class="vs">${side(you, 'vs-l')}${side(foe, 'vs-r')}<div class="vs-t" id="vsT">VS</div><div class="vs-t low" id="vsR"></div></div>`);
+  return new Promise((resolve) => {
+    if (FAST) return resolve();
+    const timers = [];
+    let done = false;
+    const finish = () => { if (done) return; done = true; timers.forEach(clearTimeout); resolve(); };
+    $('.vs').addEventListener('click', finish);
+    $('.vs-l').animate([{ transform: 'translateX(-100%)' }, { transform: 'none' }], { duration: 400, easing: 'steps(8)' });
+    $('.vs-r').animate([{ transform: 'translateX(100%)' }, { transform: 'none' }], { duration: 400, easing: 'steps(8)' });
+    sfx('vs');
+    const t = $('#vsT'), r = $('#vsR');
+    timers.push(setTimeout(() => { t.classList.add('on'); sfx('vsGo', 1); CRT.glitch(); }, 450));
+    timers.push(setTimeout(() => { r.textContent = 'READY...'; r.classList.add('on'); sfx('vsGo', 2); }, 1300));
+    timers.push(setTimeout(() => { r.textContent = 'GO!'; sfx('vsGo', 3); CRT.pulse(0.6); }, 2200));
+    timers.push(setTimeout(finish, 2900));
+  });
 }
 
 /* `onPick(deckDef)` runs when a deck is chosen: a game against the Dealer, or the online lobby. */
@@ -1108,13 +1223,7 @@ function showDeckSelect(onPick = startGame, heading = 'CHOOSE YOUR DECK') {
     b.onclick = () => { const s = saved.find((x) => x.d.id === b.dataset.id); if (s) onPick(s.def); };
   });
   $('#dsBuilder').onclick = () => { sfx('select'); showDeckBuilder(); };
-  $('#dsBack').onclick = () => { sfx('select'); showTitle(); };
-}
-
-function showRules() {
-  if (!$('#screen').classList.contains('hidden')) return;
-  showScreen(`<div class="rules panel">${RULES_HTML}<div class="rules-close"><button class="btn" id="closeRules">BACK</button></div></div>`, true);
-  $('#closeRules').onclick = hideScreen;
+  $('#dsBack').onclick = () => { sfx('select'); if (onPick === startGame) showOfflineMenu(); else showTitle(); };
 }
 
 /* ---------- opening dice roll: high roll picks who goes first ---------- */
@@ -1159,8 +1268,8 @@ function rollForFirst() {
         </div>
         <div class="roll-vs">VS</div>
         <div class="roller" id="rollerCpu">
-          <img class="r-art" src="${spriteURL('dealer')}" alt="">
-          <div class="roll-name">THE DEALER</div>
+          <img class="r-art" src="${spriteURL(oppSprite())}" alt="">
+          <div class="roll-name">${escapeHTML(foe ? foe.name : 'THE DEALER')}</div>
           <div class="die" id="dieCpu"></div>
         </div>
       </div>
@@ -1199,11 +1308,11 @@ function rollForFirst() {
         $('#goSecond').onclick = () => { sfx('select'); done(1); };
       } else {
         sfx('err');
-        msg.textContent = 'The Dealer rolled high...';
+        msg.textContent = `${OppTitle()} rolled high...`;
         await sleep(900);
         // Tempo usually beats the skipped draw, so the Dealer nearly always takes the first turn.
         const cpuFirst = Math.random() < 0.85;
-        msg.textContent = `The Dealer chooses to go ${cpuFirst ? 'first' : 'second'}.`;
+        msg.textContent = `${OppTitle()} chooses to go ${cpuFirst ? 'first' : 'second'}.`;
         await sleep(1400);
         done(cpuFirst ? 1 : 0);
       }
@@ -1212,13 +1321,19 @@ function rollForFirst() {
   });
 }
 
-async function startGame(deckDef) {
+/* opts (Dealer's Run): { cpuDeck, life: [you, dealer], boss: rule key, run: true, foe: a RIVALS entry } */
+async function startGame(deckDef, opts = {}) {
   const others = DECKS.filter((d) => d !== deckDef);
-  const cpuDeck = others[Math.floor(Math.random() * others.length)];
+  const cpuDeck = opts.cpuDeck || others[Math.floor(Math.random() * others.length)];
+  const r = opts.foe;
+  foe = r ? { name: r.name, short: r.name.toLowerCase().replace(/(^|[\s.])\w/g, (m) => m.toUpperCase()), sprite: r.sprite } : null;
+  Music.play('battle');
   const { first, you, cpu } = await rollForFirst();
   setSeats(0);
-  const g = game = new Game(deckDef, cpuDeck, first);
-  g.log.unshift({ text: `You rolled ${you}, the Dealer rolled ${cpu}.`, who: '' });
+  runBattle = !!opts.run;
+  const g = game = new Game(deckDef, cpuDeck, first, { life: opts.life, boss: opts.boss, cpuName: foe ? foe.short : undefined });
+  g.log.unshift({ text: `You rolled ${you}, ${oppTitle()} rolled ${cpu}.`, who: '' });
+  if (r && r.quip) g.log.unshift({ text: `${foe.short}: "${r.quip}"`, who: 'cpu' });
   tapState.clear();
   ended = false;
   busy = true;
@@ -1228,7 +1343,7 @@ async function startGame(deckDef) {
   inspectDefault();
   game.startTurn();
   render();
-  await banner(game.active === 0 ? 'YOU GO FIRST' : 'THE DEALER GOES FIRST');
+  await banner(game.active === 0 ? 'YOU GO FIRST' : `${foe ? foe.name : 'THE DEALER'} GOES FIRST`);
   if (abandoned(g)) return;
   if (game.active === 1) await cpuTurn();
   else { busy = false; render(); }
@@ -1243,7 +1358,7 @@ function showConcede() {
   showScreen(`
     <div class="result panel">
       <div class="r-title">CONCEDE?</div>
-      <div class="r-sub">You will lose this match and return to the ${online() ? 'online lobby' : 'main menu'}.</div>
+      <div class="r-sub">${inRun() ? 'This ends your run.' : `You will lose this match and return to the ${online() ? 'online lobby' : 'main menu'}.`}</div>
       <div class="concede-btns">
         <button class="btn" id="concedeYes">CONCEDE</button>
         <button class="btn" id="concedeNo">KEEP PLAYING</button>
@@ -1262,10 +1377,15 @@ function concede() {
     clearSel();
     sfx('lose');
   }
+  Music.play('menu');
   $('#banner').classList.remove('show');
   $('#game').classList.add('hidden');
+  if (inRun()) { runBattle = false; return Run.afterBattle(false, 0, 0); }
   showTitle();
 }
+
+/* The current game is a Dealer's Run battle. */
+function inRun() { return runBattle && !online(); }
 
 function endGame() {
   if (ended) return;
@@ -1273,7 +1393,8 @@ function endGame() {
   busy = true;
   render();
   const won = game.winner === ME;
-  if (!FAST) { const rec = getRecord(); rec[won ? 'wins' : 'losses']++; Store.write(RECORD_KEY, rec); }
+  const run = inRun();
+  if (!FAST && !run) { const rec = getRecord(); rec[won ? 'wins' : 'losses']++; Store.write(RECORD_KEY, rec); }
   sfx(won ? 'win' : 'lose');
   CRT.pulse(1.2, true);
   const g = game, you = g.players[ME], opp = g.players[OPP];
@@ -1281,33 +1402,38 @@ function endGame() {
   const st = matchStats();
   const show = (dim) => {
     if (game !== g) return;
+    Music.play('menu');
     showScreen(`
       <div class="result panel">
         <img class="r-art" src="${spriteURL(won ? 'hero' : oppSprite())}" alt="">
         <div class="r-title">${net ? net.title : won ? 'VICTORY' : 'DEFEAT'}</div>
-        <div class="r-sub">${net ? escapeHTML(net.sub) : won ? "The Dealer's life hit zero. You beat the house." : 'Your life hit zero. The house wins this one.'}</div>
-        <div class="r-stats">Turn ${g.turnNum} &middot; Your life ${Math.max(0, you.life)} &middot; ${escapeHTML(net ? Net.oppName : 'Dealer')} ${Math.max(0, opp.life)}</div>
+        <div class="r-sub">${net ? escapeHTML(net.sub) : won ? (foe ? `${escapeHTML(foe.short)}'s life hit zero. One more of the Dealer's hands down.` : "The Dealer's life hit zero. You beat the house.") : 'Your life hit zero. The house wins this one.'}</div>
+        <div class="r-stats">Turn ${g.turnNum} &middot; Your life ${Math.max(0, you.life)} &middot; ${escapeHTML(net ? Net.oppName : foe ? foe.short : 'Dealer')} ${Math.max(0, opp.life)}</div>
         <div class="r-tally">
           <div><span>DAMAGE DEALT</span><b>${st.dmg}</b></div>
           <div><span>CREATURES SUMMONED</span><b>${st.summons}</b></div>
           <div><span>BEST CHAIN</span><b>${st.bestChain}</b></div>
           <div class="r-score"><span>SCORE</span><b>${st.dmg * 100 + st.summons * 50 + st.bestChain * 200}</b></div>
         </div>
-        <div class="concede-btns">
+        <div class="concede-btns">${run ? '<button class="btn" id="runOnBtn">CONTINUE</button>' : `
           <button class="btn" id="againBtn">PLAY AGAIN</button>
-          <button class="btn" id="menuBtn">MAIN MENU</button>
+          <button class="btn" id="menuBtn">MAIN MENU</button>`}
         </div>
       </div>`, dim);
-    $('#againBtn').onclick = () => {
-      sfx('select');
-      if (net) { Net.leave(); Net.showOnline(); } else showDeckSelect();
-    };
-    $('#menuBtn').onclick = () => {
-      sfx('select');
-      if (net) Net.leave();
-      $('#game').classList.add('hidden');
-      showTitle();
-    };
+    if (run) {
+      $('#runOnBtn').onclick = () => { sfx('select'); runBattle = false; Run.afterBattle(won, you.life, opp.life); };
+    } else {
+      $('#againBtn').onclick = () => {
+        sfx('select');
+        if (net) { Net.leave(); Net.showOnline(); } else showDeckSelect();
+      };
+      $('#menuBtn').onclick = () => {
+        sfx('select');
+        if (net) Net.leave();
+        $('#game').classList.add('hidden');
+        showTitle();
+      };
+    }
     if (!FAST) {
       $('.result').animate([{ transform: 'translateY(-30px) scale(.6)', opacity: 0 }, { transform: 'none', opacity: 1 }], { duration: 360, easing: 'steps(6)' });
       tallyUp($$('.r-tally b'));
@@ -1408,16 +1534,16 @@ function tallyUp(els) {
 $('#bellImg').src = spriteURL('bell');
 $('#bell').addEventListener('click', playerEndTurn);
 $('#cpuPanel').addEventListener('click', onEnemyPanel);
-$('#helpBtn').addEventListener('click', showRules);
-
-$('#concedeBtn').addEventListener('click', showConcede);
-$('#muteBtn').addEventListener('click', () => {
-  Sfx.muted = !Sfx.muted;
-  Music.setMuted(Sfx.muted);
-  $('#muteBtn').classList.toggle('off', Sfx.muted);
+$('#gearImg').src = iconURL('gear');
+$('#gearBtn').addEventListener('click', () => {
+  if (!game || ended || !$('#screen').classList.contains('hidden')) return;
+  sfx('select');
+  openOptions(true);
 });
+$('#concedeBtn').addEventListener('click', showConcede);
+// Skips keys OPTIONS already used, e.g. the Enter that closed it must not also ring the bell.
 document.addEventListener('keydown', (e) => {
-  const inGame = game && !$('#game').classList.contains('hidden') && $('#screen').classList.contains('hidden');
+  const inGame = !e.defaultPrevented && game && !$('#game').classList.contains('hidden') && $('#screen').classList.contains('hidden');
   if (!inGame) return;
   if (e.key === 'Escape') { clearSel(); render(); }
   if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); playerEndTurn(); }
@@ -1444,7 +1570,6 @@ onSharedChange((key) => {
   if (key !== DECKS_KEY) toast(`Synced ${customIds.length} custom card${customIds.length === 1 ? '' : 's'}.`);
 });
 
-$('#crtBtn').addEventListener('click', () => toast(`CRT effect: ${CRT.cycle().toUpperCase()}`));
 CRT.init();
 showTitle();
 // The old cardmaker.html / charmaker.html addresses redirect here with a hash.

@@ -147,6 +147,105 @@ const SPRITES = {
     '......##', '....##++', '...#++++', '..#+++++', '.#++####', '.#+#####', '#+######', '#+##ww##',
     '#+##ww##', '#+######', '#++#####', '#+++####', '#++++###', '#+++++##', '#+++++++', '########',
   ],
+  /* ---------- RIVALS: alternative opponents to the Dealer (full 16x16, see RIVALS below) ---------- */
+  rival_mort: [
+    '................', '.....######.....', '....#++++++#....', '....#++++++#....',
+    '....#------#....', '.##############.', '...#wwwwwwww#...', '...#w##ww##w#...',
+    '...#wwwwwwww#...', '...#ww-ww-ww#...', '...#ww####ww#...', '....#wwwwww#....',
+    '.....######.....', '..###++++++###..', '.#+++#++++#+++#.', '#++++#++++#++++#',
+  ],
+  rival_hazel: [
+    '.........##.....', '........#++#....', '.......#+++#....', '......#++++#....',
+    '.....#+++++#....', '....#------#....', '.##############.', '..#+#wwwwww#+#..',
+    '..#+#w#ww#w#+#..', '..#+#wwwwww#+#..', '..#+#wwww#w#+#..', '..#+#www##w#+#..',
+    '..#+#w####w#+#..', '..#+##wwww##+#..', '.#+++######+++#.', '#+++++#--#+++++#',
+  ],
+  rival_rustwell: [
+    '.......###......', '......#www#.....', '.......#w#......', '...##########...',
+    '..#-w--##---+#..', '..#-w--##---+#..', '..#----##---+#..', '..############..',
+    '..###ww##ww###..', '..############..', '..#----##---+#..', '..#--#-##-#-+#..',
+    '...#---##--+#...', '.##############.', '#----#++++#----#', '#----#++++#----#',
+  ],
+  rival_corvin: [
+    '................', '...#######......', '..#+++++++#.....', '..#+++++++#.....',
+    '##############..', '..#---------#...', '..#-##---##-#...', '..##ww#-#ww##...',
+    '..#-##---##-####', '..#--------wwww#', '..#-------w---#.', '...#-----#--##..',
+    '....#####.##....', '..###+++++###...', '.#+++#+++#+++#..', '#++++#+++#++++#.',
+  ],
+  rival_pip: [
+    '.ww..........ww.', '.w#..........#w.', '..#+#......#-#..', '..#++#....#--#..',
+    '...#++####--#...', '...#+++##---#...', '...##########...', '...#wwwwwwww#...',
+    '...#ww#ww#ww#...', '...#wwwwwwww#...', '...#w#wwww#w#...', '...#ww####ww#...',
+    '....#wwwwww#....', '.#w#w#w##w#w#w#.', '#+++++#--#-----#', '#+++++#--#-----#',
+  ],
+  rival_marrow: [
+    '................', '....########....', '...#wwwwwwww#...', '..#wwwwww#www#..',
+    '..#wwwwwww#ww#..', '..#wwwwwwwwww#..', '..#w###ww###w#..', '..#w###ww###w#..',
+    '..#wwww##wwww#..', '...#wwwwwwww#...', '....#w#ww#w#....', '....#wwwwww#....',
+    '.....######.....', '......#ww#......', '..##www##www##..', '.#++#++##++#++#.',
+  ],
+  rival_goldie: [
+    '.....######.....', '...##--ww--##...', '..#----ww----#..', '..#----------#..',
+    '.##############.', '...#wwwwwwww#...', '...#w##ww##w#...', '...#ww#ww#ww#...',
+    '...#www##www#...', '..#+++wwww+++#..', '..#++++++++++#..', '..#+++####+++#..',
+    '...#++++++++#...', '....#++++++#....', '..###-#++#-###..', '.#---#-##-#---#.',
+  ],
+  rival_fenna: [
+    '..##........##..', '..#+#......#+#..', '..#w+#....#+w#..', '..#w++####++w#..',
+    '..#++++++++++#..', '.#++++++++++++#.', '.#+++######+++#.', '.#++#wwwwww#++#.',
+    '.#+#ww#ww#ww#+#.', '.#+#wwwwwwww#+#.', '.#+#wwwwwwww#+#.', '.#++#ww##ww#++#.',
+    '.#+++#wwww#+++#.', '.#++++####++++#.', '#+++++-ww-+++++#', '#++++++--++++++#',
+  ],
+  rival_veil: [
+    '.......##.......', '......#ww#......', '....###--###....', '...#+++##+++#...',
+    '..#+++#ww#+++#..', '..#+########+#..', '..#+#wwwwww#+#..', '..#+#w#ww#w#+#..',
+    '..#+#wwwwww#+#..', '..#+--------+#..', '..#+-w-w-w-w+#..', '..#+--------+#..',
+    '.#++--------++#.', '.#++#------#++#.', '#+++#-w--w-#+++#', '#++++######++++#',
+  ],
+  rival_boatman: [
+    '......####......', '....##++++##....', '...#++++++++#...', '..#+++####+++#..',
+    '..#++######++#..', '.#++########++#.', '.#+##w####w##+#.', '.#+##########+#.',
+    '.#+##########+#.', '.#++########++#.', '.#+++######+++#.', '#+++++++++#.#...',
+    '#++++++++#.###..', '#++++++++#-#w#-.', '#++++++++#-#w#-.', '##########.###..',
+  ],
+  rival_tobias: [
+    '......#ww#......', '.......##.......', '...##########...', '..#----------#..',
+    '.##----------##.', '#+#-###--###-#+#', '#+#-#w#--#w#-#+#', '.##-###--###-##.',
+    '..#----------#..', '..#--######--#..', '..#--#w##w#--#..', '..#--######--#..',
+    '..#----------#..', '...##########...', '.....#++++#.....', '.#++++#++#++++#.',
+  ],
+  rival_croak: [
+    '.....#.##.#.....', '.....#-##-#.....', '.##..#----#..##.', '#ww#.######.#ww#',
+    '#w##++++++++##w#', '.##++++++++++##.', '.#++++++++++++#.', '#++++++++++++++#',
+    '#++++++++++++++#', '#+############+#', '.#+----------+#.', '..#----------#..',
+    '...##########...', '...##ww##ww##...', '.#++++####++++#.', '#+++++#ww#+++++#',
+  ],
+  /* Halloween rivals */
+  rival_jack: [
+    '.......##.......', '.......#+#......', '...##########...', '..#-++#++#++-#..',
+    '.#-+++#++#+++-#.', '#-+www#++#www+-#', '#-++w+#++#+w++-#', '#-+++++ww+++++-#',
+    '#-++++++++++++-#', '#-+w+ww++ww+w+-#', '#-+wwwwwwwwww+-#', '.#-+ww+ww+ww+-#.',
+    '..#-++++++++-#..', '...##########...', '.#++##----##++#.', '#+++#-#--#-#+++#',
+  ],
+  rival_vesper: [
+    '................', '....########....', '...##########...', '..############..',
+    '..###ww##ww###..', '..##wwwwwwww##..', '..#w##wwww##w#..', '..#ww#wwww#ww#..',
+    '..#ww######ww#..', '..#ww#w##w#ww#..', '#+###wwwwww###+#', '#++###wwww###++#',
+    '#+++#-#ww#-#+++#', '#+++#--ww--#+++#', '#++++#-ww-#++++#', '#++++#-##-#++++#',
+  ],
+  rival_amunet: [
+    '.......##.......', '.....######.....', '....#-+-+-+#....', '...#-+-+-+-+#...',
+    '..#-+######+-#..', '..#+#ww--ww#+#..', '..#-#w##w--#-#..', '..#+#-www-w#+#..',
+    '..#-#ww--ww#-#..', '..#+#w--www#+#..', '..#-#www--w#-#..', '..#+##wwww##+#..',
+    '.#+-+######+-+#.', '#+-+-#wwww#-+-+#', '#-+-+#w--w#+-+-#', '#+-+-#ww-w#-+-+#',
+  ],
+  rival_brutus: [
+    '................', '..############..', '..############..', '..#+#++##++#+#..',
+    '..#++++++++++#..', '..#+-#-#-#-++#..', '..#+########+#..', '..#+#w#++#w#+#..',
+    '..#++++##++++#..', '..#++++++++++#..', '..#++######++#..', '..#++++++++++#..',
+    '..############..', '.#w##.#++#.##w#.', '.##++##++##++##.', '#+++++#++#+++++#',
+  ],
+
   bell: [
     '........', '.......#', '......##', '....####', '...#wwww', '..#w----', '..#w----', '..#w----',
     '..#w----', '.#w-----', '.#w-----', '#w------', '########', '......##', '......##', '........',
@@ -192,6 +291,16 @@ const ICONS = {
   stasisrune:['#######', '.#...#.', '..#.#..', '...#...', '..#.#..', '.#...#.', '#######'],
   spell:     ['...#...', '..#.#..', '.#...#.', '#..#..#', '.#...#.', '..#.#..', '...#...'],
   trap:      ['#.....#', '##...##', '#.#.#.#', '#..#..#', '#.#.#.#', '##...##', '#.....#'],
+  gear:      ['..#.#..', '.#####.', '##...##', '.#...#.', '##...##', '.#####.', '..#.#..'],
+  /* Dealer's Run: stops, teeth and event art */
+  battle:    ['#.....#', '.#...#.', '..#.#..', '...#...', '..#.#..', '##...##', '#.....#'],
+  fire:      ['...#...', '..##...', '..###.#', '.#####.', '.##.##.', '#.....#', '.#####.'],
+  altar:     ['...#...', '..###..', '...#...', '..###..', '..###..', '#######', '#.#.#.#'],
+  tooth:     ['.#####.', '#######', '#######', '.#####.', '.##.##.', '.#...#.', '.#...#.'],
+  event:     ['.####..', '#....#.', '....#..', '...#...', '...#...', '.......', '...#...'],
+  chip:      ['.#.#.#.', '#######', '#..#..#', '#.#.#.#', '#..#..#', '#######', '.#.#.#.'],
+  spring:    ['..#.#..', '.#.#...', '..#.#..', '.......', '#.....#', '#######', '.#####.'],
+  pool:      ['.......', '..#.#..', '.#.#.#.', '.......', '.#####.', '#######', '.#####.'],
 };
 
 const COLOR_KEYS = ['paw', 'bone', 'gem', 'hat'];
@@ -214,6 +323,7 @@ function iconSprite(name) {
   return px.map((r) => r.join(''));
 }
 for (const k of COLOR_KEYS) SPRITES['land_' + k] = iconSprite(COLORS[k].icon);
+for (const k of ['battle', 'fire', 'altar', 'tooth', 'event', 'chip', 'spring', 'pool']) SPRITES['ri_' + k] = iconSprite(k);
 
 const SIGILS = {
   airborne:   { name: 'Airborne',   icon: 'airborne',   text: () => 'May attack the enemy directly, even while they control creatures, unless they control an Airborne creature.' },
@@ -341,4 +451,25 @@ const DECKS = [
     desc: 'Flyers rule the skies above a wall of crystal.',
     list: { land_gem: 6, land_hat: 6, shard: 1, apprentice: 1, moth: 1, wisp: 2, adept: 1, owl: 2, shardblade: 1, battlemage: 1, drake: 1, archmage: 1, wyrm: 1, firebolt: 1, insight: 1, meteor: 1, shatter: 1, stasisrune: 1 },
   },
+];
+
+/* Alternative opponents to the Dealer. name fits the 12-char panel; deck is an index into DECKS. */
+const RIVALS = [
+  { id: 'mort',     name: 'MORT SPADE',   title: 'The Gravedigger', deck: 0, sprite: 'rival_mort',     quip: 'Every hole gets filled eventually.' },
+  { id: 'fenna',    name: 'FENNA VULPE',  title: 'The Huntress',    deck: 0, sprite: 'rival_fenna',    quip: 'I can smell your fear from here.' },
+  { id: 'corvin',   name: 'DR. CORVIN',   title: 'The Plague Doctor', deck: 0, sprite: 'rival_corvin', quip: 'Hold still. This is for your health.' },
+  { id: 'marrow',   name: 'OLD MARROW',   title: 'The Restless',    deck: 1, sprite: 'rival_marrow',   quip: 'I have all the time in the world.' },
+  { id: 'boatman',  name: 'THE BOATMAN',  title: 'The Ferryman',    deck: 1, sprite: 'rival_boatman',  quip: 'Two coins. Or your whole hand.' },
+  { id: 'veil',     name: 'MADAME VEIL',  title: 'The Oracle',      deck: 1, sprite: 'rival_veil',     quip: 'I have already seen how this ends.' },
+  { id: 'goldie',   name: 'GOLDIE PICK',  title: 'The Prospector',  deck: 2, sprite: 'rival_goldie',   quip: 'There is gold in them hills. And in your pockets.' },
+  { id: 'rustwell', name: 'SIR RUSTWELL', title: 'The Iron Knight', deck: 2, sprite: 'rival_rustwell', quip: 'Have at thee! ...Once my visor unsticks.' },
+  { id: 'croak',    name: 'BARON CROAK',  title: 'The Bog Noble',   deck: 2, sprite: 'rival_croak',    quip: 'Kneel before the crown of the swamp.' },
+  { id: 'hazel',    name: 'HAZEL BRIMM',  title: 'The Hedge Witch', deck: 3, sprite: 'rival_hazel',    quip: 'Eye of newt, deck of twenty-four.' },
+  { id: 'pip',      name: 'PIP MOTLEY',   title: 'The Jester',      deck: 3, sprite: 'rival_pip',      quip: 'The joke is on you. It always is.' },
+  { id: 'tobias',   name: 'TIN TOBIAS',   title: 'The Automaton',   deck: 3, sprite: 'rival_tobias',   quip: 'CALCULATING. YOUR. DEFEAT.' },
+  /* Halloween */
+  { id: 'jack',     name: 'JACK HOLLOW',  title: 'The Pumpkin King', deck: 0, sprite: 'rival_jack',   quip: 'Trick or treat? I pick both.' },
+  { id: 'vesper',   name: 'COUNT VESPER', title: 'The Vampire',     deck: 1, sprite: 'rival_vesper',   quip: 'Your life total looks... delicious.' },
+  { id: 'brutus',   name: 'BRUTUS BOLT',  title: 'The Stitched Man', deck: 2, sprite: 'rival_brutus', quip: 'BRUTUS... PLAY... CARD.' },
+  { id: 'amunet',   name: 'QUEEN AMUNET', title: 'The Mummy',       deck: 3, sprite: 'rival_amunet',   quip: 'Three thousand years, and still undefeated.' },
 ];

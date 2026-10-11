@@ -34,6 +34,12 @@ function spriteURL(name) {
 }
 
 const _ico = {};
+
+/* After the palette changes, every sprite and icon has to be drawn again. */
+function clearArtCache() {
+  for (const k in _spr) delete _spr[k];
+  for (const k in _ico) delete _ico[k];
+}
 function iconURL(name, color = PAL['#']) {
   const key = name + color;
   if (_ico[key]) return _ico[key];
@@ -61,7 +67,7 @@ function cardInnerHTML(c, atk = c.atk, hpNow = c.hp - (c.dmg || 0)) {
       <div class="c-band">${ico(COLORS[c.color].icon, '', PAL.w)} LAND</div>
       <div class="c-name">${name}</div>
       <img class="c-art" src="${spriteURL(c.sprite)}" alt="">
-      <div class="c-land">+1 ${ico(COLORS[c.color].icon, '', PAL.w)} <span>${COLORS[c.color].name.toUpperCase()}</span></div>
+      <div class="c-land">+1 ${ico(COLORS[c.color].icon, '', Palette.onDarkHi)} <span>${COLORS[c.color].name.toUpperCase()}</span></div>
       <div class="c-glare"></div>`;
   }
   if (c.type === 'spell' || c.type === 'trap') {

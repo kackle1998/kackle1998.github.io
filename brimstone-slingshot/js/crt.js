@@ -30,11 +30,6 @@ const CRT = {
     this.apply();
   },
 
-  cycle() {
-    this.setLevel(this.level === 'off' ? 'low' : 'off');
-    return this.level === 'off' ? 'off' : 'on';
-  },
-
   apply() {
     document.body.dataset.crt = this.level;
     if (this.level === 'off') Backdrop.drawOnce();
@@ -95,12 +90,12 @@ const Backdrop = {
   init() {
     this.cv = document.getElementById('bgfx');
     const gl = this.cv.getContext('webgl', { antialias: false, preserveDrawingBuffer: true });
-    if (!gl) { this.cv.style.background = '#b3bc8a'; return; }
+    if (!gl) { this.cv.style.background = this.bd[2]; return; }
     this.gl = gl;
     const vs = 'attribute vec2 p; void main(){ gl_Position = vec4(p, 0.0, 1.0); }';
     const fs = `
       precision mediump float;
-      uniform vec2 res; uniform float t; uniform float warp;
+      uniform vec2 res; uniform float t; uniform float warp; uniform vec3 pal[5];
       void main() {
         vec2 uv = (gl_FragCoord.xy - 0.5 * res) / min(res.x, res.y);
         float r = length(uv) + 1e-4;
@@ -115,11 +110,11 @@ const Backdrop = {
         float tunnel = 0.5 + 0.5 * sin(log(r) * 9.0 + t * 1.4 + ang * 3.0);
         v = mix(v, tunnel, warp);
         float q = floor(clamp(v, 0.0, 0.999) * 4.0);
-        vec3 c = vec3(0.561, 0.604, 0.424);                 // #8f9a6c
-        if (q > 0.5) c = vec3(0.639, 0.678, 0.498);         // #a3ad7f
-        if (q > 1.5) c = vec3(0.702, 0.737, 0.541);         // #b3bc8a
-        if (q > 2.5) c = vec3(0.765, 0.796, 0.608);         // #c3cb9b
-        if (warp > 0.6 && r < 0.09 * warp) c = vec3(0.231, 0.267, 0.188); // #3b4430 core
+        vec3 c = pal[0];                                     // the palette's 4 paint tones
+        if (q > 0.5) c = pal[1];
+        if (q > 1.5) c = pal[2];
+        if (q > 2.5) c = pal[3];
+        if (warp > 0.6 && r < 0.09 * warp) c = pal[4];       // vortex core
         gl_FragColor = vec4(c, 1.0);
       }`;
     const sh = (type, src) => { const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s); return s; };
@@ -127,7 +122,7 @@ const Backdrop = {
     gl.attachShader(prog, sh(gl.VERTEX_SHADER, vs));
     gl.attachShader(prog, sh(gl.FRAGMENT_SHADER, fs));
     gl.linkProgram(prog);
-    if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) { this.gl = null; this.cv.style.background = '#b3bc8a'; return; }
+    if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) { this.gl = null; this.cv.style.background = this.bd[2]; return; }
     gl.useProgram(prog);
     const buf = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, buf);
@@ -138,8 +133,19 @@ const Backdrop = {
     this.uRes = gl.getUniformLocation(prog, 'res');
     this.uT = gl.getUniformLocation(prog, 't');
     this.uWarp = gl.getUniformLocation(prog, 'warp');
+    this.uPal = gl.getUniformLocation(prog, 'pal');
+    this.setPalette(this.bd);
     this.resize();
     window.addEventListener('resize', () => this.resize());
+  },
+  /* bd: 4 paint tones then the vortex core, as '#rrggbb' (see PALETTES in js/options.js). */
+  bd: ['#8f9a6c', '#a3ad7f', '#b3bc8a', '#c3cb9b', '#3b4430'],
+  setPalette(bd) {
+    this.bd = bd;
+    if (!this.gl) { if (this.cv) this.cv.style.background = bd[2]; return; }
+    const rgb = bd.flatMap((h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16) / 255));
+    this.gl.uniform3fv(this.uPal, new Float32Array(rgb));
+    if (this.w) this.drawOnce();
   },
   resize() {
     if (!this.gl) return;
