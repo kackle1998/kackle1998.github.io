@@ -1,6 +1,6 @@
 'use strict';
 /* ============================================================
-   NIGHTSHADE SPELLSLINGING — Character Maker
+   BRIMSTONE SLINGSHOT — Character Maker
    Draws the player's portrait. Saved to localStorage like custom
    cards, so an open game tab swaps the art in live.
    ============================================================ */

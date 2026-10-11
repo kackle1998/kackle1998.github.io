@@ -1,5 +1,5 @@
 -- ============================================================
--- NIGHTSHADE SPELLSLINGING — head-to-head online matches
+-- BRIMSTONE SLINGSHOT — head-to-head online matches
 -- Run once in the Supabase SQL editor AFTER schema.sql (safe to re-run).
 --
 -- Both browsers run the rules engine themselves; the server only

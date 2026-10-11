@@ -1,6 +1,6 @@
 'use strict';
 /* ============================================================
-   NIGHTSHADE SPELLSLINGING — CRT post-processing & animated background
+   BRIMSTONE SLINGSHOT — CRT post-processing & animated background
    (Balatro-style: rolling scan band, gentle flicker, flashes and
    shakes on impacts, and a posterised swirling-paint backdrop.)
 

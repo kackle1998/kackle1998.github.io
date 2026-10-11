@@ -1,6 +1,6 @@
 'use strict';
 /* ============================================================
-   NIGHTSHADE SPELLSLINGING — the Dealer's brain
+   BRIMSTONE SLINGSHOT — the Dealer's brain
    ============================================================ */
 
 const AI = {

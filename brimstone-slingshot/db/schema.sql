@@ -1,5 +1,5 @@
 -- ============================================================
--- NIGHTSHADE SPELLSLINGING — online accounts, cards, decks
+-- BRIMSTONE SLINGSHOT — online accounts, cards, decks
 -- Run once in the Supabase SQL editor (safe to re-run).
 --
 -- Security model: the browser only ever has the public "anon" key.

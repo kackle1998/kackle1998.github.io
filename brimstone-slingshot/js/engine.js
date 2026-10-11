@@ -1,6 +1,6 @@
 'use strict';
 /* ============================================================
-   NIGHTSHADE SPELLSLINGING — rules engine (no DOM)
+   BRIMSTONE SLINGSHOT — rules engine (no DOM)
    ============================================================ */
 
 const BOARD_SLOTS = 5;

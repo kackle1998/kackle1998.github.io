@@ -1,6 +1,6 @@
 'use strict';
 /* ============================================================
-   NIGHTSHADE SPELLSLINGING — online accounts & sync (Supabase)
+   BRIMSTONE SLINGSHOT — online accounts & sync (Supabase)
    localStorage stays the working copy (instant, works offline);
    when logged in, every save is pushed to the server and the
    server copy is pulled on page load. Talks to Supabase's REST

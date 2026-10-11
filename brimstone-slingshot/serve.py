@@ -1,4 +1,4 @@
-"""Local server for Nightshade Spellslinging that tells the browser not to cache files,
+"""Local server for Brimstone Slingshot that tells the browser not to cache files,
 so changes to the game show up on a normal refresh."""
 import http.server
 import os
@@ -17,5 +17,5 @@ class NoCacheHandler(http.server.SimpleHTTPRequestHandler):
 # No address reuse: on Windows it would let two servers share the port silently.
 socketserver.TCPServer.allow_reuse_address = False
 with socketserver.ThreadingTCPServer(("127.0.0.1", PORT), NoCacheHandler) as httpd:
-    print(f"Serving Nightshade Spellslinging on http://localhost:{PORT}")
+    print(f"Serving Brimstone Slingshot on http://localhost:{PORT}")
     httpd.serve_forever()

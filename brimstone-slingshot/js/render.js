@@ -1,6 +1,6 @@
 'use strict';
 /* ============================================================
-   NIGHTSHADE SPELLSLINGING — shared rendering helpers (game + card maker)
+   BRIMSTONE SLINGSHOT — shared rendering helpers (game + card maker)
    ============================================================ */
 
 function escapeHTML(s) {
@@ -88,7 +88,8 @@ function cardInnerHTML(c, atk = c.atk, hpNow = c.hp - (c.dmg || 0)) {
 
 /* ---------- Balatro-style hover tilt ----------
    The hovered card leans toward the pointer in 3D, pops slightly,
-   and a glare follows the cursor. Works for any .card on the page.
+   and a glare follows the cursor. Works for any .card on the page,
+   and for anything else marked .tilt (e.g. the title portrait).
    While a card is tilted we hit-test against its resting rect (measured
    before it tilts or lifts) rather than its transformed shape: otherwise,
    near an edge the tilt swings the card out from under the cursor, it
@@ -106,7 +107,7 @@ function cardInnerHTML(c, atk = c.atk, hpNow = c.hp - (c.dmg || 0)) {
   const inside = (r, x, y) => x >= r.left && x <= r.right && y >= r.top && y <= r.bottom;
 
   document.addEventListener('pointermove', (e) => {
-    const hit = e.target && e.target.closest ? e.target.closest('.card') : null;
+    const hit = e.target && e.target.closest ? e.target.closest('.card, .tilt') : null;
     let card = hit && !hit.classList.contains('tapped') && !hit.classList.contains('dying') ? hit : null;
     // Stay on the current card while the pointer is within its resting rect,
     // unless it has moved onto a different card.

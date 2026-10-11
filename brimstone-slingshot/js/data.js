@@ -1,6 +1,6 @@
 'use strict';
 /* ============================================================
-   NIGHTSHADE SPELLSLINGING — data: palette, pixel sprites, icons, cards, decks
+   BRIMSTONE SLINGSHOT — data: palette, pixel sprites, icons, cards, decks
    Sprites are 8x16 "half" images, mirrored to 16x16.
    Legend: '.' clear  '#' ink  '+' mid  '-' light  'w' white
    ============================================================ */

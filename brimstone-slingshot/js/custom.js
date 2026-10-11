@@ -1,6 +1,6 @@
 'use strict';
 /* ============================================================
-   NIGHTSHADE SPELLSLINGING — custom cards & saved decks (shared by game + card maker)
+   BRIMSTONE SLINGSHOT — custom cards & saved decks (shared by game + card maker)
    localStorage is the working copy (js/cloud.js mirrors it to the
    server when the player is logged in), so the Card Maker and the game
    stay in sync as long as both are opened from the same address

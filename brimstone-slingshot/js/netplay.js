@@ -1,6 +1,6 @@
 'use strict';
 /* ============================================================
-   NIGHTSHADE SPELLSLINGING — head-to-head online play
+   BRIMSTONE SLINGSHOT — head-to-head online play
    Both browsers run the same rules engine from the same shuffle
    seed and apply the same moves in the same order, so their games
    stay identical. The server (db/multiplayer.sql) pairs players,

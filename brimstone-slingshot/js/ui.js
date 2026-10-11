@@ -1,6 +1,6 @@
 'use strict';
 /* ============================================================
-   NIGHTSHADE SPELLSLINGING — rendering, input, animation, sound, flow
+   BRIMSTONE SLINGSHOT — rendering, input, animation, sound, flow
    ============================================================ */
 
 const $ = (s) => document.querySelector(s);
@@ -173,10 +173,8 @@ function toast(msg) {
   toastTimer = setTimeout(() => t.classList.remove('show'), 1400);
 }
 
-let bannerUntil = 0; // combo callouts never cover a banner that's still showing
 function banner(text) {
   if (FAST) return sleep(0);
-  bannerUntil = performance.now() + 1200;
   const b = $('#banner');
   b.textContent = text;
   b.classList.remove('show');
@@ -244,6 +242,20 @@ function countCombo(fx) {
   return combo.n;
 }
 
+/* Open the callout out from the middle of the row seam, hold, then close it. */
+function callout(text) {
+  if (FAST || !text) return;
+  const el = $('#callout');
+  el.textContent = text;
+  el.getAnimations().forEach((a) => a.cancel());
+  el.animate([
+    { clipPath: 'inset(0 50% 0 50%)' },
+    { clipPath: 'inset(0 0 0 0)', offset: 0.15 },
+    { clipPath: 'inset(0 0 0 0)', offset: 0.85 },
+    { clipPath: 'inset(0 50% 0 50%)' },
+  ], { duration: 1300, easing: 'steps(13)' });
+}
+
 function sparks(r) {
   if (document.body.dataset.crt === 'off') return;
   for (let i = 0; i < 8; i++) {
@@ -267,7 +279,7 @@ function flushFx() {
   if (chain) {
     sfx('chain', chain);
     const word = calloutFor(chain);
-    if (word && !game.over && performance.now() > bannerUntil) { banner(word); sfx('callout', chain); }
+    if (word && !game.over) { callout(word); sfx('callout', chain); }
   }
   let tagged = false;
   fx.forEach((f, i) => {
@@ -962,30 +974,102 @@ function showScreen(html, dim = false) {
 }
 function hideScreen() { $('#screen').classList.add('hidden'); }
 
+/* ---------- title: Custom Robo style hangar ----------
+   Your character on a turning rune circle at left; slanted menu bars at right,
+   with a ticker that describes whichever bar is picked (mouse or arrow keys). */
+const RECORD_KEY = 'cardgrave.record.v1';
+function getRecord() { return { wins: 0, losses: 0, ...Store.read(RECORD_KEY, {}) }; }
+
+function titleMenu() {
+  return [
+    { label: 'OFFLINE PLAY', desc: "Sit at the Dealer's table and play a hand.", go: () => showDeckSelect() },
+    Cloud.enabled && { label: 'ONLINE ARENA', desc: 'Duel another spellslinger in real time. Needs an account.', go: () => Net.showOnline() },
+    { label: 'DECK BUILDER', desc: 'Bind 30 cards into a spellbook of your own.', go: () => showDeckBuilder() },
+    { label: 'CARD MAKER', desc: 'Draw and enchant a card of your own.', go: () => openMaker('cardmaker.html') },
+    { label: 'CHARACTER', desc: 'Change the face you bring to the table.', go: () => openMaker('charmaker.html') },
+    { label: 'HOW TO PLAY', desc: 'Learn the rules of the table.', go: showTitleRules },
+  ].filter(Boolean);
+}
+
 function showTitle() {
-  const parade = ['wolf', 'bat', 'golem', 'owl', 'grizzly', 'draugr', 'drake', 'archmage']
-    .map((n) => `<img src="${spriteURL(n)}" alt="">`).join('');
+  const menu = titleMenu(), rec = getRecord();
   showScreen(`
-    <div class="title">
-      <div class="logo">NIGHTSHADE<span>SPELLSLINGING</span></div>
-      <div class="sub">a duel of beasts, bones, gems &amp; arcana</div>
-      <div class="parade">${parade}</div>
-      <div class="title-btns">
-        <button class="btn big" id="startBtn">START</button>
-        <button class="btn big" id="builderBtn">DECK BUILDER</button>
-        <a class="btn big" href="cardmaker.html">CARD MAKER</a>
-        <a class="btn big" href="charmaker.html">CHARACTER</a>
+    <div class="ttl">
+      <div class="ttl-edge"></div><div class="ttl-side"></div>
+      <div class="ttl-logo"><div class="logo">BRIMSTONE<span>SLINGSHOT</span></div>
+        <div class="ttl-sub">a duel of beasts, bones, gems &amp; arcana</div></div>
+      <canvas class="ttl-rune" width="128" height="40"></canvas>
+      <div class="ttl-hero tilt" id="ttlHero" title="Edit your character" style="--spr: url(${spriteURL('hero')})">
+        <img src="${spriteURL('hero')}" alt=""><div class="c-glare"></div></div>
+      <div class="ttl-plate panel">
+        <div><div class="ttl-name">${escapeHTML(heroName().toUpperCase())}</div>
+          <div class="ttl-rec">${rec.wins} win${rec.wins === 1 ? '' : 's'} &middot; ${rec.losses} loss${rec.losses === 1 ? '' : 'es'}</div></div>
+        <button class="btn sm" id="ttlEdit">EDIT</button>
       </div>
-      <div class="title-acct">
-        ${Cloud.enabled ? '<button class="btn" id="onlineBtn" title="Play another person (needs an account)">PLAY ONLINE</button>' : ''}
-        <div id="acctSlot"></div>
-      </div>
-      <div class="rules panel">${RULES_HTML}</div>
+      <div class="ttl-bars">${menu.map((m, i) => `<button class="ttl-bar" data-i="${i}">${m.label}</button>`).join('')}</div>
+      <div class="ttl-tick"><span></span></div>
+      <div class="ttl-acct" id="acctSlot"></div>
     </div>`);
   Cloud.mount($('#acctSlot'));
-  if ($('#onlineBtn')) $('#onlineBtn').onclick = () => { sfx('select'); Net.showOnline(); };
-  $('#startBtn').onclick = () => { sfx('select'); showDeckSelect(); };
-  $('#builderBtn').onclick = () => { sfx('select'); showDeckBuilder(); };
+  $('#ttlEdit').onclick = $('#ttlHero').onclick = () => { sfx('select'); openMaker('charmaker.html'); };
+
+  const bars = [...$$('.ttl-bar')];
+  const pick = (i, quiet) => {
+    titleSel = i;
+    bars.forEach((b, j) => b.classList.toggle('on', j === i));
+    $('.ttl-tick span').textContent = menu[i].desc;
+    if (!quiet) sfx('select');
+  };
+  bars.forEach((b, i) => {
+    b.onmouseenter = () => { if (titleSel !== i) pick(i); };
+    b.onclick = () => { sfx('place'); menu[i].go(); };
+    if (!FAST) b.animate([{ transform: 'translateX(640px)' }, { transform: 'none' }], { duration: 420, delay: i * 70, easing: 'steps(8)', fill: 'backwards' });
+  });
+  pick(0, true);
+  titleRune($('.ttl-rune'));
+}
+let titleSel = 0;
+
+/* Arrow keys move the highlighted bar, Enter picks it. */
+document.addEventListener('keydown', (e) => {
+  if (!$('.ttl') || $('#screen').classList.contains('hidden') || !$('#maker').classList.contains('hidden')) return;
+  const bars = $$('.ttl-bar');
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+    e.preventDefault();
+    bars[(titleSel + (e.key === 'ArrowDown' ? 1 : bars.length - 1)) % bars.length].onmouseenter();
+  } else if (e.key === 'Enter' && document.activeElement === document.body) {
+    e.preventDefault();
+    bars[titleSel].onclick();
+  }
+});
+
+/* Rune circle: an ink ring with orbiting rune marks, ~12fps for a stepped spin. */
+function titleRune(cv) {
+  const x = cv.getContext('2d'), W = cv.width, H = cv.height, cx = W / 2, cy = H / 2;
+  const t0 = performance.now();
+  const ring = (rx, ry, n, col) => {
+    x.fillStyle = col;
+    for (let k = 0; k < n; k++) { const a = (k / n) * Math.PI * 2; x.fillRect(Math.round(cx + Math.cos(a) * rx), Math.round(cy + Math.sin(a) * ry), 1, 1); }
+  };
+  (function draw() {
+    if (!cv.isConnected) return;
+    const t = (performance.now() - t0) / 1000;
+    x.clearRect(0, 0, W, H);
+    ring(60, 18, 180, '#1f2418');
+    ring(46, 13, 120, '#3b4430');
+    for (let k = 0; k < 10; k++) {
+      const a = (k / 10) * Math.PI * 2 + t * 0.6, front = Math.sin(a) > 0;
+      const px = Math.round(cx + Math.cos(a) * 53), py = Math.round(cy + Math.sin(a) * 15.5);
+      x.fillStyle = front ? '#d97a2b' : '#6e7a52';
+      x.fillRect(px - 1, py, 3, 1); x.fillRect(px, py - 1, 1, 3);
+    }
+    if (document.body.dataset.crt !== 'off') setTimeout(draw, 83);
+  })();
+}
+
+function showTitleRules() {
+  showScreen(`<div class="rules panel">${RULES_HTML}<div class="rules-close"><button class="btn" id="closeRules">BACK</button></div></div>`);
+  $('#closeRules').onclick = () => { sfx('select'); showTitle(); };
 }
 
 /* `onPick(deckDef)` runs when a deck is chosen: a game against the Dealer, or the online lobby. */
@@ -1190,6 +1274,7 @@ function endGame() {
   busy = true;
   render();
   const won = game.winner === ME;
+  if (!FAST) { const rec = getRecord(); rec[won ? 'wins' : 'losses']++; Store.write(RECORD_KEY, rec); }
   sfx(won ? 'win' : 'lose');
   CRT.pulse(1.2, true);
   const g = game, you = g.players[ME], opp = g.players[OPP];
@@ -1225,7 +1310,7 @@ function endGame() {
   // Victory: the board spirals into the middle and the backdrop warps, Bejeweled 2 style.
   setTimeout(() => {
     if (game !== g) return;
-    banner(calloutFor(Math.max(3, combo.game === g && combo.turn === g.turnNum ? combo.n : 0)));
+    callout(calloutFor(Math.max(3, combo.game === g && combo.turn === g.turnNum ? combo.n : 0)));
     sfx('callout', 3);
   }, 300);
   setTimeout(async () => {
@@ -1339,6 +1424,7 @@ $('#board').addEventListener('mouseleave', () => { if (game && !busy) inspectDef
 onSharedChange((key) => {
   if (key === HERO_KEY) {
     if (game) render();
+    if ($('.ttl')) showTitle(); // new portrait and name on the pedestal
     toast('Character updated.');
     return;
   }

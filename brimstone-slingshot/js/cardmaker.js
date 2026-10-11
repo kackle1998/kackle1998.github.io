@@ -1,6 +1,6 @@
 'use strict';
 /* ============================================================
-   NIGHTSHADE SPELLSLINGING — Card Maker
+   BRIMSTONE SLINGSHOT — Card Maker
    Every edit auto-saves to localStorage; an open game tab on the
    same address picks the change up instantly via the 'storage' event.
    ============================================================ */
@@ -220,7 +220,7 @@ $('#exportBtn').onclick = () => {
   const blob = new Blob([JSON.stringify(records(), null, 2)], { type: 'application/json' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = 'nightshade-cards.json';
+  a.download = 'brimstone-cards.json';
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 };

@@ -1,6 +1,6 @@
 'use strict';
 /* ============================================================
-   NIGHTSHADE SPELLSLINGING — 16x16 pixel editor (card maker + character maker)
+   BRIMSTONE SLINGSHOT — 16x16 pixel editor (card maker + character maker)
    Expects the standard markup: #pix canvas, #palette, #tools, #undoBtn,
    #clearBtn, #flipBtn, [data-shift] buttons and the #template select.
    ============================================================ */

@@ -1,6 +1,6 @@
 'use strict';
 /* ============================================================
-   NIGHTSHADE SPELLSLINGING — in-game deck builder
+   BRIMSTONE SLINGSHOT — in-game deck builder
    Uses both the built-in cards and the player's Card Maker cards.
    ============================================================ */
 
