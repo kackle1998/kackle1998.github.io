@@ -54,12 +54,17 @@ function buildLibrary(deck, owner) {
 }
 
 class Game {
+<<<<<<< HEAD
   /* opts.viewer is the seat whose point of view the log is written from ("You"). */
   constructor(deck0, deck1, first = Math.random() < 0.5 ? 0 : 1, opts = {}) {
     const { names = ['You', 'Dealer'], cpu = [false, true], viewer = 0 } = opts;
     _uid = 1; // both browsers in an online match must hand out the same uids
     this.viewer = viewer;
     this.players = [this.mkPlayer(0, names[0], deck0, cpu[0]), this.mkPlayer(1, names[1], deck1, cpu[1])];
+=======
+  constructor(deckYou, deckCpu, first = Math.random() < 0.5 ? 0 : 1) {
+    this.players = [this.mkPlayer(0, 'You', deckYou, false), this.mkPlayer(1, 'Dealer', deckCpu, true)];
+>>>>>>> origin/main
     this.active = first;
     this.turnNum = 0;
     this.over = false;

@@ -70,11 +70,17 @@ const Cloud = (() => {
 
   /* ---------- server -> local ---------- */
   async function fetchMine(pid) {
+<<<<<<< HEAD
     const deckPath = (cols) => `decks?owner_id=eq.${pid}&select=${cols}&order=id.asc`;
     const [cards, decks, me] = await Promise.all([
       get(`cards?owner_id=eq.${pid}&select=id,data&order=id.asc`),
       // Servers set up before deck art have no `art` column yet.
       get(deckPath('id,name,list,art,updated_at')).catch(() => get(deckPath('id,name,list,updated_at'))),
+=======
+    const [cards, decks, me] = await Promise.all([
+      get(`cards?owner_id=eq.${pid}&select=id,data&order=id.asc`),
+      get(`decks?owner_id=eq.${pid}&select=id,name,list,updated_at&order=id.asc`),
+>>>>>>> origin/main
       get(`players?id=eq.${pid}&select=username,portrait`),
     ]);
     if (!me.length) throw new Error('not_logged_in');
@@ -82,7 +88,11 @@ const Cloud = (() => {
       username: me[0].username,
       portrait: me[0].portrait,
       cards: cards.map((r) => ({ ...r.data, id: r.id })),
+<<<<<<< HEAD
       decks: decks.map((r) => ({ id: r.id, name: r.name, list: r.list, ...(r.art ? { art: r.art } : {}), updated: Date.parse(r.updated_at) })),
+=======
+      decks: decks.map((r) => ({ id: r.id, name: r.name, list: r.list, updated: Date.parse(r.updated_at) })),
+>>>>>>> origin/main
     };
   }
 
@@ -135,11 +145,18 @@ const Cloud = (() => {
     const id = newCustomId();
     Store.write(CUSTOM_KEY, getCustomRecords().map((c) => (c.id === oldId ? { ...c, id } : c)));
     Store.write(DECKS_KEY, getSavedDecks().map((d) => {
+<<<<<<< HEAD
       const art = d.art === 'spr_' + oldId ? 'spr_' + id : d.art;
       if (!d.list[oldId] && art === d.art) return d;
       const list = { ...d.list };
       if (list[oldId]) { list[id] = list[oldId]; delete list[oldId]; }
       return { ...d, list, ...(art ? { art } : {}), updated: Date.now() };
+=======
+      if (!d.list[oldId]) return d;
+      const list = { ...d.list, [id]: d.list[oldId] };
+      delete list[oldId];
+      return { ...d, list, updated: Date.now() };
+>>>>>>> origin/main
     }));
     loadCustomCards();
     announce();
@@ -183,9 +200,13 @@ const Cloud = (() => {
         if (snap.decks[d.id] === stamp(d)) continue;
         const name = String(d.name || '').trim().slice(0, 24) || 'My Deck';
         try {
+<<<<<<< HEAD
           const args = { p_token: tok, p_id: d.id, p_name: name, p_list: d.list };
           if (d.art) args.p_art = d.art; // left out when unset, so older servers still accept art-less decks
           await rpc('upsert_deck', args);
+=======
+          await rpc('upsert_deck', { p_token: tok, p_id: d.id, p_name: name, p_list: d.list });
+>>>>>>> origin/main
         } catch (e) {
           if (e.message !== 'id_taken') throw e;
           // Practically impossible (ids are time-based), but don't get stuck on it.
@@ -361,9 +382,13 @@ const Cloud = (() => {
   return {
     enabled,
     queue, syncNow, browseCards, mount,
+<<<<<<< HEAD
     rpc, get, // used by js/netplay.js
     user() { const s = session(); return s ? s.player.username : null; },
     playerId() { const s = session(); return s ? s.player.id : null; },
     token() { const s = session(); return s ? s.token : null; },
+=======
+    user() { const s = session(); return s ? s.player.username : null; },
+>>>>>>> origin/main
   };
 })();

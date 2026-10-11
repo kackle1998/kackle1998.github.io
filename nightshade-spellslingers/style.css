@@ -532,6 +532,7 @@ a.btn { text-decoration: none; display: inline-block; }
 .db-actions { display: flex; gap: 8px; }
 .db-actions .btn { flex: 1; padding: 8px 4px; }
 
+<<<<<<< HEAD
 /* deck art button + picker */
 #dbArt { display: flex; align-items: center; gap: 6px; padding: 2px 10px 2px 2px; }
 #dbArt img { width: 32px; height: 32px; image-rendering: pixelated; background: var(--paper); border: 2px solid var(--ink); }
@@ -579,6 +580,8 @@ a.btn { text-decoration: none; display: inline-block; }
 #pix { width: 352px; height: 352px; align-self: center; border: 3px solid var(--ink); cursor: crosshair; image-rendering: pixelated; touch-action: none; }
 .cm-template { width: 100%; font-size: 19px; cursor: pointer; }
 
+=======
+>>>>>>> origin/main
 /* ---------- online account (js/cloud.js) ---------- */
 .acct { display: flex; align-items: center; gap: 8px; padding: 3px 4px 3px 10px; background: var(--paper); border: 2px solid var(--ink); font-family: var(--pixel); font-size: 11px; color: var(--ink); white-space: nowrap; }
 .acct b { font-size: 12px; }
@@ -602,6 +605,7 @@ a.btn { text-decoration: none; display: inline-block; }
 .com-item { display: flex; flex-direction: column; align-items: center; gap: 4px; }
 .com-item .card { position: relative; cursor: default; }
 .com-by { max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 16px; }
+<<<<<<< HEAD
 
 /* ---------- online play (js/netplay.js) ---------- */
 .title-acct { display: flex; align-items: center; gap: 12px; }
@@ -624,3 +628,5 @@ a.btn { text-decoration: none; display: inline-block; }
 .ol-dots span:nth-child(2) { animation-delay: .4s; }
 .ol-dots span:nth-child(3) { animation-delay: .8s; }
 @keyframes olDot { 50% { opacity: .2; } }
+=======
+>>>>>>> origin/main

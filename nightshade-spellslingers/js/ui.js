@@ -878,6 +878,7 @@ function showTitle() {
         <a class="btn big" href="cardmaker.html">CARD MAKER</a>
         <a class="btn big" href="charmaker.html">CHARACTER</a>
       </div>
+<<<<<<< HEAD
       <div class="title-acct">
         ${Cloud.enabled ? '<button class="btn" id="onlineBtn" title="Play another person (needs an account)">PLAY ONLINE</button>' : ''}
         <div id="acctSlot"></div>
@@ -886,6 +887,12 @@ function showTitle() {
     </div>`);
   Cloud.mount($('#acctSlot'));
   if ($('#onlineBtn')) $('#onlineBtn').onclick = () => { sfx('select'); Net.showOnline(); };
+=======
+      <div id="acctSlot"></div>
+      <div class="rules panel">${RULES_HTML}</div>
+    </div>`);
+  Cloud.mount($('#acctSlot'));
+>>>>>>> origin/main
   $('#startBtn').onclick = () => { sfx('select'); showDeckSelect(); };
   $('#builderBtn').onclick = () => { sfx('select'); showDeckBuilder(); };
 }
@@ -1035,7 +1042,10 @@ async function startGame(deckDef) {
   const others = DECKS.filter((d) => d !== deckDef);
   const cpuDeck = others[Math.floor(Math.random() * others.length)];
   const { first, you, cpu } = await rollForFirst();
+<<<<<<< HEAD
   setSeats(0);
+=======
+>>>>>>> origin/main
   const g = game = new Game(deckDef, cpuDeck, first);
   g.log.unshift({ text: `You rolled ${you}, the Dealer rolled ${cpu}.`, who: '' });
   tapState.clear();
