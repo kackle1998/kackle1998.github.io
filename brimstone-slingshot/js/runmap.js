@@ -14,7 +14,7 @@ const RunMap = (() => {
   const BAY = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
   const D8 = [[1, 0], [1, 1], [0, 1], [-1, 1], [-1, 0], [-1, -1], [0, -1], [1, -1]];
 
-  /* Stop icons silkscreened on the pads (11 wide); the boss is a horned skull on a chip. */
+  /* Stop icons silkscreened on the pads (11 wide). The boss is the casino resort (see CAS). */
   const PAD_ICONS = {
     start: [],
     battle: ['...#####...', '..#######..', '.#########.', '.##..#..##.', '.##..#..##.', '.#########.', '..###.###..', '...#####...', '...#.#.#...', '...#####...'],
@@ -22,7 +22,6 @@ const RunMap = (() => {
     altar: ['.....#.....', '....###....', '.....#.....', '....###....', '....###....', '....###....', '..#######..', '..#.....#..', '..#.#.#.#..', '..#.....#..', '.#########.'],
     trade: ['...........', '..#######..', '.#########.', '.#########.', '.#########.', '..#######..', '..###.###..', '..##...##..', '..##...##..', '..#.....#..', '...........'],
     event: ['...#####...', '..##...##..', '..##...##..', '.......##..', '......##...', '.....##....', '.....##....', '...........', '.....##....', '.....##....'],
-    boss: ['#.............#', '##...........##', '.##..#####..##.', '..###########..', '...#########...', '..###..#..###..', '..###..#..###..', '..###########..', '...####.####...', '....#######....', '....#.#.#.#....', '....#######....'],
   };
   const RUNE = ['.#...', '.##..', '.#.#.', '.##..', '.#.#.', '.#..#', '.#...'];
 
@@ -235,19 +234,113 @@ const RunMap = (() => {
     };
   }
 
+  /* The boss stop: the Dealer's casino, a palace-and-tower resort standing up on the 3D board.
+     At the back, a glass hotel tower crowned with a curved CASINO sign. In front, a white palace
+     podium with arches and gold trim, onion domes on its roof and a minaret at each front corner.
+     Flat parts (roofs) are top-down art lifted to their height; upright parts are standees like
+     the spires. Gold is the palette accent. When reachable, the entrance arch and carpet light up.
+     Canvas sizes are in pixels; 1 px = 2 map units. */
+  const SIGN = {
+    C: ['###', '#..', '#..', '#..', '###'], A: ['###', '#.#', '###', '#.#', '#.#'], S: ['###', '#..', '###', '..#', '###'],
+    I: ['###', '.#.', '.#.', '.#.', '###'], N: ['#..#', '##.#', '#.##', '#..#', '#..#'], O: ['###', '#.#', '#.#', '#.#', '###'],
+  };
+  const CAS = { W: 100, D: 36, towerX: 20, towerW: 60, towerD: 15, towerH: 72, podD: 21, podH: 22 };
+  /* A palette-indexed pixel canvas: draw(rect, px, ctx) paints it. */
+  function paint(w, h, C, draw) {
+    const cv = document.createElement('canvas');
+    cv.width = w; cv.height = h;
+    const x = cv.getContext('2d');
+    const rect = (u, v, rw, rh, k) => { x.fillStyle = C[k]; x.fillRect(u, v, rw, rh); };
+    draw(rect, (u, v, k) => rect(u, v, 1, 1, k), x);
+    return cv;
+  }
+  const signText = (rect, word, u0, v0, k) => {
+    for (const ch of word) {
+      const g = SIGN[ch];
+      g.forEach((row, j) => [...row].forEach((c, i) => { if (c === '#') rect(u0 + i * 2, v0 + j * 2, 2, 2, k); }));
+      u0 += g[0].length * 2 + 2;
+    }
+  };
+  const signWidth = (word) => [...word].reduce((a, ch) => a + SIGN[ch][0].length * 2 + 2, -2);
+
+  /* Glass curtain wall: mullions, floor lines, a scatter of lit rooms. */
+  const towerFace = (C) => paint(CAS.towerW, CAS.towerH, C, (rect, px) => {
+    rect(0, 0, CAS.towerW, CAS.towerH, 3);
+    for (let v = 4; v < CAS.towerH; v += 4) rect(0, v, CAS.towerW, 1, 4);
+    for (let u = 3; u < CAS.towerW; u += 4) rect(u, 0, 1, CAS.towerH, 2);
+    for (let v = 5; v < CAS.towerH - 4; v += 4) for (let u = 4; u < CAS.towerW - 3; u += 4) if ((u * 31 + v * 17) % 7 === 0) rect(u, v, 3, 3, 7);
+    rect(0, 0, 2, CAS.towerH, 5); rect(CAS.towerW - 2, 0, 2, CAS.towerH, 2); rect(0, 0, CAS.towerW, 2, 5);
+  });
+  const towerRoof = (C) => paint(CAS.towerW, CAS.towerD, C, (rect) => {
+    rect(0, 0, CAS.towerW, CAS.towerD, 3); rect(1, 1, CAS.towerW - 2, CAS.towerD - 2, 2);
+    rect(8, 4, 6, 5, 4); rect(46, 5, 6, 4, 4);
+  });
+  /* The crown: a sign plate whose top curves up in the middle, CASINO across it. */
+  const crown = (C) => paint(70, 20, C, (rect, px) => {
+    for (let u = 0; u < 70; u++) {
+      const t = (u - 34.5) / 34.5, top = Math.round(6 * t * t);
+      rect(u, top, 1, 20 - top, 6);
+      px(u, top, 1); px(u, 19, 1);
+      if (top + 1 < 19) px(u, top + 1, 8);
+    }
+    rect(0, 6, 1, 14, 1); rect(69, 6, 1, 14, 1);
+    rect(1, 17, 68, 2, 5);
+    signText(rect, 'CASINO', 35 - Math.ceil(signWidth('CASINO') / 2), 6, 8);
+  });
+  /* The palace front: gold cornice, arcade of arches, a big entrance arch in the middle. */
+  const podiumFace = (C, lit) => paint(CAS.W, CAS.podH, C, (rect, px) => {
+    rect(0, 0, CAS.W, CAS.podH, 6);
+    rect(0, 0, CAS.W, 2, 8); rect(0, 2, CAS.W, 1, 1);
+    for (let u = 0; u < CAS.W; u += 4) rect(u, 0, 2, 1, 7);               // crenels
+    const arch = (u, w, h, k) => {                                        // round-topped opening
+      for (let i = 0; i < w; i++) {
+        const d = Math.abs(i - (w - 1) / 2) / (w / 2), cut = Math.round((1 - Math.sqrt(1 - Math.min(1, d * d))) * (w / 2));
+        rect(u + i, CAS.podH - 2 - h + cut, 1, h - cut, k);
+      }
+    };
+    for (let u = 4; u < CAS.W - 4; u += 10) if (Math.abs(u + 3 - CAS.W / 2) > 12) { arch(u - 1, 8, 13, 8); arch(u, 6, 12, 2); }
+    arch(CAS.W / 2 - 9, 18, 18, 8);
+    arch(CAS.W / 2 - 8, 16, 17, lit ? 8 : 0);
+    rect(0, CAS.podH - 2, CAS.W, 2, 4);
+  });
+  const podiumRoof = (C) => paint(CAS.W, CAS.podD, C, (rect) => {
+    rect(0, 0, CAS.W, CAS.podD, 4); rect(1, 1, CAS.W - 2, CAS.podD - 2, 6);
+    for (let u = 4; u < CAS.W; u += 6) rect(u, 1, 1, CAS.podD - 2, 5);
+  });
+  /* An onion dome on a drum: gold finial, shaded bulb with gold scallops, gold neck ring. */
+  const dome = (C, w, h) => paint(w, h, C, (rect, px) => {
+    const c = (w - 1) / 2, r = (w - 1) / 2, f = Math.round(h * 0.14), b = Math.round(h * 0.68);
+    for (let v = 0; v < f; v++) px(c, v, 8);
+    rect(c - 1, f - 2, 3, 2, 8);
+    const row = (v, hw, fill) => {
+      for (let u = Math.round(c - hw); u <= Math.round(c + hw); u++) {
+        const edge = u === Math.round(c - hw) || u === Math.round(c + hw);
+        px(u, v, edge ? 1 : fill(u, v));
+      }
+    };
+    for (let v = f; v < b; v++) {
+      const t = (v - f) / (b - f);
+      const hw = Math.max(0.5, r * (t < 0.65 ? Math.sin((t / 0.65) * Math.PI / 2) ** 1.8 : Math.cos(((t - 0.65) / 0.35) * Math.PI / 2) ** 0.6));
+      row(v, hw, (u) => (t > 0.8 && (u + v) % 3 === 0 ? 8 : u < c - hw / 3 ? 7 : u < c + hw / 3 ? 6 : 5));
+    }
+    row(b, r * 0.45, () => 8); row(b + 1, r * 0.5, () => 8);
+    for (let v = b + 2; v < h; v++) row(v, r * 0.62, (u) => (v > b + 3 && v < h - 2 && Math.round(u - c) % 3 === 0 ? 2 : u < c ? 6 : 5));
+  });
+  /* A minaret: small onion top, a slim shaft with two gold balconies. */
+  const minaret = (C) => paint(9, 60, C, (rect, px, x) => {
+    x.drawImage(dome(C, 9, 16), 0, 0);
+    rect(2, 16, 5, 44, 6); rect(2, 16, 1, 44, 7); rect(6, 16, 1, 44, 5);
+    for (const v of [26, 42]) { rect(0, v, 9, 2, 8); rect(0, v + 2, 9, 1, 1); }
+    for (const v of [20, 32, 48]) rect(4, v, 1, 3, 2);
+    rect(0, 58, 9, 2, 4);
+  });
+  const casinoCarpet = (C, lit) => paint(8, 4, C, (rect) => { rect(0, 0, 8, 4, 1); rect(1, 0, 6, 4, lit ? 8 : 5); });
+
+
   /* A stop's pad: reachable = solid accent (no blinking), visited = mid, the rest = paper. */
   function drawPad(c, n, state, C) {
     const x = c.getContext('2d');
     x.clearRect(0, 0, c.width, c.height);
-    if (n.t === 'boss') {
-      x.fillStyle = C[4];
-      for (let i = 4; i < 48; i += 6) { x.fillRect(i, 0, 2, 4); x.fillRect(i, 30, 2, 4); }
-      x.fillStyle = C[1]; x.fillRect(0, 3, 48, 28);
-      x.fillStyle = C[2]; x.fillRect(0, 3, 48, 2);
-      x.fillStyle = C[3]; x.fillRect(3, 7, 2, 2);
-      pix(c, PAD_ICONS.boss, { '#': state === 'reach' ? C[8] : C[6] }, 16, 10);
-      return;
-    }
     x.fillStyle = C[1]; x.fillRect(2, 0, 13, 17); x.fillRect(0, 2, 17, 13);
     x.fillStyle = state === 'done' ? C[3] : state === 'reach' ? C[8] : C[6];
     x.fillRect(3, 1, 11, 15); x.fillRect(1, 3, 15, 11);
@@ -273,7 +366,7 @@ const RunMap = (() => {
     // Things the spires keep clear of: every trace, pad, rune circle and obelisk.
     const block = [
       ...edges.flatMap((e) => e.s.map((q) => [q[0], q[1], 26])),
-      ...nodes.map((n) => [n.x, n.y, n.t === 'boss' ? 66 : 34]),
+      ...nodes.map((n) => (n.t === 'boss' ? [n.x, 58, 100] : [n.x, n.y, 34])), // the casino is wide
     ];
     const clear = (x, y, r) => block.every((b) => Math.hypot(x - b[0], y - b[1]) - b[2] > r);
     const runes = [[110, 610], [650, 640], [650, 370], [110, 260], [640, 140], [120, 430]].filter(([x, y]) => clear(x, y, 34)).slice(0, 3);
@@ -292,7 +385,14 @@ const RunMap = (() => {
           <div class="rh-who"><img src="${spriteURL('hero')}" alt=""><div><div class="rh-name">${escapeHTML(heroName().toUpperCase())}</div><div class="rh-deck">${escapeHTML(run.name)}</div></div></div>
           <div class="rh-row">${ico('hp')}<span>LIFE</span><b>${run.life}/${run.maxLife}</b></div>
           <div class="rh-row">${ico('tooth')}<span>TEETH</span><b>${run.teeth}</b></div>
-          <div class="rh-row">${ico('spell')}<span>DECK</span><b>${Run.deckSize()}</b></div>
+          <div class="rh-row">${ico('spell')}<span>DECK</span><b id="rhDeck">${Run.deckSize()}</b></div>
+          <div class="rh-lands">
+            <div class="rh-h">LANDS</div>
+            ${run.colors.map((k) => `
+            <div class="rh-land" data-k="${k}">${ico(COLORS[k].icon)}<span>${COLORS[k].land.toUpperCase()}</span>
+              <button class="mini-btn" data-d="-1" title="Remove a ${COLORS[k].land}">-</button><b>${run.lands[k] || 0}</b><button class="mini-btn" data-d="1" title="Add a ${COLORS[k].land}">+</button>
+            </div>`).join('')}
+          </div>
           <button class="btn" id="rmDeck">VIEW DECK</button>
         </div>
         <div class="rm-btns"><button class="btn" id="rmMenu">MENU</button><button class="btn" id="rmQuit">ABANDON</button></div>
@@ -305,35 +405,62 @@ const RunMap = (() => {
     drawGround($('#rmGnd'), R, C);
     placeProps(pl, R, C, block, runes, obel);
 
-    // Stop pads.
+    // Stop pads, and the casino for the boss.
     for (const n of nodes) {
-      const el = document.createElement('div'), c = document.createElement('canvas');
-      el.className = 'rm-nd' + (n.t === 'boss' ? ' boss' : '');
-      if (n.t === 'boss') { c.width = 48; c.height = 34; el.style.cssText = `left:${n.x - 48}px;top:${n.y - 34}px`; }
-      else { c.width = 17; c.height = 17; el.style.cssText = `left:${n.x - 19}px;top:${n.y - 19}px`; }
+      const el = document.createElement('div');
       const state = reach.includes(n.id) ? 'reach' : visited.has(n.id) ? 'done' : 'idle';
+      if (n.t === 'boss') {
+        // The resort: footprint on the board, roofs lifted to their height, upright parts as standees.
+        const lit = state === 'reach', W2 = CAS.W * 2, D2 = CAS.D * 2;
+        el.className = 'rm-casino';
+        el.style.cssText = `left:${n.x - CAS.W}px;top:${BOSS_PIN_Y - 8 - D2}px;width:${W2}px;height:${D2}px`;
+        const flat = (cv, x, y, z) => { cv.className = 'rm-c-flat'; cv.style.cssText = `left:${x}px;top:${y}px;width:${cv.width * 2}px;height:${cv.height * 2}px;transform:translateZ(${z}px)`; return cv; };
+        const stand = (cv, cx, by, z) => {
+          const s = document.createElement('div'), w = cv.width * 2, h = cv.height * 2;
+          s.className = 'rm-st';
+          s.style.cssText = `left:${cx - w / 2}px;top:${by - h}px;width:${w}px;height:${h}px;transform:translateZ(${z}px) rotateX(-90deg)`;
+          s.appendChild(cv);
+          return s;
+        };
+        const tx = CAS.towerX * 2, tw = CAS.towerW * 2, td = CAS.towerD * 2, th = CAS.towerH * 2;
+        const podY = D2 - CAS.podD * 2, ph = CAS.podH * 2;
+        el.append(
+          flat(towerRoof(C), tx, 0, th),
+          stand(towerFace(C), tx + tw / 2, td, 0),
+          stand(crown(C), tx + tw / 2, td + 2, th - 4),
+          flat(podiumRoof(C), 0, podY, ph),
+          stand(podiumFace(C, lit), W2 / 2, D2, 0),
+          stand(dome(C, 19, 24), W2 / 2 - 50, podY + 22, ph),
+          stand(dome(C, 19, 24), W2 / 2 + 50, podY + 22, ph),
+          stand(dome(C, 31, 38), W2 / 2, podY + 26, ph),
+          stand(minaret(C), 10, D2 - 4, ph),
+          stand(minaret(C), W2 - 10, D2 - 4, ph),
+        );
+        const carpet = casinoCarpet(C, lit);
+        carpet.className = 'rm-c-carpet';
+        carpet.style.cssText = `left:${CAS.W - 8}px;top:${D2}px`;
+        el.append(carpet);
+      } else {
+        const c = document.createElement('canvas');
+        el.className = 'rm-nd';
+        c.width = 17; c.height = 17;
+        el.style.cssText = `left:${n.x - 19}px;top:${n.y - 19}px`;
+        drawPad(c, n, state, C);
+        el.appendChild(c);
+      }
       el.classList.toggle('reach', state === 'reach');
-      drawPad(c, n, state, C);
-      el.appendChild(c);
       pl.appendChild(el);
       el.onmouseenter = () => { tick.textContent = visited.has(n.id) && n.t !== 'start' ? `${STOPS[n.t].name}: cleared` : STOPS[n.t].desc; };
       el.onmouseleave = () => { tick.textContent = idle(); };
       el.onclick = () => walkTo(n.id);
     }
 
-    // Your figurine: the character sprite as a standee on a round base.
-    const base = document.createElement('div');
-    base.className = 'rm-base';
-    base.style.borderColor = C[8];
-    base.style.background = C[1];
+    // Your figurine: the character sprite standing up off the board.
     const fig = document.createElement('div');
     fig.className = 'rm-st rm-fig';
     fig.innerHTML = `<img src="${spriteURL('hero')}" alt="">`;
-    pl.append(base, fig);
-    const place = (x, y) => {
-      fig.style.left = x - 30 + 'px'; fig.style.top = y - 62 + 'px';
-      base.style.left = x - 22 + 'px'; base.style.top = y - 9 + 'px';
-    };
+    pl.append(fig);
+    const place = (x, y) => { fig.style.left = x - 30 + 'px'; fig.style.top = y - 62 + 'px'; };
     const here = nodes[run.cur];
     place(here.x, here.t === 'boss' ? BOSS_PIN_Y + 34 : here.y);
 
@@ -354,6 +481,12 @@ const RunMap = (() => {
     }
 
     $('#rmDeck').onclick = () => { sfx('select'); Run.showDeck($('#rmap')); };
+    // Lands are free to add or take out any time you're on the map.
+    $$('.rh-land').forEach((row) => row.querySelectorAll('[data-d]').forEach((b) => (b.onclick = () => {
+      if (!Run.setLands(row.dataset.k, +b.dataset.d)) return;
+      row.querySelector('b').textContent = run.lands[row.dataset.k];
+      $('#rhDeck').textContent = Run.deckSize();
+    })));
     $('#rmMenu').onclick = () => { sfx('select'); showTitle(); };
     $('#rmQuit').onclick = () => Run.confirmAbandon(() => show());
 

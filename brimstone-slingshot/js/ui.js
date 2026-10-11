@@ -1402,6 +1402,8 @@ function endGame() {
   const st = matchStats();
   const show = (dim) => {
     if (game !== g) return;
+    // Losing a run battle ends the run: go straight to the run's own RUN OVER screen.
+    if (run && !won) { runBattle = false; Run.afterBattle(false, you.life, opp.life); return; }
     Music.play('menu');
     showScreen(`
       <div class="result panel">

@@ -9,7 +9,8 @@
 const RUN_KEY = 'cardgrave.run.v1';
 const RUN_RECORD_KEY = 'cardgrave.runRecord.v1';
 const RUN_MAX_LIFE = 20;
-const RUN_MIN_DECK = 15;                                // BURN A CARD can't go below this
+const RUN_MIN_DECK = 15;                                // BURN A CARD or taking out lands can't go below this
+const RUN_MAX_LANDS = 20;                               // of each land type
 const RUN_ROW_Y = [840, 710, 580, 450, 320, 190, 70];   // map units: start, rows 1-5, boss
 const DEALER_LIFE = [0, 8, 8, 12, 12, 14];              // a battle's Dealer life, by row
 const DEALER_COST_CAP = [0, 3, 3, 4, 4, 99];            // the Dealer's priciest card, by row
@@ -108,9 +109,9 @@ function genRunMap(R) {
 const RUN_EVENTS = [
   {
     id: 'cracked', title: 'CRACKED CHIP', art: 'ri_chip',
-    text: 'A cracked chip hums in the dirt. It offers power, at a price: +2 attack, but the creature forgets one of its sigils.',
+    text: 'A cracked chip hums in the dirt. Press it into a creature in your deck: it gains +2 attack, but forgets one of its sigils at random.',
     choices: [
-      { label: 'TAKE THE POWER', pick: (d) => d.sigils.length > 0, need: 'Needs a creature with a sigil.',
+      { label: 'IMPLANT IN A CREATURE', pick: (d) => d.sigils.length > 0, need: 'Needs a creature with a sigil.',
         act: (run, d) => {
           const rc = run.rc(d.rid), k = rc.sigils.splice(Math.floor(Math.random() * rc.sigils.length), 1)[0];
           rc.atk += 2;
@@ -130,7 +131,7 @@ const RUN_EVENTS = [
   },
   {
     id: 'pool', title: 'MOLTEN POOL', art: 'ri_pool',
-    text: 'A pool of slow fire. Dip a creature in: it may come out faster than ever, or not come out at all.',
+    text: 'A pool of slow fire. Dip a creature from your deck in: half the time it comes out with Haste, half the time it melts away for good.',
     choices: [
       { label: 'DIP A CREATURE', pick: (d) => !d.sigils.includes('haste') && d.sigils.length < 4, need: 'Needs a creature without Haste.',
         act: (run, d) => {
@@ -166,7 +167,7 @@ const RUN_EVENTS = [
   },
   {
     id: 'rune', title: 'RUNE CIRCLE', art: 'stasisrune',
-    text: 'A rune circle turns slowly in the ground. For 3 life it will copy a sigil from one creature to another.',
+    text: 'A rune circle turns slowly in the ground. Pay 3 life and it copies a sigil from one creature in your deck onto another.',
     choices: [
       { label: 'PAY 3 LIFE', transfer: true, cost: 3, ok: (run) => run.s.life > 3 && run.givers().length > 0,
         need: 'Needs more than 3 life and a sigil to copy.' },
@@ -175,7 +176,7 @@ const RUN_EVENTS = [
   },
   {
     id: 'moth', title: 'WANDERING MOTH', art: 'moth',
-    text: 'A moth made of glass circles your light. For 4 life it will lend a creature its wings.',
+    text: 'A moth made of glass circles your light. Pay 4 life and it gives one creature in your deck its wings: Airborne.',
     choices: [
       { label: 'PAY 4 LIFE', ok: (run) => run.s.life > 4, pick: (d) => !d.sigils.includes('airborne') && d.sigils.length < 4,
         need: 'Needs more than 4 life and a creature without Airborne.',
@@ -254,6 +255,17 @@ const Run = {
   creatures() { return this.cards().filter((d) => d.type === 'creature'); },
   landCount() { return Object.values(this.s.lands).reduce((a, b) => a + b, 0); },
   deckSize() { return this.s.deck.length + this.landCount(); },
+  /* Add (d = 1) or take out (d = -1) a land of colour k, from the map. Returns false if not allowed. */
+  setLands(k, d) {
+    const s = this.s, n = s.lands[k] || 0;
+    if (d < 0 && n <= 0) { sfx('err'); return false; }
+    if (d < 0 && this.deckSize() <= RUN_MIN_DECK) { toast(`Your deck can't go below ${RUN_MIN_DECK} cards.`); sfx('err'); return false; }
+    if (d > 0 && n >= RUN_MAX_LANDS) { toast(`At most ${RUN_MAX_LANDS} of each land.`); sfx('err'); return false; }
+    s.lands[k] = n + d;
+    this.save();
+    sfx(d > 0 ? 'land' : 'select');
+    return true;
+  },
   heal(n) { const h = Math.max(0, Math.min(n, this.s.maxLife - this.s.life)); this.s.life += h; return h; },
   gainTeeth(n) { this.s.teeth += n; this.s.stats.teeth += n; },
 
@@ -379,7 +391,7 @@ const Run = {
     this.outcome(icon, title, text);
   },
   outcome(icon, title, text) {
-    this.screen(icon, title, escapeHTML(text), '', '<button class="btn" id="rnOk">CONTINUE</button>');
+    this.screen(icon, title, '', `<p class="rn-outcome">${escapeHTML(text)}</p>`, '<button class="btn" id="rnOk">CONTINUE</button>');
     $('#rnOk').onclick = () => { sfx('select'); this.leave(); };
   },
 

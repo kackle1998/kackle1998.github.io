@@ -715,10 +715,15 @@ a.btn { text-decoration: none; display: inline-block; }
 .rm-st { position: absolute; transform-origin: 50% 100%; transform: rotateX(-90deg); pointer-events: none; }
 .rm-rune { position: absolute; left: 4px; top: 28px; width: 14px; height: 20px; image-rendering: pixelated; }
 .rm-nd { position: absolute; width: 38px; height: 38px; transform: translateZ(1px); }
-.rm-nd.boss { width: 96px; height: 68px; }
+.rm-casino { position: absolute; transform-style: preserve-3d; }
+.rm-casino canvas { display: block; image-rendering: pixelated; }
+.rm-casino .rm-st { pointer-events: auto; }
+.rm-c-flat { position: absolute; }
+.rm-casino .rm-st canvas { width: 100%; height: 100%; }
+.rm-c-carpet { position: absolute; width: 16px; height: 8px; transform: translateZ(1px); }
+.rm-casino.reach { cursor: pointer; }
 .rm-nd canvas { display: block; width: 100%; height: 100%; image-rendering: pixelated; }
 .rm-nd.reach { cursor: pointer; }
-.rm-base { position: absolute; width: 38px; height: 12px; border: 3px solid; border-radius: 50%; transform: translateZ(2px); pointer-events: none; }
 .rm-fig { width: 60px; height: 60px; }
 .rm-fig img { display: block; width: 100%; height: 100%; image-rendering: pixelated; animation: rmBob 1.2s steps(2) infinite; }
 @keyframes rmBob { 50% { transform: translateY(-3px); } }
@@ -733,10 +738,17 @@ body[data-crt="off"] .rm-fig img { animation: none; }
 .rh-row .ico { width: 16px; height: 16px; }
 .rh-row b { margin-left: auto; font-family: var(--pixel); font-size: 16px; font-weight: normal; }
 .rhud .btn { margin-top: 6px; font-size: 14px; padding: 8px 10px; }
+.rh-lands { border-top: 2px solid var(--light); padding-top: 6px; display: flex; flex-direction: column; gap: 4px; }
+.rh-h { font-family: var(--pixel); font-size: 11px; letter-spacing: 2px; color: var(--mid); }
+.rh-land { display: flex; align-items: center; gap: 6px; font-size: 19px; }
+.rh-land .ico { width: 16px; height: 16px; }
+.rh-land span { flex: 1; }
+.rh-land b { min-width: 26px; text-align: center; font-family: var(--pixel); font-size: 15px; font-weight: normal; }
+.rh-land .mini-btn { width: 24px; height: 24px; font-size: 18px; line-height: 16px; }
 .rm-btns { position: absolute; right: 16px; top: 16px; display: flex; gap: 10px; }
 .rm-btns .btn { font-size: 14px; padding: 8px 14px; }
 .rm-tick {
-  position: absolute; left: 50%; top: 18px; transform: translateX(-50%); padding: 6px 14px; white-space: nowrap; pointer-events: none;
+  position: absolute; right: 16px; top: 70px; padding: 6px 14px; white-space: nowrap; pointer-events: none;
   font-family: var(--pixel); font-size: 13px; color: var(--paper); background: var(--ink); border: 2px solid var(--mid);
 }
 
@@ -780,6 +792,7 @@ body[data-crt="off"] .rm-fig img { animation: none; }
 .rn-event { display: flex; align-items: center; gap: 22px; padding: 6px 10px; }
 .rn-art { width: 128px; height: 128px; flex: none; background: var(--artbg); border: 3px solid var(--ink); image-rendering: pixelated; }
 .rn-event p { margin: 0; font-size: 24px; line-height: 23px; }
+.rn-outcome { margin: 0; padding: 14px 10px; text-align: center; font-size: 24px; line-height: 23px; }
 .rn-need { width: 100%; text-align: center; font-size: 18px; color: var(--mid); }
 .rn-deckwrap { position: absolute; inset: 0; z-index: 5; display: flex; align-items: center; justify-content: center; background: color-mix(in srgb, var(--bg) 72%, transparent); }
 
