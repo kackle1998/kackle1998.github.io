@@ -407,7 +407,7 @@ body[data-crt="off"] .card.rare:not(.tilting) .c-glare { animation: none; opacit
 /* The glare only lights the sprite's own pixels, not the square around it. */
 .ttl-hero .c-glare { -webkit-mask: var(--spr) 0 0 / 100% 100% no-repeat; mask: var(--spr) 0 0 / 100% 100% no-repeat; }
 @keyframes heroBob { 50% { translate: 0 -8px; } } /* translate, so the hover tilt can own transform */
-.ttl-plate { position: absolute; left: 72px; top: 604px; width: 400px; padding: 10px 14px; display: flex; align-items: center; justify-content: space-between; }
+.ttl-plate { position: absolute; left: 272px; top: 604px; transform: translateX(-50%); width: max-content; min-width: 220px; padding: 10px 18px; } /* hugs the name, centred under the portrait */
 .ttl-name { font-family: var(--pixel); font-size: 20px; letter-spacing: 2px; }
 .ttl-rec { font-size: 20px; color: var(--mid); }
 .ttl-bars { position: absolute; right: 0; top: 150px; width: 600px; display: flex; flex-direction: column; gap: 12px; }

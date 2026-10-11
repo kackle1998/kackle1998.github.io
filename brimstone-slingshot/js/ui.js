@@ -1004,14 +1004,13 @@ function showTitle() {
       <div class="ttl-plate panel">
         <div><div class="ttl-name">${escapeHTML(heroName().toUpperCase())}</div>
           <div class="ttl-rec">${rec.wins} win${rec.wins === 1 ? '' : 's'} &middot; ${rec.losses} loss${rec.losses === 1 ? '' : 'es'}</div></div>
-        <button class="btn sm" id="ttlEdit">EDIT</button>
       </div>
       <div class="ttl-bars">${menu.map((m, i) => `<button class="ttl-bar" data-i="${i}">${m.label}</button>`).join('')}</div>
       <div class="ttl-tick"><span></span></div>
       <div class="ttl-acct" id="acctSlot"></div>
     </div>`);
   Cloud.mount($('#acctSlot'));
-  $('#ttlEdit').onclick = $('#ttlHero').onclick = () => { sfx('select'); openMaker('charmaker.html'); };
+  $('#ttlHero').onclick = () => { sfx('select'); openMaker('charmaker.html'); };
 
   const bars = [...$$('.ttl-bar')];
   const pick = (i, quiet) => {
