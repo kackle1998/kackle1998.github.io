@@ -385,7 +385,7 @@ creature('golem',     'Stone Golem','gem', '1G',   2, 3, ['regen']);
 creature('moth',      'Crystal Moth','gem','1G',   1, 2, ['airborne', 'regen']);
 creature('geode',     'Heal Geode', 'gem', '1G',   1, 3, ['mend'], { mend: 3 });
 creature('sentinel',  'Gem Sentinel','gem','2G',   2, 5, ['guardian']);
-creature('shardblade','Shardblade', 'gem', '1GG',  3, 3, ['quick']);
+creature('shardblade','Shardblade', 'gem', '1GG',  3, 2, ['quick']);
 creature('drake',     'Prism Drake','gem', '2GG',  3, 4, ['airborne']);
 creature('colossus',  'Gem Colossus','gem','3GG',  5, 7, ['guardian', 'regen'], { flavor: 'A mountain that learned to walk.' });
 // Arcane
