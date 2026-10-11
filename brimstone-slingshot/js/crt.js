@@ -162,22 +162,22 @@ const Backdrop = {
   frame(t) { if (this.warp > 0 || ++this.tick % 2 === 0) this.draw(t); },
   drawOnce() { this.draw((performance.now() - CRT.t0) / 1000); },
 
-  /* Victory warp: wind up 1.2s, spin 1.2s, settle 1s. Time runs up to 15x faster
-     while it spins; `boost` keeps the extra time so the paint doesn't snap back.
-     Resolves as it starts to settle, so the result can arrive with the calm. */
+  /* End-of-match warp: wind up 1.2s, spin for `hold` seconds, settle 1s. Time runs up to
+     15x faster while it spins; `boost` keeps the extra time so the paint doesn't snap
+     back. Resolves as it starts to settle, so the result can arrive with the calm. */
   warp: 0, boost: 0,
-  vortex() {
+  vortex(hold = 1.2) {
     return new Promise((done) => {
       if (!this.gl || CRT.level === 'off') { done(); return; }
-      const t0 = performance.now();
+      const t0 = performance.now(), end = 1.2 + hold;
       let last = t0, settled = false;
       const step = (now) => {
         const e = (now - t0) / 1000;
         this.boost += ((now - last) / 1000) * this.warp * 14;
         last = now;
-        this.warp = e < 1.2 ? e / 1.2 : e < 2.4 ? 1 : Math.max(0, 1 - (e - 2.4));
-        if (e >= 2.4 && !settled) { settled = true; done(); }
-        if (this.warp > 0 || e < 2.4) requestAnimationFrame(step);
+        this.warp = e < 1.2 ? e / 1.2 : e < end ? 1 : Math.max(0, 1 - (e - end));
+        if (e >= end && !settled) { settled = true; done(); }
+        if (this.warp > 0 || e < end) requestAnimationFrame(step);
       };
       requestAnimationFrame(step);
     });

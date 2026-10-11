@@ -985,8 +985,8 @@ function titleMenu() {
     { label: 'OFFLINE PLAY', desc: "Sit at the Dealer's table and play a hand.", go: () => showDeckSelect() },
     Cloud.enabled && { label: 'ONLINE ARENA', desc: 'Duel another spellslinger in real time. Needs an account.', go: () => Net.showOnline() },
     { label: 'DECK BUILDER', desc: 'Bind 30 cards into a spellbook of your own.', go: () => showDeckBuilder() },
-    { label: 'CARD MAKER', desc: 'Draw and enchant a card of your own.', go: () => openMaker('cardmaker.html') },
-    { label: 'CHARACTER', desc: 'Change the face you bring to the table.', go: () => openMaker('charmaker.html') },
+    { label: 'CARD MAKER', desc: 'Draw and enchant a card of your own.', go: () => CardMaker.show() },
+    { label: 'CHARACTER', desc: 'Change the face you bring to the table.', go: () => CharMaker.show() },
     { label: 'HOW TO PLAY', desc: 'Learn the rules of the table.', go: showTitleRules },
   ].filter(Boolean);
 }
@@ -1010,7 +1010,7 @@ function showTitle() {
       <div class="ttl-acct" id="acctSlot"></div>
     </div>`);
   Cloud.mount($('#acctSlot'));
-  $('#ttlHero').onclick = () => { sfx('select'); openMaker('charmaker.html'); };
+  $('#ttlHero').onclick = () => { sfx('select'); CharMaker.show(); };
 
   const bars = [...$$('.ttl-bar')];
   const pick = (i, quiet) => {
@@ -1031,7 +1031,7 @@ let titleSel = 0;
 
 /* Arrow keys move the highlighted bar, Enter picks it. */
 document.addEventListener('keydown', (e) => {
-  if (!$('.ttl') || $('#screen').classList.contains('hidden') || !$('#maker').classList.contains('hidden')) return;
+  if (!$('.ttl') || $('#screen').classList.contains('hidden')) return;
   const bars = $$('.ttl-bar');
   if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
     e.preventDefault();
@@ -1194,7 +1194,7 @@ function rollForFirst() {
       if (youWon) {
         sfx('heal');
         msg.textContent = 'You rolled high! Go first or second?';
-        btns.innerHTML = '<button class="btn big accent" id="goFirst">GO FIRST</button><button class="btn big" id="goSecond">GO SECOND</button>';
+        btns.innerHTML = '<button class="btn big" id="goFirst">GO FIRST</button><button class="btn big" id="goSecond">GO SECOND</button>';
         $('#goFirst').onclick = () => { sfx('select'); done(0); };
         $('#goSecond').onclick = () => { sfx('select'); done(1); };
       } else {
@@ -1293,49 +1293,94 @@ function endGame() {
           <div><span>BEST CHAIN</span><b>${st.bestChain}</b></div>
           <div class="r-score"><span>SCORE</span><b>${st.dmg * 100 + st.summons * 50 + st.bestChain * 200}</b></div>
         </div>
-        <button class="btn" id="againBtn">PLAY AGAIN</button>
+        <div class="concede-btns">
+          <button class="btn" id="againBtn">PLAY AGAIN</button>
+          <button class="btn" id="menuBtn">MAIN MENU</button>
+        </div>
       </div>`, dim);
     $('#againBtn').onclick = () => {
       sfx('select');
       if (net) { Net.leave(); Net.showOnline(); } else showDeckSelect();
+    };
+    $('#menuBtn').onclick = () => {
+      sfx('select');
+      if (net) Net.leave();
+      $('#game').classList.add('hidden');
+      showTitle();
     };
     if (!FAST) {
       $('.result').animate([{ transform: 'translateY(-30px) scale(.6)', opacity: 0 }, { transform: 'none', opacity: 1 }], { duration: 360, easing: 'steps(6)' });
       tallyUp($$('.r-tally b'));
     }
   };
-  if (!won || FAST || CRT.level === 'off') { setTimeout(() => show(true), FAST ? 0 : 1000); return; }
+  if (FAST || CRT.level === 'off') { setTimeout(() => show(true), FAST ? 0 : 1000); return; }
 
-  // Victory: the board spirals into the middle and the backdrop warps, Bejeweled 2 style.
-  setTimeout(() => {
+  // Bejeweled 2 style, win or lose: the table melts away to reveal the backdrop winding
+  // into a vortex, and every card on the board and in hand is pulled round into its core.
+  // Only a win gets the combo callout first.
+  if (won) setTimeout(() => {
     if (game !== g) return;
     callout(calloutFor(Math.max(3, combo.game === g && combo.turn === g.turnNum ? combo.n : 0)));
     sfx('callout', 3);
   }, 300);
   setTimeout(async () => {
     if (game !== g) return;
-    const b = relRect($('#board'));
-    const cx = b.x + b.w / 2, cy = b.y + b.h / 2;
-    $$('#board .card').forEach((c, i) => {
-      const r = relRect(c), dx = cx - (r.x + r.w / 2), dy = cy - (r.y + r.h / 2), spin = i % 2 ? 540 : -540;
-      const keys = [];
-      for (let s = 0; s <= 10; s++) {
-        const p = s / 10;
-        keys.push({ transform: `translate(${dx * p * p}px, ${dy * p * p}px) rotate(${spin * p}deg) scale(${1 - p})` });
-      }
-      c.animate(keys, { duration: 1100, delay: i * 60, easing: 'steps(16)', fill: 'forwards' });
-    });
+    const cards = liftCards();
+    const SPIN = 380, STAGGER = 90, LEAD = 250; // ms: per-card duration base, gap between cards, wait before the first
+    const total = LEAD + SPIN * 4 + cards.length * STAGGER;
     sfx('warp');
-    const vortex = Backdrop.vortex();
-    await sleep(900);
-    if (game !== g) return;
+    // The vortex winds up over 1.2s; hold it until the last card is in.
+    const vortex = Backdrop.vortex(Math.max(1.2, total / 1000 - 1.0));
     const gameEl = $('#game');
-    await gameEl.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 400, easing: 'steps(4)', fill: 'forwards' }).finished;
-    gameEl.classList.add('hidden');
-    gameEl.getAnimations().forEach((a) => a.cancel());
+    gameEl.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 320, easing: 'steps(4)', fill: 'forwards' }).finished.then(() => {
+      gameEl.classList.add('hidden');
+      gameEl.getAnimations().forEach((a) => a.cancel());
+    }).catch(() => {}); // cancelled by the fallback below
+    cards.forEach((c, i) => suckIn(c, LEAD + i * STAGGER, SPIN * 4));
+    await sleep(total);
+    if (game !== g) return;
+    CRT.pulse(0.8);
     await vortex;
+    cards.forEach((c) => c.el.remove());
+    gameEl.classList.add('hidden'); // in case the fade never got to finish (e.g. tab in background)
+    gameEl.getAnimations().forEach((a) => a.cancel());
     show(false);
   }, 1500);
+}
+
+/* The vortex sits at the centre of the screen, which is the centre of the stage. */
+const VORTEX = { x: 640, y: 360 };
+
+/* Copy every card on the table and in hand into #fx at the same spot, so they
+   outlive the game screen fading out. Nearest the core goes first. */
+function liftCards() {
+  return [...$$('#board .card, #hand .card')].map((c) => {
+    const r = relRect(c), w = c.offsetWidth, h = c.offsetHeight;
+    const x = r.x + r.w / 2, y = r.y + r.h / 2;
+    const el = c.cloneNode(true);
+    el.classList.remove('tilting', 'selected', 'playable', 'ready', 'targetable', 'enter', 'unplayable');
+    el.style.cssText = `position:absolute;left:${x - w / 2}px;top:${y - h / 2}px;margin:0;z-index:2;pointer-events:none`;
+    $('#fx').appendChild(el);
+    return { el, x, y, d: Math.hypot(x - VORTEX.x, y - VORTEX.y) };
+  }).sort((a, b) => a.d - b.d);
+}
+
+/* Orbit a lifted card clockwise (the way the vortex turns), tightening into the core. */
+function suckIn(c, delay, duration) {
+  const a0 = Math.atan2(c.y - VORTEX.y, c.x - VORTEX.x), N = 36, keys = [];
+  for (let s = 0; s <= N; s++) {
+    const p = s / N;
+    const a = a0 + Math.PI * 2.4 * p ** 1.6;
+    const r = c.d * (1 - p) ** 1.3;
+    const dx = VORTEX.x + Math.cos(a) * r - c.x, dy = VORTEX.y + Math.sin(a) * r - c.y;
+    keys.push({
+      transform: `translate(${dx.toFixed(1)}px, ${dy.toFixed(1)}px) rotate(${((a - a0) * 180 / Math.PI).toFixed(1)}deg) scale(${(1 - 0.88 * p).toFixed(3)})`,
+      opacity: p > 0.95 ? 0 : 1,
+    });
+  }
+  c.el.animate(keys, { duration, delay, easing: `steps(${N})`, fill: 'both' }).finished
+    .then(() => { sfx('tick'); CRT.pulse(0.12); })
+    .catch(() => {});
 }
 
 /* Results count up one row at a time, Mario-time-bonus style. Click to skip. */
@@ -1365,42 +1410,6 @@ $('#bell').addEventListener('click', playerEndTurn);
 $('#cpuPanel').addEventListener('click', onEnemyPanel);
 $('#helpBtn').addEventListener('click', showRules);
 
-/* ---------- card / character makers ---------- */
-// They're separate pages, so open them in a frame over the game instead of navigating:
-// leaving index.html would unload the game and stop the music. Their localStorage
-// writes still reach this page through 'storage' events, so the deck builder stays live.
-const MAKER_PAGE = /^(cardmaker|charmaker)\.html$/;
-function openMaker(href) {
-  const f = $('#maker');
-  f.src = href;
-  f.classList.remove('hidden');
-  f.focus();
-}
-function closeMaker() {
-  const f = $('#maker');
-  f.classList.add('hidden');
-  f.src = 'about:blank';
-}
-document.addEventListener('click', (e) => {
-  const a = e.target.closest('a[href]');
-  if (!a || e.defaultPrevented || e.button || e.ctrlKey || e.metaKey || e.shiftKey) return;
-  if (!MAKER_PAGE.test(a.getAttribute('href'))) return;
-  e.preventDefault();
-  sfx('select');
-  openMaker(a.getAttribute('href'));
-});
-$('#maker').addEventListener('load', () => {
-  const f = $('#maker');
-  let doc;
-  try { doc = f.contentDocument; } catch (err) { return; }
-  if (!doc || f.classList.contains('hidden')) return;
-  // Anything that would bring the game itself into the frame closes the frame instead.
-  if (!MAKER_PAGE.test(doc.location.pathname.split('/').pop())) { closeMaker(); return; }
-  doc.addEventListener('click', (e) => {
-    const a = e.target.closest('a[href]');
-    if (a && /(^|\/)(index\.html)?$/.test(a.getAttribute('href'))) { e.preventDefault(); sfx('select'); closeMaker(); }
-  });
-});
 $('#concedeBtn').addEventListener('click', showConcede);
 $('#muteBtn').addEventListener('click', () => {
   Sfx.muted = !Sfx.muted;
@@ -1419,7 +1428,7 @@ stage.addEventListener('contextmenu', (e) => {
 });
 $('#board').addEventListener('mouseleave', () => { if (game && !busy) inspectDefault(); });
 
-/* Live sync with the Card Maker / Character Maker (another tab on the same address). */
+/* Live sync with another tab on the same address (or a cloud pull). */
 onSharedChange((key) => {
   if (key === HERO_KEY) {
     if (game) render();
@@ -1438,3 +1447,7 @@ onSharedChange((key) => {
 $('#crtBtn').addEventListener('click', () => toast(`CRT effect: ${CRT.cycle().toUpperCase()}`));
 CRT.init();
 showTitle();
+// The old cardmaker.html / charmaker.html addresses redirect here with a hash.
+if (location.hash === '#cardmaker') CardMaker.show();
+else if (location.hash === '#character') CharMaker.show();
+if (location.hash) history.replaceState(null, '', location.pathname + location.search);

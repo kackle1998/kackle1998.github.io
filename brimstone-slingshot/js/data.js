@@ -220,7 +220,7 @@ const SIGILS = {
   guardian:   { name: 'Guardian',   icon: 'guardian',   text: () => 'While this is on the board, enemies must attack a Guardian.' },
   haste:      { name: 'Haste',      icon: 'haste',      text: () => 'Can attack the turn it is summoned.' },
   deathtouch: { name: 'Touch of Death', icon: 'deathtouch', text: () => 'Any creature damaged by this perishes.' },
-  leech:      { name: 'Leech',      icon: 'leech',      text: () => 'Damage this deals in combat also heals its owner.' },
+  leech:      { name: 'Leech',      icon: 'leech',      text: () => 'Damage this deals in combat also heals its owner, once per turn.' },
   trample:    { name: 'Piercing',   icon: 'trample',    text: () => 'When this kills a creature in an attack, excess damage hits the enemy.' },
   quick:      { name: 'Quick',      icon: 'quick',      text: () => 'Strikes first in combat. If the foe perishes, it takes no damage.' },
   bonespawn:  { name: 'Bone Spawn', icon: 'bonespawn',  text: () => 'When this perishes, a 1/1 Skeleton rises in its place.' },
@@ -264,8 +264,8 @@ creature('mooseking', 'Moose King', 'paw', '3PP',  6, 6, ['trample', 'rally'], {
 creature('rat',       'Grave Rat',  'bone', 'K',   1, 1, ['bonespawn']);
 creature('bat',       'Vampire Bat','bone', '1K',  1, 2, ['airborne', 'leech']);
 creature('draugr',    'Draugr',     'bone', '1K',  1, 3, ['bonespawn'], { flavor: 'Something still stirs inside the armour.' });
-creature('ghoul',     'Ghoul',      'bone', '2K',  2, 3, ['deathtouch']);
-creature('crow',      'Plague Crow','bone', '2K',  2, 2, ['airborne', 'deathtouch']);
+creature('ghoul',     'Ghoul',      'bone', '2K',  2, 2, ['deathtouch']);
+creature('crow',      'Plague Crow','bone', '2K',  1, 2, ['airborne', 'deathtouch']);
 creature('revenant',  'Revenant',   'bone', '2KK', 4, 4, ['leech']);
 creature('bonelord',  'Bone Lord',  'bone', '3KK', 4, 5, ['rally', 'bonespawn'], { flavor: 'All bones answer to the crown.' });
 CARDS.skeleton = { id: 'skeleton', name: 'Skeleton', type: 'creature', color: 'bone', cost: parseCost('0'), atk: 1, hp: 1, sigils: [], sprite: 'skeleton', token: true };

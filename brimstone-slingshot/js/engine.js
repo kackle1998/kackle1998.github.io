@@ -413,7 +413,7 @@ class Game {
       const n = this.attackOf(a);
       this.say(`${a.name} struck ${this.obj(o)} directly for ${n}.`, p);
       this.damagePlayer(o, n);
-      if (has(a, 'leech')) this.healPlayer(p, n);
+      this.leech(a, p, n);
     } else {
       const d = this.findCreature(target.uid);
       if (!d) return;
@@ -421,11 +421,11 @@ class Game {
       this.say(`${a.name} attacked ${d.name}.`, p);
       if (r.toD > 0) {
         this.damageCreature(d, r.toD, has(a, 'deathtouch'));
-        if (has(a, 'leech')) this.healPlayer(p, r.toD);
+        this.leech(a, p, r.toD);
       }
       if (r.toA > 0) {
         this.damageCreature(a, r.toA, has(d, 'deathtouch'));
-        if (has(d, 'leech')) this.healPlayer(o, r.toA);
+        this.leech(d, o, r.toA);
       }
       if (r.pierce > 0) {
         this.say(`${a.name} pierced through for ${r.pierce}.`, p);
@@ -433,6 +433,13 @@ class Game {
       }
     }
     this.checkOver();
+  }
+
+  /* Leech heals its owner, at most once per turn per creature. */
+  leech(c, p, n) {
+    if (!has(c, 'leech') || n <= 0 || c.leechTurn === this.turnNum) return;
+    c.leechTurn = this.turnNum;
+    this.healPlayer(p, n);
   }
 
   damageCreature(c, n, deathtouch) {

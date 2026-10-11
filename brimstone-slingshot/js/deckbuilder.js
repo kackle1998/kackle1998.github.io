@@ -10,11 +10,15 @@ const DB = { deck: null, tab: 'all', source: 'all', page: 0, dirty: false, delAr
 function dbBlankDeck() { return { id: null, name: 'My Deck', list: {}, art: null }; }
 function dbFromSaved(s) { return { id: s.id, name: s.name, list: cleanDeckList(s.list), art: s.art || null }; }
 
-function showDeckBuilder(id) {
-  const saved = id ? getSavedDecks().find((d) => d.id === id) : null;
-  DB.deck = saved ? dbFromSaved(saved) : dbBlankDeck();
-  DB.page = 0;
-  DB.dirty = false;
+/* `resume` returns to the deck being edited (e.g. coming back from the Card Maker). */
+function showDeckBuilder(id, resume = false) {
+  if (resume && DB.deck) DB.deck.list = cleanDeckList(DB.deck.list);
+  else {
+    const saved = id ? getSavedDecks().find((d) => d.id === id) : null;
+    DB.deck = saved ? dbFromSaved(saved) : dbBlankDeck();
+    DB.page = 0;
+    DB.dirty = false;
+  }
   $('#game').classList.add('hidden');
   showScreen(`
     <div class="db">
@@ -27,7 +31,7 @@ function showDeckBuilder(id) {
         <button class="btn sm" id="dbSave">SAVE</button>
         <button class="btn sm" id="dbDelete">DELETE</button>
         <span class="db-spacer"></span>
-        <a class="btn sm" href="cardmaker.html" id="dbCardMaker">CARD MAKER</a>
+        <button class="btn sm" id="dbCardMaker">CARD MAKER</button>
         <button class="btn sm" id="dbBack">BACK</button>
       </div>
       <div class="db-left">
@@ -62,6 +66,7 @@ function showDeckBuilder(id) {
   $('#dbNew').onclick = () => { DB.deck = dbBlankDeck(); DB.dirty = false; sfx('select'); dbRender(); dbArtOpen(); };
   $('#dbSave').onclick = () => { if (dbSave()) toast('Deck saved.'); };
   $('#dbDelete').onclick = dbDelete;
+  $('#dbCardMaker').onclick = () => { sfx('select'); CardMaker.show(() => showDeckBuilder(null, true)); };
   $('#dbBack').onclick = () => { sfx('select'); showTitle(); };
   $('#dbPrev').onclick = () => { DB.page--; dbRender(); };
   $('#dbNext').onclick = () => { DB.page++; dbRender(); };
@@ -72,7 +77,7 @@ function showDeckBuilder(id) {
   dbRender();
 }
 
-/* Called when the Card Maker changes cards in another tab. */
+/* Called when another tab changes cards. */
 function refreshDeckBuilder() {
   if (!DB.deck) return;
   DB.deck.list = cleanDeckList(DB.deck.list);
