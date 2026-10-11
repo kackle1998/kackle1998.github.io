@@ -25,7 +25,7 @@ function showDeckBuilder(id) {
         <button class="btn sm" id="dbSave">SAVE</button>
         <button class="btn sm" id="dbDelete">DELETE</button>
         <span class="db-spacer"></span>
-        <a class="btn sm" href="cardmaker.html" target="_blank" rel="noopener">CARD MAKER &#8599;</a>
+        <a class="btn sm" href="cardmaker.html" id="dbCardMaker">CARD MAKER</a>
         <button class="btn sm" id="dbBack">BACK</button>
       </div>
       <div class="db-left">
@@ -60,6 +60,10 @@ function showDeckBuilder(id) {
   $('#dbSave').onclick = () => { if (dbSave()) toast('Deck saved.'); };
   $('#dbDelete').onclick = dbDelete;
   $('#dbBack').onclick = () => { sfx('select'); showTitle(); };
+  // The Card Maker replaces this page, so don't silently drop an unsaved deck.
+  $('#dbCardMaker').onclick = (e) => {
+    if (DB.dirty && !confirm('Leave the deck builder? Your unsaved deck changes will be lost.')) e.preventDefault();
+  };
   $('#dbPrev').onclick = () => { DB.page--; dbRender(); };
   $('#dbNext').onclick = () => { DB.page++; dbRender(); };
   $('#dbAuto').onclick = () => { dbAutoComplete(); sfx('place'); dbRender(); };

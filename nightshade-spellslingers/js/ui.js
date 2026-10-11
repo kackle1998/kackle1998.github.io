@@ -15,11 +15,30 @@ let sel = { hand: null, attacker: null }; // uids
 let curScale = 1;
 const tapState = new Map(); // uid -> was tapped at last render (to animate tap/untap)
 
+/* Size from the layout viewport (unaffected by pinch zoom), not innerWidth,
+   which mobile Safari shrinks while zoomed in. */
 function fit() {
-  curScale = Math.min(window.innerWidth / 1280, window.innerHeight / 720);
+  const de = document.documentElement;
+  curScale = Math.min(de.clientWidth / 1280, de.clientHeight / 720);
   stage.style.setProperty('--s', curScale);
 }
+
+/* If the phone ended up zoomed anyway (e.g. kept from before a rotation),
+   re-applying the viewport tag makes the browser snap back to 1x. */
+function unzoom() {
+  const vv = window.visualViewport;
+  if (!vv || vv.scale <= 1.01) return;
+  const meta = document.querySelector('meta[name="viewport"]');
+  const content = meta.content;
+  meta.content = content + ', initial-scale=1';
+  requestAnimationFrame(() => { meta.content = content; });
+}
+
 window.addEventListener('resize', fit);
+window.addEventListener('orientationchange', () => setTimeout(() => { unzoom(); fit(); }, 250));
+if (window.visualViewport) window.visualViewport.addEventListener('resize', () => { unzoom(); fit(); });
+// iOS Safari ignores user-scalable=no for pinches; these block them.
+for (const ev of ['gesturestart', 'gesturechange']) document.addEventListener(ev, (e) => e.preventDefault(), { passive: false });
 fit();
 
 /* ---------- sound (tiny WebAudio synth) ---------- */
@@ -240,7 +259,7 @@ function inspectDefault() {
     <div class="i-help">
       <b>HOW TO PLAY</b>
       <p>Click a <b>land</b> in your hand to play it (one per turn).</p>
-      <p>Click a <b>creature</b> you can afford, then an empty slot. Click it twice to drop it in the first free slot.</p>
+      <p>Click a <b>creature</b> you can afford, then an empty slot.</p>
       <p>Click a ready creature (blinking white outline), then click an enemy creature, or the Dealer's panel when the way is clear.</p>
       <p>Spells: click, then a target (or click again). Traps: click twice to set face-down.</p>
       <p>Ring the bell (Space) to end your turn. Esc or right-click cancels.</p>
@@ -510,7 +529,12 @@ function onBoardCard(p, c) {
 function onEnemyPanel() {
   if (!myTurnReady() || sel.attacker == null) return;
   if (isTarget({ player: 1 })) playerAttack({ player: 1 });
-  else { toast('Clear the Dealer\'s creatures first (Airborne ignores this).'); sfx('err'); }
+  else {
+    const a = selectedAttacker(), foes = game.livingBoard(game.players[1]);
+    const flyers = a && has(a, 'airborne') && !foes.some((e) => has(e, 'guardian')) && foes.some((e) => has(e, 'airborne'));
+    toast(flyers ?'The Dealer\'s flyers block the way! Take them out first.' : 'Clear the Dealer\'s creatures first (Airborne ignores this unless the Dealer has flyers).');
+    sfx('err');
+  }
 }
 
 async function playerAttack(t) {
@@ -659,7 +683,7 @@ const RULES_HTML = `
     <li>Attack by choosing an enemy creature: both strike each other at once. <b>Damage stays</b> on creatures.</li>
     <li><b>Spells</b> are cast on your own turn only: they take effect at once, then go to the grave.</li>
     <li><b>Traps</b> are paid for and set face-down on your turn (up to 3). They spring by themselves on the enemy's turn when they attack, summon or cast a spell.</li>
-    <li>You may only hit the Dealer <b>directly</b> when they have no creatures, unless your attacker is <b>Airborne</b>. <b>Guardians</b> must be attacked first.</li>
+    <li>You may only hit the Dealer <b>directly</b> when they have no creatures, unless your attacker is <b>Airborne</b> and the Dealer has no Airborne creatures of their own. <b>Guardians</b> must be attacked first.</li>
     <li>Ring the <b>bell</b> to end your turn. Drawing from an empty deck hurts, more each time.</li>
   </ul>`;
 
@@ -682,8 +706,8 @@ function showTitle() {
       <div class="title-btns">
         <button class="btn big" id="startBtn">START</button>
         <button class="btn big" id="builderBtn">DECK BUILDER</button>
-        <a class="btn big" href="cardmaker.html" target="_blank" rel="noopener">CARD MAKER &#8599;</a>
-        <a class="btn big" href="charmaker.html" target="_blank" rel="noopener">CHARACTER &#8599;</a>
+        <a class="btn big" href="cardmaker.html">CARD MAKER</a>
+        <a class="btn big" href="charmaker.html">CHARACTER</a>
       </div>
       <div class="rules panel">${RULES_HTML}</div>
     </div>`);

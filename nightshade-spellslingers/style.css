@@ -14,6 +14,8 @@
 
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; background: var(--bg); overflow: hidden; }
+/* phones: no double-tap / pinch zoom, no landscape text inflation */
+html { touch-action: manipulation; -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
 body { font-family: var(--font); color: var(--ink); user-select: none; -webkit-user-select: none; }
 img { image-rendering: pixelated; image-rendering: crisp-edges; }
 button { font-family: inherit; }
@@ -136,7 +138,7 @@ body[data-crt="off"] .crt-tube { background: radial-gradient(ellipse at center, 
 
 /* ---------- right column ---------- */
 #right { position: absolute; left: 962px; top: 12px; width: 306px; height: 480px; display: flex; flex-direction: column; gap: 10px; }
-#inspector { flex: 0 0 300px; padding: 12px 14px; overflow: hidden; }
+#inspector { flex: 0 0 300px; padding: 9px 14px; overflow: hidden; }
 .i-head { display: flex; justify-content: space-between; align-items: flex-start; }
 .i-name { font-family: var(--pixel); font-size: 16px; line-height: 18px; }
 .i-cost { display: flex; gap: 3px; align-items: center; }
@@ -150,9 +152,9 @@ body[data-crt="off"] .crt-tube { background: radial-gradient(ellipse at center, 
 .i-sigil { display: flex; gap: 8px; font-size: 17px; line-height: 16px; margin-top: 6px; }
 .i-sigil .ico { width: 18px; height: 18px; flex: 0 0 18px; margin-top: -1px; }
 .i-flavor { font-size: 17px; color: var(--mid); font-style: italic; margin-top: 8px; }
-.i-help { font-size: 18px; line-height: 17px; }
+.i-help { font-size: 18px; line-height: 16px; }
 .i-help b { font-family: var(--pixel); font-size: 13px; font-weight: normal; }
-.i-help p { margin: 6px 0; }
+.i-help p { margin: 4px 0; }
 .i-help .ico { width: 14px; height: 14px; }
 
 #log { flex: 1; min-height: 0; padding: 6px 12px 8px; display: flex; flex-direction: column; font-size: 16px; line-height: 15px; }

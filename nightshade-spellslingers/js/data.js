@@ -215,7 +215,7 @@ function iconSprite(name) {
 for (const k of COLOR_KEYS) SPRITES['land_' + k] = iconSprite(COLORS[k].icon);
 
 const SIGILS = {
-  airborne:   { name: 'Airborne',   icon: 'airborne',   text: () => 'May attack the enemy directly, even while they control creatures.' },
+  airborne:   { name: 'Airborne',   icon: 'airborne',   text: () => 'May attack the enemy directly, even while they control creatures, unless they control an Airborne creature.' },
   guardian:   { name: 'Guardian',   icon: 'guardian',   text: () => 'While this is on the board, enemies must attack a Guardian.' },
   haste:      { name: 'Haste',      icon: 'haste',      text: () => 'Can attack the turn it is summoned.' },
   deathtouch: { name: 'Touch of Death', icon: 'deathtouch', text: () => 'Any creature damaged by this perishes.' },

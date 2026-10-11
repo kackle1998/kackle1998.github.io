@@ -1,102 +1,48 @@
 'use strict';
 /* ============================================================
    NIGHTSHADE SPELLSLINGING — CRT post-processing & animated background
-   (Balatro-style: curved glass, chromatic aberration that spikes
-   on impacts, rolling scan band, gentle flicker, and a
-   posterised swirling-paint backdrop.)
+   (Balatro-style: rolling scan band, gentle flicker, flashes and
+   shakes on impacts, and a posterised swirling-paint backdrop.)
 
-   Quality levels (saved per browser):
-     high - everything, incl. SVG curvature + RGB split + bloom
-     low  - overlays + background only (no SVG filter)
-     off  - static scanlines, still background
+   Levels (saved per browser):
+     low - overlays + animated background (default)
+     off - static scanlines, still background
    ============================================================ */
 
 const CRT = {
-  level: 'high',
+  level: 'low',
   wrap: null,
-  offR: null, offB: null,
-  base: 0.7,        // resting RGB split in px
-  pulseAmt: 0,      // decays back to 0
   t0: performance.now(),
 
   init() {
     this.wrap = document.getElementById('screenWrap');
-    this.offR = document.getElementById('crtOffR');
-    this.offB = document.getElementById('crtOffB');
-    document.getElementById('crtMap').setAttribute('href', this.barrelMap());
     let saved = null;
     try { saved = localStorage.getItem('cardgrave.crt'); } catch (e) { /* storage blocked */ }
-    this.level = saved || 'high';
-    this.autoTune = !saved; // only second-guess the default, never the player's choice
+    this.level = saved === 'off' ? 'off' : 'low'; // old 'high' saves fall back to 'low'
     Backdrop.init();
     this.apply();
     requestAnimationFrame((t) => this.frame(t));
   },
 
-  /* If the full filter can't hold ~40fps on this machine, quietly drop to 'low'. */
-  perf: { frames: 0, slow: 0, last: 0 },
-  watchPerf(now) {
-    const p = this.perf;
-    const dt = now - p.last;
-    p.last = now;
-    if (!this.autoTune || this.level !== 'high' || document.hidden || dt > 250) return;
-    p.frames++;
-    if (dt > 25) p.slow++;
-    if (p.frames >= 180) {
-      if (p.slow / p.frames > 0.5) {
-        this.level = 'low';
-        this.apply();
-        if (typeof toast === 'function') toast('CRT set to LOW for smoother play (TV button to change).');
-      }
-      this.autoTune = false;
-    }
-  },
-
   setLevel(level) {
-    this.autoTune = false;
     this.level = level;
     try { localStorage.setItem('cardgrave.crt', level); } catch (e) { /* storage blocked */ }
     this.apply();
   },
 
   cycle() {
-    const order = ['high', 'low', 'off'];
-    this.setLevel(order[(order.indexOf(this.level) + 1) % order.length]);
-    return this.level;
+    this.setLevel(this.level === 'off' ? 'low' : 'off');
+    return this.level === 'off' ? 'off' : 'on';
   },
 
   apply() {
     document.body.dataset.crt = this.level;
-    this.wrap.style.filter = this.level === 'high' ? 'url(#crtFilter)' : 'none';
     if (this.level === 'off') Backdrop.drawOnce();
   },
 
-  /* Displacement map that pulls the edges in like curved tube glass. */
-  barrelMap() {
-    const w = 640, h = 360;
-    const cv = document.createElement('canvas');
-    cv.width = w; cv.height = h;
-    const x = cv.getContext('2d');
-    const img = x.createImageData(w, h);
-    for (let py = 0; py < h; py++) {
-      for (let px = 0; px < w; px++) {
-        const nx = (px / (w - 1)) * 2 - 1, ny = (py / (h - 1)) * 2 - 1;
-        const r2 = nx * nx + ny * ny;
-        const i = (py * w + px) * 4;
-        img.data[i] = 128 + nx * r2 * 0.5 * 127;
-        img.data[i + 1] = 128 + ny * r2 * 0.5 * 127;
-        img.data[i + 2] = 128;
-        img.data[i + 3] = 255;
-      }
-    }
-    x.putImageData(img, 0, 0);
-    return cv.toDataURL();
-  },
-
-  /* Kick the colour split and shake the picture; strength 0..1. */
+  /* Flash the screen and optionally shake the picture; strength 0..1. */
   pulse(strength = 0.5, shake = false) {
     if (this.level === 'off') return;
-    this.pulseAmt = Math.min(1.5, this.pulseAmt + strength);
     if (shake) {
       const s = 4 + strength * 8;
       this.wrap.animate([
@@ -125,19 +71,7 @@ const CRT = {
 
   frame(now) {
     const t = (now - this.t0) / 1000;
-    this.watchPerf(now);
     if (this.level !== 'off') {
-      // Resting aberration breathes slowly; impacts add on top and decay.
-      this.pulseAmt *= 0.9;
-      if (this.pulseAmt < 0.01) this.pulseAmt = 0;
-      if (this.level === 'high') {
-        const split = this.base + Math.sin(t * 1.7) * 0.25 + this.pulseAmt * 7;
-        const jy = this.pulseAmt * (Math.random() - 0.5) * 3;
-        this.offR.setAttribute('dx', (-split).toFixed(2));
-        this.offR.setAttribute('dy', jy.toFixed(2));
-        this.offB.setAttribute('dx', split.toFixed(2));
-        this.offB.setAttribute('dy', (-jy).toFixed(2));
-      }
       Flicker.frame(t);
       Backdrop.frame(t);
     }

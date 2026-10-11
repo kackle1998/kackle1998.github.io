@@ -335,7 +335,7 @@ class Game {
     const guards = enemies.filter((e) => has(e, 'guardian'));
     if (guards.length) return guards.map((e) => ({ uid: e.uid }));
     const t = enemies.map((e) => ({ uid: e.uid }));
-    if (!enemies.length || has(c, 'airborne')) t.push({ player: o.idx });
+    if (!enemies.length || (has(c, 'airborne') && !enemies.some((e) => has(e, 'airborne')))) t.push({ player: o.idx });
     return t;
   }
 

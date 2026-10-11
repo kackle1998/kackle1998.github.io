@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <title>Nightshade Spellslinging</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Silkscreen&family=VT323&display=swap" rel="stylesheet">
@@ -11,24 +11,6 @@
 </head>
 <body>
   <canvas id="bgfx" aria-hidden="true"></canvas>
-  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
-    <filter id="crtFilter" x="0" y="0" width="1" height="1" color-interpolation-filters="sRGB">
-      <feImage id="crtMap" x="0" y="0" width="1280" height="720" preserveAspectRatio="none" result="map"/>
-      <feDisplacementMap in="SourceGraphic" in2="map" scale="12" xChannelSelector="R" yChannelSelector="G" result="warp"/>
-      <feColorMatrix in="warp" type="matrix" values="1 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 1 0" result="r"/>
-      <feOffset id="crtOffR" in="r" dx="-1" dy="0" result="r2"/>
-      <feColorMatrix in="warp" type="matrix" values="0 0 0 0 0  0 1 0 0 0  0 0 0 0 0  0 0 0 1 0" result="g"/>
-      <feColorMatrix in="warp" type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 1 0 0  0 0 0 1 0" result="b"/>
-      <feOffset id="crtOffB" in="b" dx="1" dy="0" result="b2"/>
-      <feBlend in="r2" in2="g" mode="screen" result="rg"/>
-      <feBlend in="rg" in2="b2" mode="screen" result="rgb"/>
-      <feGaussianBlur in="rgb" stdDeviation="3" result="blur"/>
-      <feComponentTransfer in="blur" result="glow">
-        <feFuncR type="linear" slope="0.16"/><feFuncG type="linear" slope="0.16"/><feFuncB type="linear" slope="0.16"/>
-      </feComponentTransfer>
-      <feBlend in="rgb" in2="glow" mode="screen"/>
-    </filter>
-  </svg>
   <div id="stage">
     <div id="screenWrap">
     <div id="game" class="hidden">
@@ -40,7 +22,7 @@
           <div class="tb-btns">
             <button id="helpBtn" class="mini-btn" title="How to play">?</button>
             <button id="muteBtn" class="mini-btn" title="Sound on/off">&#9835;</button>
-            <button id="crtBtn" class="mini-btn" title="CRT effect quality">TV</button>
+            <button id="crtBtn" class="mini-btn" title="CRT effect on/off">TV</button>
             <button id="concedeBtn" class="mini-btn" title="Concede and return to the main menu">&#9873;</button>
           </div>
         </div>
