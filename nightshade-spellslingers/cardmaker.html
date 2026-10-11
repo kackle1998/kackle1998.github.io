@@ -15,6 +15,8 @@
     <div class="cm-logo">NIGHTSHADE SPELLSLINGING <span>CARD MAKER</span></div>
     <div class="cm-sync" id="sync"></div>
     <div class="cm-topbtns">
+      <div id="acctSlot"></div>
+      <button class="btn sm hidden" id="communityBtn" title="Browse cards made by other players">COMMUNITY</button>
       <button class="btn sm" id="exportBtn" title="Download all your cards as a .json backup">EXPORT</button>
       <button class="btn sm" id="importBtn" title="Load cards from a .json file">IMPORT</button>
       <input type="file" id="importFile" accept=".json,application/json" hidden>
@@ -96,6 +98,8 @@
 
   <script src="js/data.js"></script>
   <script src="js/custom.js"></script>
+  <script src="js/config.js"></script>
+  <script src="js/cloud.js"></script>
   <script src="js/render.js"></script>
   <script src="js/pixeleditor.js"></script>
   <script src="js/cardmaker.js"></script>

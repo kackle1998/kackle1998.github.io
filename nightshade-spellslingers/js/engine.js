@@ -40,9 +40,9 @@ function buildLibrary(deck, owner) {
 }
 
 class Game {
-  constructor(deckYou, deckCpu) {
+  constructor(deckYou, deckCpu, first = Math.random() < 0.5 ? 0 : 1) {
     this.players = [this.mkPlayer(0, 'You', deckYou, false), this.mkPlayer(1, 'Dealer', deckCpu, true)];
-    this.active = Math.random() < 0.5 ? 0 : 1;
+    this.active = first;
     this.turnNum = 0;
     this.over = false;
     this.winner = -1;
@@ -88,6 +88,13 @@ class Game {
 
   endTurn() {
     if (this.over) return;
+    // Undo 'until end of turn' stat cuts (Massacre), on the board and in the grave.
+    for (const p of this.players) for (const c of [...p.board, ...p.grave]) {
+      if (!c || !c.wither) continue;
+      c.atk += c.wither;
+      c.hp += c.wither;
+      delete c.wither;
+    }
     this.active = 1 - this.active;
     this.startTurn();
   }
@@ -216,6 +223,16 @@ class Game {
       case 'quake': this.livingBoard(o).forEach((e) => this.damageCreature(e, n, false)); break;
       case 'draw': for (let i = 0; i < n; i++) this.drawCard(p); break;
       case 'drain': this.damagePlayer(o, n); this.healPlayer(p, n); break;
+      case 'massacre': {
+        const foes = this.livingBoard(o);
+        foes.forEach((e) => this.witherCreature(e, n));
+        if (foes.some((e) => e.dead)) { // a flat drain, not per creature
+          this.say(`The massacre drained ${n} life from ${this.obj(o)}.`, p);
+          this.damagePlayer(o, n);
+          this.healPlayer(p, n);
+        }
+        break;
+      }
       case 'buff': this.buffCreature(t, n); break;
       case 'howl': this.livingBoard(p).forEach((a) => this.buffCreature(a, n)); break;
       case 'restore':
@@ -231,6 +248,15 @@ class Game {
         break;
       }
     }
+  }
+
+  /* -n/-n until end of turn; undone in endTurn(). */
+  witherCreature(c, n) {
+    c.atk -= n;
+    c.hp -= n;
+    c.wither = (c.wither || 0) + n;
+    this.fx.push({ kind: 'dmg', uid: c.uid, n });
+    if (hpLeft(c) <= 0) c.dead = true;
   }
 
   buffCreature(c, n) {
@@ -306,9 +332,9 @@ class Game {
   onBoard(c) { return this.boardOf(c).includes(c); }
 
   attackOf(c) {
-    if (!this.onBoard(c)) return c.atk;
+    if (!this.onBoard(c)) return Math.max(0, c.atk);
     const rally = this.boardOf(c).filter((o) => o && o !== c && !o.dead && has(o, 'rally')).length;
-    return c.atk + rally;
+    return Math.max(0, c.atk + rally);
   }
 
   findCreature(uid) {

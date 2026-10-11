@@ -81,8 +81,8 @@ function cardInnerHTML(c, atk = c.atk, hpNow = c.hp - (c.dmg || 0)) {
     <div class="c-sigils">${c.sigils.map((s) => ico(SIGILS[s].icon)).join('')}</div>
     ${c.custom ? '<div class="c-custom">NEW!</div>' : ''}
     <div class="c-stats">
-      <span class="c-atk${atk > c.atk ? ' buff' : ''}">${ico('atk')}${atk}</span>
-      <span class="c-hp${hpNow < c.hp ? ' hurt' : ''}">${hpNow}${ico('hp')}</span>
+      <span class="c-atk${c.wither ? ' hurt' : atk > c.atk ? ' buff' : ''}">${ico('atk')}${atk}</span>
+      <span class="c-hp${hpNow < c.hp || c.wither ? ' hurt' : ''}">${hpNow}${ico('hp')}</span>
     </div>
     <div class="c-glare"></div>`;
 }
@@ -154,6 +154,6 @@ function inspectHTML(c, atk = c.atk, hpNow = c.hp - (c.dmg || 0)) {
       <img class="i-art" src="${spriteURL(c.sprite)}" alt="">
       <div class="i-stats">${ico('atk')} ${atk}${atk > c.atk ? ` <span class="muted">(${c.atk}+${atk - c.atk})</span>` : ''}<br>${ico('hp')} ${hpNow}/${c.hp}</div>
     </div>
-    ${c.sigils.map((s) => `<div class="i-sigil">${ico(SIGILS[s].icon)}<div><b>${SIGILS[s].name}.</b> ${SIGILS[s].text(c)}</div></div>`).join('') || '<div class="i-sigil muted">No sigils.</div>'}
+    ${c.sigils.map((s) => `<div class="i-sigil">${ico(SIGILS[s].icon)}<div><b>${sigilName(s, c)}.</b> ${SIGILS[s].text(c)}</div></div>`).join('') || '<div class="i-sigil muted">No sigils.</div>'}
     ${c.flavor ? `<div class="i-flavor">"${escapeHTML(c.flavor)}"</div>` : ''}`;
 }

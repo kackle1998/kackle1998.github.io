@@ -1,7 +1,8 @@
 'use strict';
 /* ============================================================
    NIGHTSHADE SPELLSLINGING — custom cards & saved decks (shared by game + card maker)
-   Everything lives in localStorage, so the Card Maker and the game
+   localStorage is the working copy (js/cloud.js mirrors it to the
+   server when the player is logged in), so the Card Maker and the game
    stay in sync as long as both are opened from the same address
    (e.g. http://localhost:8765). Changes in one tab fire a 'storage'
    event in the other, which reloads the cards live.
@@ -20,6 +21,9 @@ const Store = {
     try { localStorage.setItem(key, JSON.stringify(value)); return true; } catch (e) { return false; }
   },
 };
+
+/* When logged in (js/cloud.js), every local save is also queued for upload. */
+function cloudQueue() { if (typeof Cloud !== 'undefined') Cloud.queue(); }
 
 function clampInt(v, lo, hi, dflt = lo) {
   const n = Math.round(Number(v));
@@ -66,6 +70,7 @@ function loadCustomCards() {
 function saveCustomRecords(list) {
   const ok = Store.write(CUSTOM_KEY, list);
   loadCustomCards();
+  cloudQueue();
   return ok;
 }
 
@@ -82,7 +87,7 @@ function onSharedChange(cb) {
 
 /* ---------- saved decks ---------- */
 function getSavedDecks() { return Store.read(DECKS_KEY, []).filter((d) => d && d.id && d.list); }
-function saveSavedDecks(decks) { return Store.write(DECKS_KEY, decks); }
+function saveSavedDecks(decks) { const ok = Store.write(DECKS_KEY, decks); cloudQueue(); return ok; }
 
 function deckCount(list) { return Object.values(list).reduce((a, b) => a + b, 0); }
 
@@ -137,6 +142,7 @@ function getHeroRecord() {
 }
 
 function heroName() {
+  if (typeof Cloud !== 'undefined' && Cloud.user()) return Cloud.user();
   const d = getHeroRecord();
   return (d && String(d.name || '').trim().slice(0, 12)) || HERO_DEFAULT_NAME;
 }
@@ -151,6 +157,7 @@ function loadHero() {
 function saveHeroRecord(d) {
   const ok = d ? Store.write(HERO_KEY, d) : (() => { try { localStorage.removeItem(HERO_KEY); return true; } catch (e) { return false; } })();
   loadHero();
+  cloudQueue();
   return ok;
 }
 
