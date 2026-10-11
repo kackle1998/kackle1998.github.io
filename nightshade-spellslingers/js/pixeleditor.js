@@ -99,7 +99,7 @@ const PixelEditor = (() => {
   function apply(src) { pushHistory(); setRows(src); changed(); }
 
   function renderTemplates() {
-    const names = Object.keys(SPRITES).filter((k) => !k.startsWith('spr_') && !k.endsWith('_default'));
+    const names = Object.keys(SPRITES).filter((k) => !k.startsWith('spr_') && !k.startsWith('deck_') && !k.endsWith('_default'));
     q('#template').innerHTML = `<option value="">START FROM BUILT-IN ART...</option>` +
       names.map((n) => `<option value="${n}">${(CARDS[n] && CARDS[n].name) || n.replace('land_', 'land: ')}</option>`).join('');
   }

@@ -110,13 +110,37 @@ function deckColors(list) {
   return COLOR_KEYS.filter((k) => weight[k] > 0).sort((a, b) => weight[b] - weight[a]);
 }
 
+/* ---------- deck art ----------
+   A deck's `art` is either a sprite name (built-in art or a custom card's art)
+   or 16 rows of pixels drawn in the deck builder. Without one, the deck shows
+   its priciest creature. */
+function cleanArtRows(rows) {
+  return Array.from({ length: 16 }, (_, y) => String((rows && rows[y]) || '').replace(/[^.#+\-w]/g, '.').padEnd(16, '.').slice(0, 16));
+}
+function hasArtPixels(rows) { return Array.isArray(rows) && rows.some((r) => /[#+\-w]/.test(r)); }
+
+function autoDeckArt(list) {
+  const best = Object.keys(list).filter((id) => CARDS[id] && CARDS[id].type === 'creature')
+    .sort((a, b) => costTotal(CARDS[b].cost) - costTotal(CARDS[a].cost))[0];
+  return best ? CARDS[best].sprite : 'hero';
+}
+
+/* Sprite name to draw for a deck (drawn art is registered as deck_<id>). */
+function deckArtSprite(d, list = cleanDeckList(d.list)) {
+  if (hasArtPixels(d.art)) {
+    const key = 'deck_' + (d.id || 'draft');
+    SPRITES[key] = cleanArtRows(d.art);
+    return key;
+  }
+  if (typeof d.art === 'string' && SPRITES[d.art]) return d.art;
+  return autoDeckArt(list);
+}
+
 /* Shape a saved deck like a premade one so the Game can use it. */
 function savedDeckToDef(d) {
   const list = cleanDeckList(d.list);
   const colors = deckColors(list);
-  const best = Object.keys(list).filter((id) => CARDS[id].type === 'creature')
-    .sort((a, b) => costTotal(CARDS[b].cost) - costTotal(CARDS[a].cost))[0];
-  return { name: d.name || 'Custom Deck', colors: colors.length ? colors : ['paw'], feature: best ? CARDS[best].sprite : 'hero', list, custom: true, id: d.id };
+  return { name: d.name || 'Custom Deck', colors: colors.length ? colors : ['paw'], feature: deckArtSprite(d, list), list, custom: true, id: d.id };
 }
 
 /* Rough power estimate shared by the card maker's balance meter. */

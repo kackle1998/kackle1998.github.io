@@ -89,25 +89,38 @@ function cardInnerHTML(c, atk = c.atk, hpNow = c.hp - (c.dmg || 0)) {
 
 /* ---------- Balatro-style hover tilt ----------
    The hovered card leans toward the pointer in 3D, pops slightly,
-   and a glare follows the cursor. Works for any .card on the page. */
+   and a glare follows the cursor. Works for any .card on the page.
+   While a card is tilted we hit-test against its resting rect (measured
+   before it tilts or lifts) rather than its transformed shape: otherwise,
+   near an edge the tilt swings the card out from under the cursor, it
+   springs back, catches the cursor again, and twitches. */
 (function initCardTilt() {
-  const MAX = 26; // degrees
-  let cur = null, rect = null, lastUid = null;
+  const MAX = 26;  // degrees
+  const SLOP = 3;  // px of grace around the resting rect
+  let cur = null, rect = null, zone = null, lastUid = null;
 
   function release(el) {
     el.classList.remove('tilting');
     el.style.setProperty('--rx', '0deg');
     el.style.setProperty('--ry', '0deg');
   }
+  const inside = (r, x, y) => x >= r.left && x <= r.right && y >= r.top && y <= r.bottom;
 
   document.addEventListener('pointermove', (e) => {
     const hit = e.target && e.target.closest ? e.target.closest('.card') : null;
-    const card = hit && !hit.classList.contains('tapped') && !hit.classList.contains('dying') ? hit : null;
+    let card = hit && !hit.classList.contains('tapped') && !hit.classList.contains('dying') ? hit : null;
+    // Stay on the current card while the pointer is within its resting rect,
+    // unless it has moved onto a different card.
+    if (cur && cur.isConnected && (!hit || hit === cur) && inside(zone, e.clientX, e.clientY)) card = cur;
     if (card !== cur) {
       if (cur) release(cur);
       cur = card;
       if (!cur) { lastUid = null; return; }
       rect = cur.getBoundingClientRect();
+      // Hand cards lift when tilting (style.css), so stretch the zone up to follow them.
+      const k = rect.height / (cur.offsetHeight || rect.height);
+      const lift = cur.closest('#hand') ? 22 * k : 0;
+      zone = { left: rect.left - SLOP, right: rect.right + SLOP, top: rect.top - SLOP - lift, bottom: rect.bottom + SLOP };
       cur.classList.add('tilting');
       // Pop on a genuinely new card, not when the same card is re-rendered under the cursor.
       const uid = cur.dataset.uid || cur.textContent;

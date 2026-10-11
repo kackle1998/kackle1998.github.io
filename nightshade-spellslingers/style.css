@@ -31,6 +31,8 @@ button { font-family: inherit; }
   border-radius: 26px;
 }
 #screenWrap { position: absolute; inset: 0; }
+/* Card/character makers open over the game in a frame, so the page (and its music) never unloads. */
+#maker { position: fixed; inset: 0; width: 100%; height: 100%; border: 0; z-index: 2000; background: var(--bg); }
 
 /* ---------- CRT (game) ---------- */
 #bgfx { position: fixed; inset: 0; width: 100vw; height: 100vh; image-rendering: pixelated; display: block; }
@@ -173,7 +175,8 @@ body[data-crt="off"] .crt-tube { background: radial-gradient(ellipse at center, 
   display: flex; align-items: center; justify-content: center; padding: 0 12px;
 }
 #hand .card { margin: 0 4px; animation: sway 3.4s ease-in-out infinite alternate; animation-delay: calc(var(--i, 0) * -0.55s); }
-#hand .card:hover { translate: 0 -14px; z-index: 5; }
+/* Lift keys off .tilting (render.js) rather than :hover, so it can't pull the card out from under the cursor. */
+#hand .card.tilting { translate: 0 -14px; }
 #hand .card.selected { translate: 0 -20px; z-index: 6; }
 @keyframes sway { from { rotate: -1.4deg; } to { rotate: 1.4deg; } }
 #hand .card.unplayable { filter: brightness(.75) saturate(.6); }
@@ -292,6 +295,20 @@ body[data-crt="off"] .crt-tube { background: radial-gradient(ellipse at center, 
 @keyframes blink { 50% { outline-color: transparent; } }
 .card.enter { animation: enter .35s steps(4); }
 @keyframes enter { from { transform: translateY(-24px) scale(1.15); opacity: 0; } }
+
+/* ---------- drag to target (ui.js) ---------- */
+#hand .card, #youRow .card { touch-action: none; }
+#stage.dragging, #stage.dragging * { cursor: grabbing !important; }
+#dragArrow { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 155; display: none; overflow: visible; }
+#dragArrow.on { display: block; }
+#dragArrow path { fill: none; stroke-linecap: round; }
+#dragArrow .da-back { stroke: var(--ink); stroke-width: 11; }
+#dragArrow .da-line { stroke: var(--accent); stroke-width: 5; stroke-dasharray: 12 8; animation: daMarch .4s linear infinite; }
+#dragArrow .da-head { fill: var(--accent); stroke: var(--ink); stroke-width: 3; stroke-linejoin: round; }
+@keyframes daMarch { to { stroke-dashoffset: -20; } }
+.slot.drop-hover, .tslot.drop-hover { border: 2px solid var(--white); background: rgba(217,122,43,.35); animation: none; }
+.slot.drop-hover .card { outline: 3px solid var(--white); animation: none; }
+.ppanel.drop-hover { outline: 3px solid var(--white); animation: none; }
 
 /* ---------- fx ---------- */
 #fx { position: absolute; inset: 0; pointer-events: none; z-index: 150; }
@@ -515,6 +532,53 @@ a.btn { text-decoration: none; display: inline-block; }
 .db-actions { display: flex; gap: 8px; }
 .db-actions .btn { flex: 1; padding: 8px 4px; }
 
+/* deck art button + picker */
+#dbArt { display: flex; align-items: center; gap: 6px; padding: 2px 10px 2px 2px; }
+#dbArt img { width: 32px; height: 32px; image-rendering: pixelated; background: var(--paper); border: 2px solid var(--ink); }
+.da-wrap { position: absolute; inset: 0; z-index: 20; display: flex; align-items: center; justify-content: center; background: rgba(18, 22, 14, .72); }
+.da { width: 860px; height: 620px; padding: 12px 16px; display: flex; flex-direction: column; gap: 10px; }
+.da-head { display: flex; align-items: center; gap: 14px; }
+.da-head .db-title { margin: 0; }
+.da-cur { width: 56px; height: 56px; image-rendering: pixelated; background: var(--paper); border: 3px solid var(--ink); }
+.da-curname { font-size: 20px; color: var(--mid); }
+.da-head .db-tabs { margin-left: auto; }
+.da-body { flex: 1; min-height: 0; overflow-y: auto; padding-right: 4px; }
+.da-body::-webkit-scrollbar { width: 8px; }
+.da-body::-webkit-scrollbar-thumb { background: var(--mid); }
+.da-h { font-family: var(--pixel); font-size: 11px; color: var(--mid); margin: 8px 0 4px; }
+.da-grid { display: grid; grid-template-columns: repeat(auto-fill, 74px); gap: 8px; }
+.da-tile { width: 74px; height: 86px; padding: 4px 2px; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 2px; background: var(--white); border: 2px solid var(--ink); color: var(--ink); font-family: var(--font); font-size: 14px; line-height: 14px; }
+.da-tile:hover { background: var(--light); }
+.da-tile.on { outline: 3px solid var(--accent); outline-offset: 1px; }
+.da-tile img { width: 56px; height: 56px; image-rendering: pixelated; }
+.da-tile span { width: 100%; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.da-tile.new { justify-content: center; font-family: var(--pixel); font-size: 10px; line-height: 14px; background: var(--paper); }
+.da-tile.new b { font-size: 26px; line-height: 30px; }
+.da-draw { display: flex; gap: 18px; align-items: flex-start; }
+.da-draw .cm-art { display: flex; flex-direction: column; gap: 8px; width: 420px; }
+.da-draw .cm-template { font-size: 19px; }
+.da-side { flex: 1; display: flex; flex-direction: column; gap: 10px; font-size: 19px; }
+.da-sizes { display: flex; align-items: flex-end; gap: 10px; }
+.da-sizes img { image-rendering: pixelated; background: var(--paper); border: 2px solid var(--ink); }
+.da-foot { display: flex; gap: 8px; justify-content: flex-end; }
+.da-foot .btn { padding: 8px 18px; }
+
+/* ---------- 16x16 pixel editor (js/pixeleditor.js: card maker, character maker, deck art) ---------- */
+.cm-tools { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+.cm-pal { display: flex; gap: 4px; }
+.sw { width: 30px; height: 30px; border: 3px solid var(--ink); cursor: pointer; padding: 0; }
+.sw.erase { background: repeating-conic-gradient(#cdd4a4 0 25%, #eef1d6 0 50%) 0 0 / 10px 10px; }
+.sw.on { outline: 3px solid var(--accent); outline-offset: 1px; }
+.cm-toolbtns { display: flex; gap: 4px; flex-wrap: wrap; }
+.tool {
+  height: 28px; padding: 0 8px; cursor: pointer; font-family: var(--pixel); font-size: 10px; color: var(--ink);
+  background: var(--light); border: 2px solid var(--ink);
+}
+.tool:hover { background: var(--white); }
+.tool.on { background: var(--ink); color: var(--paper); }
+#pix { width: 352px; height: 352px; align-self: center; border: 3px solid var(--ink); cursor: crosshair; image-rendering: pixelated; touch-action: none; }
+.cm-template { width: 100%; font-size: 19px; cursor: pointer; }
+
 /* ---------- online account (js/cloud.js) ---------- */
 .acct { display: flex; align-items: center; gap: 8px; padding: 3px 4px 3px 10px; background: var(--paper); border: 2px solid var(--ink); font-family: var(--pixel); font-size: 11px; color: var(--ink); white-space: nowrap; }
 .acct b { font-size: 12px; }
@@ -538,3 +602,25 @@ a.btn { text-decoration: none; display: inline-block; }
 .com-item { display: flex; flex-direction: column; align-items: center; gap: 4px; }
 .com-item .card { position: relative; cursor: default; }
 .com-by { max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 16px; }
+
+/* ---------- online play (js/netplay.js) ---------- */
+.title-acct { display: flex; align-items: center; gap: 12px; }
+.ti-timer { font-family: var(--pixel); font-size: 13px; margin-top: 3px; }
+.ti-timer.low { color: var(--accent); animation: olDot 1s steps(2) infinite; }
+.ol { width: 760px; padding: 20px 26px; display: flex; flex-direction: column; gap: 14px; font-size: 20px; }
+.ol-title { font-family: var(--pixel); font-size: 30px; letter-spacing: 3px; text-align: center; }
+.ol-deck { display: flex; align-items: center; justify-content: center; gap: 8px; flex-wrap: wrap; }
+.ol-icons { display: inline-flex; gap: 2px; vertical-align: middle; }
+.ol-btns { display: flex; justify-content: center; gap: 16px; }
+.ol-h { font-family: var(--pixel); font-size: 14px; border-top: 2px solid var(--light); padding-top: 10px; }
+.ol-list { display: flex; flex-direction: column; gap: 6px; min-height: 120px; max-height: 260px; overflow-y: auto; }
+.ol-row { display: flex; align-items: center; gap: 12px; padding: 4px 8px; background: var(--white); border: 2px solid var(--ink); }
+.ol-row b { font-family: var(--pixel); font-size: 13px; min-width: 130px; }
+.ol-rdeck { flex: 1; }
+.ol-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 17px; }
+.ol-wait { width: 520px; align-items: center; text-align: center; }
+.ol-dots { display: flex; gap: 10px; height: 18px; }
+.ol-dots span { width: 14px; height: 14px; background: var(--ink); animation: olDot 1.2s steps(2) infinite; }
+.ol-dots span:nth-child(2) { animation-delay: .4s; }
+.ol-dots span:nth-child(3) { animation-delay: .8s; }
+@keyframes olDot { 50% { opacity: .2; } }

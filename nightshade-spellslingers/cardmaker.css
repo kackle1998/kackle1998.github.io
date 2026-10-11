@@ -66,7 +66,14 @@ body.cm #toast { position: fixed; left: 50%; top: auto; bottom: 24px; }
 }
 .cm-color .ico { width: 18px; height: 18px; }
 .cm-color.on { background: var(--white); box-shadow: inset 0 -5px 0 var(--accent); }
-.cm-steppers { display: flex; flex-wrap: wrap; gap: 6px 14px; }
+/* A | before each stepper so the icons read as separate groups. The ones that
+   land at the start of a wrapped line sit outside the box and get clipped. */
+.cm-steppers { display: flex; flex-wrap: wrap; gap: 6px 22px; clip-path: inset(-10px -10px -10px 0); }
+.cm-steppers > .cm-step { position: relative; }
+.cm-steppers > .cm-step::before {
+  content: '|'; position: absolute; left: -15px; top: 50%; transform: translateY(-50%);
+  font-family: var(--font); font-size: 26px; line-height: 1; color: var(--mid);
+}
 .cm-step { display: inline-flex; align-items: center; gap: 4px; }
 .cm-slabel { display: inline-flex; align-items: center; gap: 3px; font-family: var(--pixel); font-size: 11px; min-width: 18px; }
 .cm-slabel .ico { width: 16px; height: 16px; }
@@ -96,21 +103,7 @@ body.cm #toast { position: fixed; left: 50%; top: auto; bottom: 24px; }
 .cm-bal-note { font-size: 16px; line-height: 15px; }
 .cm-actions { display: flex; gap: 8px; }
 
-/* art */
-.cm-tools { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
-.cm-pal { display: flex; gap: 4px; }
-.sw { width: 30px; height: 30px; border: 3px solid var(--ink); cursor: pointer; padding: 0; }
-.sw.erase { background: repeating-conic-gradient(#cdd4a4 0 25%, #eef1d6 0 50%) 0 0 / 10px 10px; }
-.sw.on { outline: 3px solid var(--accent); outline-offset: 1px; }
-.cm-toolbtns { display: flex; gap: 4px; flex-wrap: wrap; }
-.tool {
-  height: 28px; padding: 0 8px; cursor: pointer; font-family: var(--pixel); font-size: 10px; color: var(--ink);
-  background: var(--light); border: 2px solid var(--ink);
-}
-.tool:hover { background: var(--white); }
-.tool.on { background: var(--ink); color: var(--paper); }
-#pix { width: 352px; height: 352px; align-self: center; border: 3px solid var(--ink); cursor: crosshair; image-rendering: pixelated; touch-action: none; }
-.cm-template { width: 100%; font-size: 19px; cursor: pointer; }
+/* art: the pixel editor styles live in style.css (the deck builder uses them too) */
 .cm-preview { display: flex; gap: 14px; align-items: flex-start; border-top: 2px solid var(--light); padding-top: 10px; }
 .cm-cardwrap { width: 176px; height: 264px; flex: 0 0 176px; }
 .cm-cardwrap .card { zoom: 1.6; cursor: default; }

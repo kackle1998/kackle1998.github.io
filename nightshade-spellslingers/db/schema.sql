@@ -49,6 +49,8 @@ create table if not exists public.decks (
   updated_at timestamptz not null default now()
 );
 create index if not exists decks_owner_idx on public.decks(owner_id);
+-- Deck art: a sprite name (string) or 16 rows of drawn pixels (array). Null = automatic.
+alter table public.decks add column if not exists art jsonb;
 
 -- ---------- access: read-only for the public, no direct writes ----------
 alter table public.players  enable row level security;
@@ -166,13 +168,29 @@ begin
 end $$;
 
 -- ---------- decks ----------
-create or replace function public.upsert_deck(p_token uuid, p_id text, p_name text, p_list jsonb) returns json
+-- The pre-art 4-argument version would make calls ambiguous.
+drop function if exists public.upsert_deck(uuid, text, text, jsonb);
+create or replace function public.upsert_deck(p_token uuid, p_id text, p_name text, p_list jsonb, p_art jsonb default null) returns json
 language plpgsql security definer set search_path = public as $$
 declare pid uuid := _player_from_token(p_token); cur_owner uuid; total int;
 begin
   if p_id is null or p_id !~ '^d_[a-z0-9]{4,24}$' then raise exception 'bad_id'; end if;
   if p_name is null or length(trim(p_name)) not between 1 and 24 then raise exception 'bad_name'; end if;
   if jsonb_typeof(p_list) <> 'object' then raise exception 'bad_list'; end if;
+  if p_art is not null and jsonb_typeof(p_art) <> 'null' then
+    if jsonb_typeof(p_art) = 'string' then
+      if (p_art #>> '{}') !~ '^[a-z0-9_]{1,40}$' then raise exception 'bad_art'; end if;
+    elsif jsonb_typeof(p_art) = 'array' then
+      if jsonb_array_length(p_art) <> 16 or exists (select 1 from jsonb_array_elements(p_art) r
+           where jsonb_typeof(r) <> 'string' or (r #>> '{}') !~ '^[.#+w-]{16}$') then
+        raise exception 'bad_art';
+      end if;
+    else
+      raise exception 'bad_art';
+    end if;
+  else
+    p_art := null;
+  end if;
   -- keys look like card ids, counts are 1..30, total at most 30 (the game needs exactly 30 to play,
   -- but half-built decks can be saved).
   if exists (select 1 from jsonb_each(p_list) e
@@ -188,8 +206,8 @@ begin
   if cur_owner is null and (select count(*) from decks where owner_id = pid) >= 50 then
     return json_build_object('error', 'too_many_decks');
   end if;
-  insert into decks(id, owner_id, name, list) values (p_id, pid, trim(p_name), p_list)
-  on conflict (id) do update set name = excluded.name, list = excluded.list, updated_at = now();
+  insert into decks(id, owner_id, name, list, art) values (p_id, pid, trim(p_name), p_list, p_art)
+  on conflict (id) do update set name = excluded.name, list = excluded.list, art = excluded.art, updated_at = now();
   return json_build_object('ok', true);
 end $$;
 
@@ -210,6 +228,6 @@ grant execute on function
   public.save_profile(uuid, text[]),
   public.upsert_card(uuid, text, jsonb),
   public.delete_card(uuid, text),
-  public.upsert_deck(uuid, text, text, jsonb),
+  public.upsert_deck(uuid, text, text, jsonb, jsonb),
   public.delete_deck(uuid, text)
 to anon, authenticated;

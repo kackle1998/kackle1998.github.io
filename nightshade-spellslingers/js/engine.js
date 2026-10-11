@@ -10,9 +10,23 @@ const START_HAND = 5;
 
 let _uid = 1;
 
+/* Game randomness. Online matches seed it so both browsers shuffle and resolve identically. */
+function mulberry32(seed) {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6D2B79F5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+let rng = Math.random;
+function seedRng(seed) { rng = seed == null ? Math.random : mulberry32(seed); }
+
 function shuffle(a) {
   for (let i = a.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
+    const j = Math.floor(rng() * (i + 1));
     [a[i], a[j]] = [a[j], a[i]];
   }
   return a;
@@ -40,8 +54,12 @@ function buildLibrary(deck, owner) {
 }
 
 class Game {
-  constructor(deckYou, deckCpu, first = Math.random() < 0.5 ? 0 : 1) {
-    this.players = [this.mkPlayer(0, 'You', deckYou, false), this.mkPlayer(1, 'Dealer', deckCpu, true)];
+  /* opts.viewer is the seat whose point of view the log is written from ("You"). */
+  constructor(deck0, deck1, first = Math.random() < 0.5 ? 0 : 1, opts = {}) {
+    const { names = ['You', 'Dealer'], cpu = [false, true], viewer = 0 } = opts;
+    _uid = 1; // both browsers in an online match must hand out the same uids
+    this.viewer = viewer;
+    this.players = [this.mkPlayer(0, names[0], deck0, cpu[0]), this.mkPlayer(1, names[1], deck1, cpu[1])];
     this.active = first;
     this.turnNum = 0;
     this.over = false;
@@ -50,7 +68,7 @@ class Game {
     this.fx = []; // visual events drained by the UI
     this.reveals = []; // traps that just sprang, drained by the UI
     for (const p of this.players) for (let i = 0; i < START_HAND; i++) this.drawCard(p);
-    this.say(this.active === 0 ? 'You go first.' : 'The Dealer goes first.');
+    this.say(`${this.subj(this.cur)} ${this.isViewer(this.cur) ? 'go' : 'goes'} first.`);
   }
 
   mkPlayer(idx, name, deck, cpu) {
@@ -63,9 +81,18 @@ class Game {
 
   get cur() { return this.players[this.active]; }
   opp(p) { return this.players[1 - p.idx]; }
-  say(text, p) { this.log.push({ text, who: p ? (p.cpu ? 'cpu' : 'you') : '' }); if (this.log.length > 80) this.log.shift(); }
-  subj(p) { return p.cpu ? 'The Dealer' : 'You'; }
-  obj(p) { return p.cpu ? 'the Dealer' : 'you'; }
+  isViewer(p) { return p.idx === this.viewer; }
+  say(text, p) { this.log.push({ text, who: p ? (this.isViewer(p) ? 'you' : 'cpu') : '' }); if (this.log.length > 80) this.log.shift(); }
+  subj(p) { return this.isViewer(p) ? 'You' : p.cpu ? 'The Dealer' : p.name; }
+  obj(p) { return this.isViewer(p) ? 'you' : p.cpu ? 'the Dealer' : p.name; }
+  possessive(p) { return this.isViewer(p) ? 'your' : p.cpu ? "the Dealer's" : `${p.name}'s`; }
+
+  concede(p) {
+    if (this.over) return;
+    this.over = true;
+    this.winner = 1 - p.idx;
+    this.say(`${this.subj(p)} conceded.`, p);
+  }
 
   /* ---------- turn flow ---------- */
   startTurn() {
@@ -241,10 +268,10 @@ class Game {
         break;
       case 'raise': {
         const pool = this.graveCreatures(p);
-        const back = pool[Math.floor(Math.random() * pool.length)];
+        const back = pool[Math.floor(rng() * pool.length)];
         p.grave.splice(p.grave.indexOf(back), 1);
         p.hand.push(instantiate(back.id, p.idx));
-        this.say(`${back.name} returned to ${p.cpu ? "the Dealer's" : 'your'} hand.`, p);
+        this.say(`${back.name} returned to ${this.possessive(p)} hand.`, p);
         break;
       }
     }

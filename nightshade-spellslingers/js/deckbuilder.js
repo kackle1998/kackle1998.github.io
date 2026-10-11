@@ -7,11 +7,12 @@
 const DB_PAGE = 12;
 const DB = { deck: null, tab: 'all', source: 'all', page: 0, dirty: false, delArmed: false };
 
-function dbBlankDeck() { return { id: null, name: 'My Deck', list: {} }; }
+function dbBlankDeck() { return { id: null, name: 'My Deck', list: {}, art: null }; }
+function dbFromSaved(s) { return { id: s.id, name: s.name, list: cleanDeckList(s.list), art: s.art || null }; }
 
 function showDeckBuilder(id) {
   const saved = id ? getSavedDecks().find((d) => d.id === id) : null;
-  DB.deck = saved ? { id: saved.id, name: saved.name, list: cleanDeckList(saved.list) } : dbBlankDeck();
+  DB.deck = saved ? dbFromSaved(saved) : dbBlankDeck();
   DB.page = 0;
   DB.dirty = false;
   $('#game').classList.add('hidden');
@@ -20,6 +21,7 @@ function showDeckBuilder(id) {
       <div class="db-top panel">
         <div class="db-title">DECK BUILDER</div>
         <input id="dbName" class="db-input" maxlength="20" spellcheck="false" aria-label="Deck name">
+        <button class="btn sm" id="dbArt" title="Choose or draw this deck's art"><img id="dbArtImg" alt="">ART</button>
         <select id="dbLoad" class="db-input" aria-label="Load a deck"></select>
         <button class="btn sm" id="dbNew">NEW</button>
         <button class="btn sm" id="dbSave">SAVE</button>
@@ -55,15 +57,12 @@ function showDeckBuilder(id) {
     </div>`);
 
   $('#dbName').addEventListener('input', (e) => { DB.deck.name = e.target.value; DB.dirty = true; });
+  $('#dbArt').onclick = () => dbArtOpen();
   $('#dbLoad').addEventListener('change', (e) => dbLoad(e.target.value));
-  $('#dbNew').onclick = () => { DB.deck = dbBlankDeck(); DB.dirty = false; sfx('select'); dbRender(); };
+  $('#dbNew').onclick = () => { DB.deck = dbBlankDeck(); DB.dirty = false; sfx('select'); dbRender(); dbArtOpen(); };
   $('#dbSave').onclick = () => { if (dbSave()) toast('Deck saved.'); };
   $('#dbDelete').onclick = dbDelete;
   $('#dbBack').onclick = () => { sfx('select'); showTitle(); };
-  // The Card Maker replaces this page, so don't silently drop an unsaved deck.
-  $('#dbCardMaker').onclick = (e) => {
-    if (DB.dirty && !confirm('Leave the deck builder? Your unsaved deck changes will be lost.')) e.preventDefault();
-  };
   $('#dbPrev').onclick = () => { DB.page--; dbRender(); };
   $('#dbNext').onclick = () => { DB.page++; dbRender(); };
   $('#dbAuto').onclick = () => { dbAutoComplete(); sfx('place'); dbRender(); };
@@ -157,6 +156,7 @@ function dbSave() {
   const decks = getSavedDecks();
   if (!d.id) d.id = 'd_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
   const rec = { id: d.id, name: d.name, list: { ...d.list }, updated: Date.now() };
+  if (d.art) rec.art = Array.isArray(d.art) ? cleanArtRows(d.art) : d.art;
   const i = decks.findIndex((x) => x.id === d.id);
   if (i >= 0) decks[i] = rec; else decks.push(rec);
   if (!saveSavedDecks(decks)) { toast('Could not save (storage blocked).'); sfx('err'); return false; }
@@ -186,10 +186,10 @@ function dbLoad(value) {
   if (!value) return;
   if (value.startsWith('pre:')) {
     const p = DECKS[+value.slice(4)];
-    DB.deck = { id: null, name: p.name + ' copy', list: { ...p.list } };
+    DB.deck = { id: null, name: p.name + ' copy', list: { ...p.list }, art: p.feature };
   } else {
     const s = getSavedDecks().find((d) => d.id === value);
-    if (s) DB.deck = { id: s.id, name: s.name, list: cleanDeckList(s.list) };
+    if (s) DB.deck = dbFromSaved(s);
   }
   DB.dirty = false;
   sfx('select');
@@ -200,6 +200,137 @@ function dbPlay() {
   if (deckCount(DB.deck.list) !== DECK_SIZE) { toast(`Your deck needs exactly ${DECK_SIZE} cards.`); sfx('err'); return; }
   if (!dbSave()) return;
   startGame(savedDeckToDef(DB.deck));
+}
+
+/* ---------- deck art picker ---------- */
+function dbArtLabel(key) {
+  if (key === 'hero') return 'Hero';
+  if (key.startsWith('land_')) return COLORS[key.slice(5)] ? COLORS[key.slice(5)].land : key;
+  const c = Object.values(CARDS).find((x) => x.sprite === key);
+  return c ? c.name : key;
+}
+
+function dbArtTile(key, label, on) {
+  return `<button class="da-tile${on ? ' on' : ''}" data-art="${escapeHTML(key)}" title="${escapeHTML(label)}">
+    <img src="${spriteURL(key)}" alt=""><span>${escapeHTML(label)}</span></button>`;
+}
+
+function dbArtOpen(mode = 'choose') {
+  sfx('select');
+  let wrap = $('#daWrap');
+  if (!wrap) {
+    wrap = document.createElement('div');
+    wrap.className = 'da-wrap';
+    wrap.id = 'daWrap';
+    wrap.addEventListener('pointerdown', (e) => { if (e.target === wrap) dbArtClose(); });
+    $('.db').appendChild(wrap);
+  }
+  if (mode === 'draw') dbArtDraw(wrap); else dbArtChoose(wrap);
+}
+
+function dbArtClose() { const w = $('#daWrap'); if (w) w.remove(); }
+
+function dbArtSet(art) {
+  DB.deck.art = art;
+  DB.dirty = true;
+  dbArtClose();
+  sfx('place');
+  dbRender();
+}
+
+function dbArtHead(cur) {
+  return `<div class="da-head">
+    <div class="db-title">DECK ART</div>
+    <img class="da-cur" src="${spriteURL(cur)}" alt="">
+    <div class="da-curname">${escapeHTML(DB.deck.name || 'My Deck')}</div>
+  </div>`;
+}
+
+function dbArtChoose(wrap) {
+  const d = DB.deck, list = d.list;
+  const cur = deckArtSprite(d, list), auto = autoDeckArt(list);
+  const pick = typeof d.art === 'string' && SPRITES[d.art] ? d.art : null;
+  const drawn = hasArtPixels(d.art);
+
+  const inDeck = [...new Set(Object.keys(list).filter((id) => CARDS[id].type !== 'land').map((id) => CARDS[id].sprite))].filter((k) => SPRITES[k]);
+  const mine = customIds.map((id) => CARDS[id].sprite).filter((k) => k.startsWith('spr_') && !inDeck.includes(k));
+  const builtIn = Object.keys(SPRITES).filter((k) => !k.startsWith('spr_') && !k.startsWith('deck_') && !k.endsWith('_default') && !inDeck.includes(k));
+  const section = (title, keys) => keys.length
+    ? `<div class="da-h">${title}</div><div class="da-grid">${keys.map((k) => dbArtTile(k, dbArtLabel(k), pick === k)).join('')}</div>` : '';
+
+  wrap.innerHTML = `<div class="da panel">
+    ${dbArtHead(cur)}
+    <div class="da-body">
+      <div class="da-grid">
+        <button class="da-tile new" id="daDraw" title="Draw your own 16x16 art"><b>+</b>${drawn ? 'EDIT MY<br>DRAWING' : 'DRAW<br>NEW ART'}</button>
+        ${drawn ? `<button class="da-tile on" id="daKeep" title="Keep the art you drew"><img src="${spriteURL(cur)}" alt=""><span>My drawing</span></button>` : ''}
+        <button class="da-tile${!pick && !drawn ? ' on' : ''}" id="daAuto" title="Use the deck's most expensive creature (changes as you build)">
+          <img src="${spriteURL(auto)}" alt=""><span>Auto</span></button>
+      </div>
+      ${section('CARDS IN THIS DECK', inDeck)}
+      ${section('MY CARD MAKER ART', mine)}
+      ${section('ALL ART', builtIn)}
+    </div>
+    <div class="da-foot"><button class="btn sm" id="daCancel">${DB.deck.id || deckCount(list) ? 'CANCEL' : 'SKIP'}</button></div>
+  </div>`;
+
+  wrap.querySelectorAll('[data-art]').forEach((b) => (b.onclick = () => dbArtSet(b.dataset.art)));
+  $('#daAuto').onclick = () => dbArtSet(null);
+  if (drawn) $('#daKeep').onclick = () => { sfx('select'); dbArtClose(); };
+  $('#daDraw').onclick = () => dbArtOpen('draw');
+  $('#daCancel').onclick = () => { sfx('select'); dbArtClose(); };
+}
+
+function dbArtDraw(wrap) {
+  const d = DB.deck;
+  wrap.innerHTML = `<div class="da panel">
+    ${dbArtHead(deckArtSprite(d))}
+    <div class="da-body da-draw">
+      <section class="cm-art">
+        <div class="cm-tools">
+          <div class="cm-pal" id="palette"></div>
+          <div class="cm-toolbtns" id="tools"></div>
+        </div>
+        <canvas id="pix" width="352" height="352"></canvas>
+        <div class="cm-toolbtns">
+          <button class="tool" id="undoBtn">UNDO</button>
+          <button class="tool" id="clearBtn">CLEAR</button>
+          <button class="tool" id="flipBtn" title="Flip horizontally">FLIP</button>
+          <button class="tool" data-shift="0,-1" title="Shift up">&#9650;</button>
+          <button class="tool" data-shift="0,1" title="Shift down">&#9660;</button>
+          <button class="tool" data-shift="-1,0" title="Shift left">&#9664;</button>
+          <button class="tool" data-shift="1,0" title="Shift right">&#9654;</button>
+        </div>
+        <select class="db-input cm-template" id="template" aria-label="Start from built-in art"></select>
+      </section>
+      <div class="da-side">
+        <div class="da-h">PREVIEW</div>
+        <div class="da-sizes" id="daSizes"></div>
+        <p class="muted">Draw a 16 x 16 picture for this deck. It shows on the deck list when you choose a deck to play.</p>
+        <p class="muted">Left-click paints, right-click erases. Start from any built-in art with the menu under the canvas.</p>
+      </div>
+    </div>
+    <div class="da-foot">
+      <button class="btn sm" id="daBack">BACK</button>
+      <button class="btn sm accent" id="daUse">USE THIS ART</button>
+    </div>
+  </div>`;
+
+  const preview = () => {
+    SPRITES.deck_preview = PixelEditor.rows();
+    const src = spriteURL('deck_preview');
+    $('#daSizes').innerHTML = [96, 56, 32].map((n) => `<img src="${src}" alt="" style="width:${n}px;height:${n}px">`).join('');
+  };
+  PixelEditor.init({ onChange: preview, onToast: toast });
+  PixelEditor.load(hasArtPixels(d.art) ? cleanArtRows(d.art) : Array(16).fill(PixelEditor.BLANK_ROW));
+  preview();
+
+  $('#daBack').onclick = () => dbArtOpen('choose');
+  $('#daUse').onclick = () => {
+    const rows = PixelEditor.rows();
+    if (!hasArtPixels(rows)) { toast('Draw something first.'); sfx('err'); return; }
+    dbArtSet(rows);
+  };
 }
 
 /* ---------- rendering ---------- */
@@ -231,6 +362,7 @@ function dbRender() {
   // top bar
   const nameEl = $('#dbName');
   if (document.activeElement !== nameEl) nameEl.value = d.name;
+  $('#dbArtImg').src = spriteURL(deckArtSprite(d, list));
   const saved = getSavedDecks();
   $('#dbLoad').innerHTML = `<option value="">LOAD DECK...</option>` +
     (saved.length ? `<optgroup label="My decks">${saved.map((s) => `<option value="${escapeHTML(s.id)}">${escapeHTML(s.name)} (${deckCount(cleanDeckList(s.list))})</option>`).join('')}</optgroup>` : '') +

@@ -6,9 +6,25 @@
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => document.querySelectorAll(s);
 const stage = $('#stage');
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+let FAST = false;     // fast-forward: replaying an online match after a reload, so skip animations
+const sleep = (ms) => (FAST ? Promise.resolve() : new Promise((r) => setTimeout(r, ms)));
 
 let game = null;
+/* Which seat this browser plays. Always 0 against the Dealer; online, the guest is seat 1. */
+let ME = 0, OPP = 1;
+const mine = (p) => p.idx === ME;
+const online = () => typeof Net !== 'undefined' && Net.on;
+function oppName() { return online() ? Net.oppName : 'DEALER'; }       // panel / banner text
+function oppTitle() { return online() ? Net.oppName : 'the Dealer'; }  // in sentences
+function oppSprite() { return online() ? 'opp_hero' : 'dealer'; }
+
+function setSeats(me) {
+  ME = me;
+  OPP = 1 - me;
+  $('#youPanel').dataset.player = ME;
+  $('#cpuPanel').dataset.player = OPP;
+  $('#board .row-label:not(.bottom)').textContent = online() ? Net.oppName.toUpperCase() : 'THE DEALER';
+}
 let busy = false;     // true while animations / the Dealer are acting
 let ended = false;
 let sel = { hand: null, attacker: null }; // uids
@@ -73,6 +89,7 @@ const Sfx = {
   },
 };
 function sfx(name) {
+  if (FAST) return;
   const S = Sfx;
   switch (name) {
     case 'select': S.tone(660, 0.04, 'square', 0.025); break;
@@ -151,6 +168,7 @@ function toast(msg) {
 }
 
 function banner(text) {
+  if (FAST) return sleep(0);
   const b = $('#banner');
   b.textContent = text;
   b.classList.remove('show');
@@ -169,6 +187,7 @@ function cardElByUid(uid) { return document.querySelector(`#board .card[data-uid
 function panelOf(idx) { return document.querySelector(`.ppanel[data-player="${idx}"]`); }
 
 async function lunge(a, t) {
+  if (FAST) return;
   const ra = relRect(a), rt = relRect(t);
   const dx = rt.x + rt.w / 2 - (ra.x + ra.w / 2), dy = rt.y + rt.h / 2 - (ra.y + ra.h / 2);
   a.style.zIndex = 30;
@@ -192,6 +211,7 @@ function shake(el) {
 
 function flushFx() {
   const fx = game.fx.splice(0);
+  if (FAST) return;
   fx.forEach((f, i) => {
     let el, shakeEl;
     if (f.uid != null) { el = cardElByUid(f.uid); shakeEl = el; }
@@ -216,6 +236,7 @@ function flushFx() {
 
 /* Pop a big copy of a card over the board: a spell being cast or a trap springing. */
 async function popCard(c, label) {
+  if (FAST) return;
   const wrap = document.createElement('div');
   wrap.className = 'popcard ' + c.type;
   wrap.innerHTML = `<div class="pc-label">${label}</div><div class="card ${c.type}">${cardInnerHTML(c)}</div>`;
@@ -236,7 +257,7 @@ async function popCard(c, label) {
 async function showReveals() {
   for (const r of game.reveals.splice(0)) {
     sfx('trap');
-    await popCard(r.card, r.owner === 0 ? 'YOUR TRAP!' : 'TRAP!');
+    await popCard(r.card, r.owner === ME ? 'YOUR TRAP!' : 'TRAP!');
   }
 }
 
@@ -265,30 +286,30 @@ function inspectDefault() {
       <p>Click a ready creature (blinking white outline), then click an enemy creature, or the Dealer's panel when the way is clear.</p>
       <p>Spells: click, then a target (or click again). Traps: click twice to set face-down.</p>
       <p>Ring the bell (Space) to end your turn. Esc or right-click cancels.</p>
-      <p class="muted">Hover any card to inspect it.</p>
+      <p class="muted">Hover to inspect. Drag cards to targets.</p>
     </div>`;
 }
 
 /* ---------- rendering ---------- */
 function render() {
   if (!game) return;
-  renderPanel(panelOf(1), game.players[1]);
-  renderPanel(panelOf(0), game.players[0]);
-  renderRow($('#cpuRow'), game.players[1]);
-  renderRow($('#youRow'), game.players[0]);
-  renderTraps($('#cpuTraps'), game.players[1]);
-  renderTraps($('#youTraps'), game.players[0]);
+  renderPanel($('#cpuPanel'), game.players[OPP]);
+  renderPanel($('#youPanel'), game.players[ME]);
+  renderRow($('#cpuRow'), game.players[OPP]);
+  renderRow($('#youRow'), game.players[ME]);
+  renderTraps($('#cpuTraps'), game.players[OPP]);
+  renderTraps($('#youTraps'), game.players[ME]);
   renderHand();
   renderTurn();
   renderLog();
 }
 
 function selectedAttacker() { return sel.attacker != null ? game.findCreature(sel.attacker) : null; }
-function selectedHand() { return sel.hand != null ? game.players[0].hand.find((x) => x.uid === sel.hand) || null : null; }
+function selectedHand() { return sel.hand != null ? game.players[ME].hand.find((x) => x.uid === sel.hand) || null : null; }
 /* True if the selected spell from hand could be aimed at creature `c`. */
 function isSpellTarget(c) {
   const s = selectedHand();
-  return !!s && s.type === 'spell' && !!s.target && game.spellTargets(game.players[0], s).includes(c);
+  return !!s && s.type === 'spell' && !!s.target && game.spellTargets(game.players[ME], s).includes(c);
 }
 function isTarget(t) {
   const a = selectedAttacker();
@@ -299,11 +320,11 @@ function isTarget(t) {
 function renderPanel(el, p) {
   const e = game.energy(p);
   el.classList.toggle('active', game.active === p.idx && !game.over);
-  el.classList.toggle('targetable', p.cpu && isTarget({ player: p.idx }));
+  el.classList.toggle('targetable', !mine(p) && isTarget({ player: p.idx }));
   el.innerHTML = `
     <div class="pp-head">
-      <img class="portrait" src="${spriteURL(p.cpu ? 'dealer' : 'hero')}" alt="">
-      <div><div class="pp-name">${p.cpu ? 'DEALER' : escapeHTML(heroName().toUpperCase())}</div><div class="pp-deck">${p.deckDef.name}</div></div>
+      <img class="portrait" src="${spriteURL(mine(p) ? 'hero' : oppSprite())}" alt="">
+      <div><div class="pp-name">${escapeHTML((mine(p) ? heroName() : oppName()).toUpperCase())}</div><div class="pp-deck">${escapeHTML(p.deckDef.name)}</div></div>
       <div class="pp-life">${ico('hp')}<b>${Math.max(0, p.life)}</b></div>
     </div>
     <div class="pp-stats"><span>DECK ${p.library.length}</span><span>HAND ${p.hand.length}</span><span>GRAVE ${p.grave.length}</span></div>
@@ -313,17 +334,19 @@ function renderPanel(el, p) {
           return `<tr title="${COLORS[k].land}"><td class="n">${e[k].total}X</td><td>${ico(COLORS[k].icon)}</td><td class="muted">${used ? `${used} USED` : ''}</td></tr>`;
         }).join('')}</table>`
       : '<div class="pp-energy muted">no lands yet</div>'}
-    ${p.cpu ? `<div class="pp-hand">${'<span class="mini-back"></span>'.repeat(Math.min(p.hand.length, 12))}</div>` : ''}`;
+    ${!mine(p) ? `<div class="pp-hand">${'<span class="mini-back"></span>'.repeat(Math.min(p.hand.length, 12))}</div>` : ''}`;
 }
 
 function renderRow(el, p) {
   el.innerHTML = '';
-  const myTurn = game.active === 0 && !game.over;
+  const myTurn = game.active === ME && !game.over;
   p.board.forEach((c, i) => {
     const slot = document.createElement('div');
     slot.className = 'slot';
+    slot.dataset.player = p.idx;
+    slot.dataset.i = i;
     if (!c) {
-      if (!p.cpu && selectedHand()?.type === 'creature') slot.classList.add('droppable');
+      if (mine(p) && selectedHand()?.type === 'creature') slot.classList.add('droppable');
       slot.addEventListener('click', () => onSlot(p, i));
     } else {
       const ce = cardEl(c);
@@ -336,34 +359,37 @@ function renderRow(el, p) {
       if (c.attacked && was === false) ce.classList.add('tap-in');
       if (!c.attacked && was === true) ce.classList.add('tap-out');
       tapState.set(c.uid, c.attacked);
-      if (!p.cpu && myTurn && !busy && game.canAttack(c)) {
+      if (mine(p) && myTurn && !busy && game.canAttack(c)) {
         ce.classList.add('ready');
         // Phase the outline blink off the wall clock so re-renders don't restart
         // it and every ready creature blinks in sync, like a terminal cursor.
         ce.style.setProperty('--blink-delay', `${-(performance.now() % 1060)}ms`);
       }
       if (sel.attacker === c.uid) ce.classList.add('selected');
-      if ((p.cpu && isTarget({ uid: c.uid })) || isSpellTarget(c)) ce.classList.add('targetable');
+      if ((!mine(p) && isTarget({ uid: c.uid })) || isSpellTarget(c)) ce.classList.add('targetable');
       ce.addEventListener('click', () => onBoardCard(p, c));
+      if (mine(p)) ce.addEventListener('pointerdown', (e) => dragPress(e, c, false));
       slot.appendChild(ce);
     }
     el.appendChild(slot);
   });
 }
 
-/* Face-down traps: yours show their art, the Dealer's stay hidden. */
+/* Face-down traps: yours show their art, the opponent's stay hidden. */
 function renderTraps(el, p) {
   el.innerHTML = '';
-  const settingTrap = !p.cpu && selectedHand()?.type === 'trap';
+  const settingTrap = mine(p) && selectedHand()?.type === 'trap';
   p.traps.forEach((t, i) => {
     const s = document.createElement('div');
     s.className = 'tslot';
+    s.dataset.player = p.idx;
+    s.dataset.i = i;
     if (t) {
       s.classList.add('set');
-      if (!p.cpu) { s.classList.add('mine'); s.innerHTML = `<img src="${spriteURL(t.sprite)}" alt="">`; }
+      if (mine(p)) { s.classList.add('mine'); s.innerHTML = `<img src="${spriteURL(t.sprite)}" alt="">`; }
       s.addEventListener('mouseenter', () => {
-        if (!p.cpu) inspect(t);
-        else $('#inspector').innerHTML = '<div class="i-help"><b>FACE-DOWN TRAP</b><p>The Dealer set this on their turn. It will spring by itself when you attack, summon or cast a spell, depending on what it is.</p></div>';
+        if (mine(p)) inspect(t);
+        else $('#inspector').innerHTML = `<div class="i-help"><b>FACE-DOWN TRAP</b><p>${escapeHTML(oppTitle().replace(/^t/, 'T'))} set this on their turn. It will spring by itself when you attack, summon or cast a spell, depending on what it is.</p></div>`;
       });
     } else {
       if (settingTrap) s.classList.add('droppable');
@@ -376,8 +402,8 @@ function renderTraps(el, p) {
 function renderHand() {
   const h = $('#hand');
   h.innerHTML = '';
-  const you = game.players[0];
-  const myTurn = game.active === 0 && !game.over;
+  const you = game.players[ME];
+  const myTurn = game.active === ME && !game.over;
   const n = you.hand.length;
   const overlap = n > 10 ? -Math.ceil((n * 118 - 1220) / (n - 1)) + 4 : 4;
   // Lands first, then everything else, with a gap between the two groups.
@@ -392,36 +418,40 @@ function renderHand() {
     ce.style.margin = `0 ${overlap / 2 + gap}px 0 ${overlap / 2}px`;
     ce.style.setProperty('--i', i);
     ce.addEventListener('click', () => onHand(c));
+    ce.addEventListener('pointerdown', (e) => dragPress(e, c, true));
     h.appendChild(ce);
   });
 }
 
 function renderTurn() {
-  const mine = game.active === 0;
-  const you = game.players[0];
+  const myTurn = game.active === ME;
+  const you = game.players[ME];
   $('#turnInfo').innerHTML = `
     <div class="ti-turn">TURN ${game.turnNum}</div>
-    <div class="ti-who">${game.over ? 'GAME OVER' : mine ? 'YOUR TURN' : "DEALER'S TURN"}</div>
-    <div class="ti-land">${mine ? (you.landPlayed ? 'Land played' : 'Land: ready') : 'Waiting...'}</div>`;
-  $('#bell').disabled = !mine || busy || game.over;
+    <div class="ti-who">${game.over ? 'GAME OVER' : myTurn ? 'YOUR TURN' : `${escapeHTML(oppName().toUpperCase())}'S TURN`}</div>
+    <div class="ti-land">${myTurn ? (you.landPlayed ? 'Land played' : 'Land: ready') : 'Waiting...'}</div>
+    ${online() && !game.over ? '<div class="ti-timer" id="turnTimer"></div>' : ''}`;
+  $('#bell').disabled = !myTurn || busy || game.over;
 }
 
 function renderLog() {
+  // Escaped: online, card and player names come from the other player.
   $('#log').innerHTML = '<div class="log-title">LOG</div><div class="log-lines">' +
-    game.log.slice(-14).map((l) => `<div class="ll ${l.who}">${l.text}</div>`).join('') + '</div>';
+    game.log.slice(-14).map((l) => `<div class="ll ${l.who}">${escapeHTML(l.text)}</div>`).join('') + '</div>';
 }
 
 /* ---------- player input ---------- */
-function myTurnReady() { return game && !game.over && game.active === 0 && !busy; }
+function myTurnReady() { return game && !game.over && game.active === ME && !busy; }
 
 function clearSel() { sel = { hand: null, attacker: null }; }
 
 function onHand(c) {
   if (!myTurnReady()) return;
-  const you = game.players[0];
+  const you = game.players[ME];
   sel.attacker = null;
   if (c.type === 'land') {
     if (you.landPlayed) { toast('Only one land per turn.'); sfx('err'); return; }
+    if (online()) return Net.local({ t: 'land', uid: c.uid });
     game.playLand(you, you.hand.indexOf(c));
     sel.hand = null;
     sfx('land');
@@ -449,7 +479,8 @@ function onHand(c) {
 }
 
 async function castAt(c, slot) {
-  const g = game, you = game.players[0];
+  if (online()) return Net.local({ t: 'cast', uid: c.uid, slot });
+  const g = game, you = game.players[ME];
   busy = true;
   clearSel();
   if (!game.cast(you, you.hand.indexOf(c), slot)) { busy = false; toast("Can't summon that."); render(); return; }
@@ -466,7 +497,8 @@ async function castAt(c, slot) {
 }
 
 async function castSpellAt(c, targetUid) {
-  const g = game, you = game.players[0];
+  if (online()) return Net.local({ t: 'spell', uid: c.uid, target: targetUid });
+  const g = game, you = game.players[ME];
   busy = true;
   clearSel();
   if (!game.castSpell(you, you.hand.indexOf(c), targetUid)) { busy = false; toast("Can't cast that."); render(); return; }
@@ -491,7 +523,8 @@ async function playSpellFx(c) {
 }
 
 function setTrapAt(c, slot) {
-  const you = game.players[0];
+  if (online()) return Net.local({ t: 'trap', uid: c.uid, slot });
+  const you = game.players[ME];
   clearSel();
   if (!game.setTrap(you, you.hand.indexOf(c), slot)) { toast("Can't set that."); render(); return; }
   sfx('place');
@@ -499,7 +532,7 @@ function setTrapAt(c, slot) {
 }
 
 function onSlot(p, i) {
-  if (!myTurnReady() || p.cpu) return;
+  if (!myTurnReady() || !mine(p)) return;
   const c = selectedHand();
   if (c && c.type === 'creature') castAt(c, i);
 }
@@ -512,7 +545,7 @@ function onBoardCard(p, c) {
     else { toast('Not a valid target for ' + s.name + '.'); sfx('err'); }
     return;
   }
-  if (!p.cpu) {
+  if (mine(p)) {
     if (game.canAttack(c)) {
       sel.attacker = sel.attacker === c.uid ? null : c.uid;
       sel.hand = null;
@@ -530,18 +563,151 @@ function onBoardCard(p, c) {
 
 function onEnemyPanel() {
   if (!myTurnReady() || sel.attacker == null) return;
-  if (isTarget({ player: 1 })) playerAttack({ player: 1 });
+  if (isTarget({ player: OPP })) playerAttack({ player: OPP });
   else {
-    const a = selectedAttacker(), foes = game.livingBoard(game.players[1]);
+    const a = selectedAttacker(), foes = game.livingBoard(game.players[OPP]);
     const flyers = a && has(a, 'airborne') && !foes.some((e) => has(e, 'guardian')) && foes.some((e) => has(e, 'airborne'));
-    toast(flyers ?'The Dealer\'s flyers block the way! Take them out first.' : 'Clear the Dealer\'s creatures first (Airborne ignores this unless the Dealer has flyers).');
+    const whose = `${oppTitle()}'s`, Whose = whose[0].toUpperCase() + whose.slice(1);
+    toast(flyers ? `${Whose} flyers block the way! Take them out first.` : `Clear ${whose} creatures first (Airborne ignores this unless ${oppTitle()} has flyers).`);
     sfx('err');
   }
 }
 
+/* ---------- drag to target ----------
+   Press a hand card or a ready creature and drag: an arrow follows the pointer,
+   and letting go over a target does what the two clicks would. A press that
+   doesn't move stays a plain click. */
+const DRAG_MIN = 6; // px of movement before a press becomes a drag
+let drag = null;    // { c, fromHand, x0, y0, kind, from, hover }
+let swallowClick = false;
+const dragArrow = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+dragArrow.id = 'dragArrow';
+dragArrow.setAttribute('viewBox', '0 0 1280 720');
+dragArrow.innerHTML = '<path class="da-back"/><path class="da-line"/><polygon class="da-head"/>';
+$('#screenWrap').appendChild(dragArrow);
+
+function toStage(x, y) {
+  const s = stage.getBoundingClientRect();
+  return { x: (x - s.left) / curScale, y: (y - s.top) / curScale };
+}
+
+function dragPress(e, c, fromHand) {
+  if (e.button !== 0 || !myTurnReady()) return;
+  // While aiming a spell, a press on your own creature is a target pick, not a drag.
+  if (!fromHand && selectedHand()) return;
+  drag = { c, fromHand, x0: e.clientX, y0: e.clientY, kind: null };
+}
+
+/* Select the card the same way a first click would; returns false if it can't go anywhere. */
+function dragBegin() {
+  const { c, fromHand } = drag;
+  if (fromHand) {
+    if (c.type !== 'land') {
+      if (sel.hand !== c.uid) onHand(c);
+      if (sel.hand !== c.uid) return false;
+    }
+    drag.kind = c.type === 'spell' && c.target ? 'aim' : 'play';
+  } else {
+    if (sel.attacker !== c.uid) onBoardCard(game.players[ME], c);
+    if (sel.attacker !== c.uid) return false;
+    drag.kind = 'attack';
+  }
+  const el = cardElByUid(c.uid);
+  const r = relRect(el);
+  drag.from = { x: r.x + r.w / 2, y: r.y + r.h / 2 };
+  dragArrow.classList.add('on');
+  stage.classList.add('dragging');
+  return true;
+}
+
+function dropTargetAt(x, y) {
+  const within = (el) => { const r = el.getBoundingClientRect(); return x >= r.left && x <= r.right && y >= r.top && y <= r.bottom; };
+  for (const el of $$('#board .slot, #board .tslot, #cpuPanel')) if (within(el)) return el;
+  return within($('#board')) ? $('#board') : null;
+}
+
+/* Is `el` somewhere this drag would do something? (Used for the hover highlight.) */
+function dropMeaningful(el) {
+  if (!el) return false;
+  if (drag.kind === 'attack') return el.id === 'cpuPanel' ? el.classList.contains('targetable') : !!el.querySelector('.card.targetable');
+  if (drag.kind === 'aim') return !!el.querySelector('.card.targetable');
+  return el.classList.contains('droppable');
+}
+
+function drawArrow(x, y) {
+  const a = drag.from, b = toStage(x, y);
+  // Bow the arrow upward a little, like a thrown line.
+  const cx = (a.x + b.x) / 2, cy = Math.min(a.y, b.y) - Math.min(120, Math.hypot(b.x - a.x, b.y - a.y) * 0.3);
+  const d = `M${a.x},${a.y} Q${cx},${cy} ${b.x},${b.y}`;
+  dragArrow.querySelector('.da-back').setAttribute('d', d);
+  dragArrow.querySelector('.da-line').setAttribute('d', d);
+  const ang = Math.atan2(b.y - cy, b.x - cx), L = 22, W = 14;
+  const pt = (dx, dy) => `${b.x + dx * Math.cos(ang) - dy * Math.sin(ang)},${b.y + dx * Math.sin(ang) + dy * Math.cos(ang)}`;
+  dragArrow.querySelector('.da-head').setAttribute('points', `${pt(6, 0)} ${pt(-L, -W)} ${pt(-L, W)}`);
+}
+
+function dragEnd() {
+  dragArrow.classList.remove('on');
+  stage.classList.remove('dragging');
+  if (drag && drag.hover) drag.hover.classList.remove('drop-hover');
+  drag = null;
+}
+
+function dropOn(d, el) {
+  const { c, kind, fromHand } = d;
+  const slot = el && el.classList.contains('slot') ? el : null;
+  const p = slot ? game.players[+slot.dataset.player] : null;
+  const occupant = slot ? p.board[+slot.dataset.i] : null;
+  if (kind === 'attack') {
+    if (occupant && !mine(p)) return onBoardCard(p, occupant);
+    if (el && el.id === 'cpuPanel') return onEnemyPanel();
+  } else if (kind === 'aim') {
+    if (occupant) return onBoardCard(p, occupant);
+  } else if (el) {
+    if (c.type === 'creature' && slot && mine(p) && !occupant) return castAt(c, +slot.dataset.i);
+    if (c.type === 'trap' && el.classList.contains('droppable')) return setTrapAt(c, +el.dataset.i);
+    // Anywhere else on the board: play it as a second click would (first free slot, etc.).
+    if (fromHand) return onHand(c);
+  }
+  // Dropped somewhere that does nothing: put the card back.
+  clearSel();
+  render();
+}
+
+document.addEventListener('pointermove', (e) => {
+  if (!drag) return;
+  if (!drag.kind) {
+    if (Math.hypot(e.clientX - drag.x0, e.clientY - drag.y0) < DRAG_MIN) return;
+    if (!myTurnReady() || !dragBegin()) { dragEnd(); return; }
+  }
+  drawArrow(e.clientX, e.clientY);
+  const t = dropTargetAt(e.clientX, e.clientY);
+  const hover = dropMeaningful(t) ? t : null;
+  if (hover !== drag.hover) {
+    if (drag.hover) drag.hover.classList.remove('drop-hover');
+    if (hover) hover.classList.add('drop-hover');
+    drag.hover = hover;
+  }
+});
+document.addEventListener('pointerup', (e) => {
+  const d = drag;
+  if (!d) return;
+  dragEnd();
+  if (!d.kind) return; // never moved: let it be a plain click
+  // The browser may still fire a click on whatever is under the pointer; that click isn't meant.
+  swallowClick = true;
+  setTimeout(() => { swallowClick = false; }, 0);
+  if (myTurnReady()) dropOn(d, dropTargetAt(e.clientX, e.clientY));
+});
+// Card art is an <img>, which the browser would otherwise start dragging natively (cancelling ours).
+document.addEventListener('dragstart', (e) => { if (e.target.closest && e.target.closest('#game')) e.preventDefault(); });
+document.addEventListener('pointercancel', () => { if (drag && drag.kind) { clearSel(); render(); } dragEnd(); });
+window.addEventListener('click', (e) => { if (swallowClick) { e.stopPropagation(); e.preventDefault(); } }, true);
+
 async function playerAttack(t) {
   const a = selectedAttacker();
   if (!a) return;
+  if (online()) return Net.local({ t: 'attack', a: a.uid, tgt: t.player != null ? { player: t.player } : { uid: t.uid } });
   busy = true;
   clearSel();
   await performAttack(a, t);
@@ -593,6 +759,7 @@ async function playerEndTurn() {
   sfx('bell');
   const b = $('#bell');
   b.classList.remove('ring'); void b.offsetWidth; b.classList.add('ring');
+  if (online()) { busy = false; return Net.local({ t: 'end' }); }
   game.endTurn();
   render();
   flushFx();
@@ -711,20 +878,25 @@ function showTitle() {
         <a class="btn big" href="cardmaker.html">CARD MAKER</a>
         <a class="btn big" href="charmaker.html">CHARACTER</a>
       </div>
-      <div id="acctSlot"></div>
+      <div class="title-acct">
+        ${Cloud.enabled ? '<button class="btn" id="onlineBtn" title="Play another person (needs an account)">PLAY ONLINE</button>' : ''}
+        <div id="acctSlot"></div>
+      </div>
       <div class="rules panel">${RULES_HTML}</div>
     </div>`);
   Cloud.mount($('#acctSlot'));
+  if ($('#onlineBtn')) $('#onlineBtn').onclick = () => { sfx('select'); Net.showOnline(); };
   $('#startBtn').onclick = () => { sfx('select'); showDeckSelect(); };
   $('#builderBtn').onclick = () => { sfx('select'); showDeckBuilder(); };
 }
 
-function showDeckSelect() {
+/* `onPick(deckDef)` runs when a deck is chosen: a game against the Dealer, or the online lobby. */
+function showDeckSelect(onPick = startGame, heading = 'CHOOSE YOUR DECK') {
   $('#game').classList.add('hidden');
   const saved = getSavedDecks().map((d) => ({ d, def: savedDeckToDef(d) }));
   showScreen(`
     <div class="ds">
-      <div class="ds-title">CHOOSE YOUR DECK</div>
+      <div class="ds-title">${heading}</div>
       <div class="tablets">${DECKS.map((d, i) => `
         <div class="tablet" data-i="${i}">
           <div class="t-art"><img src="${spriteURL(d.feature)}" alt=""></div>
@@ -748,11 +920,11 @@ function showDeckSelect() {
       </div>
     </div>`);
   $$('.tablet').forEach((t) => {
-    t.onclick = () => startGame(DECKS[+t.dataset.i]);
+    t.onclick = () => onPick(DECKS[+t.dataset.i]);
     t.onmouseenter = () => sfx('select');
   });
   $$('.md-deck').forEach((b) => {
-    b.onclick = () => { const s = saved.find((x) => x.d.id === b.dataset.id); if (s) startGame(s.def); };
+    b.onclick = () => { const s = saved.find((x) => x.d.id === b.dataset.id); if (s) onPick(s.def); };
   });
   $('#dsBuilder').onclick = () => { sfx('select'); showDeckBuilder(); };
   $('#dsBack').onclick = () => { sfx('select'); showTitle(); };
@@ -863,6 +1035,7 @@ async function startGame(deckDef) {
   const others = DECKS.filter((d) => d !== deckDef);
   const cpuDeck = others[Math.floor(Math.random() * others.length)];
   const { first, you, cpu } = await rollForFirst();
+  setSeats(0);
   const g = game = new Game(deckDef, cpuDeck, first);
   g.log.unshift({ text: `You rolled ${you}, the Dealer rolled ${cpu}.`, who: '' });
   tapState.clear();
@@ -889,7 +1062,7 @@ function showConcede() {
   showScreen(`
     <div class="result panel">
       <div class="r-title">CONCEDE?</div>
-      <div class="r-sub">You will lose this match and return to the main menu.</div>
+      <div class="r-sub">You will lose this match and return to the ${online() ? 'online lobby' : 'main menu'}.</div>
       <div class="concede-btns">
         <button class="btn" id="concedeYes">CONCEDE</button>
         <button class="btn" id="concedeNo">KEEP PLAYING</button>
@@ -900,9 +1073,9 @@ function showConcede() {
 }
 
 function concede() {
+  if (online()) return Net.concede();
   if (game && !ended) {
-    game.over = true;
-    game.winner = 1;
+    game.concede(game.players[ME]);
     ended = true;
     busy = true;
     clearSel();
@@ -918,28 +1091,69 @@ function endGame() {
   ended = true;
   busy = true;
   render();
-  const won = game.winner === 0;
+  const won = game.winner === ME;
   sfx(won ? 'win' : 'lose');
   CRT.pulse(1.2, true);
-  const [you, cpu] = game.players;
+  const you = game.players[ME], opp = game.players[OPP];
+  const net = online() ? Net.result() : null; // also reports the result to the server
   setTimeout(() => {
     showScreen(`
       <div class="result panel">
-        <img class="r-art" src="${spriteURL(won ? 'hero' : 'dealer')}" alt="">
-        <div class="r-title">${won ? 'VICTORY' : 'DEFEAT'}</div>
-        <div class="r-sub">${won ? "The Dealer's life hit zero. You beat the house." : 'Your life hit zero. The house wins this one.'}</div>
-        <div class="r-stats">Turn ${game.turnNum} &middot; Your life ${Math.max(0, you.life)} &middot; Dealer ${Math.max(0, cpu.life)}</div>
+        <img class="r-art" src="${spriteURL(won ? 'hero' : oppSprite())}" alt="">
+        <div class="r-title">${net ? net.title : won ? 'VICTORY' : 'DEFEAT'}</div>
+        <div class="r-sub">${net ? escapeHTML(net.sub) : won ? "The Dealer's life hit zero. You beat the house." : 'Your life hit zero. The house wins this one.'}</div>
+        <div class="r-stats">Turn ${game.turnNum} &middot; Your life ${Math.max(0, you.life)} &middot; ${escapeHTML(net ? Net.oppName : 'Dealer')} ${Math.max(0, opp.life)}</div>
         <button class="btn" id="againBtn">PLAY AGAIN</button>
       </div>`, true);
-    $('#againBtn').onclick = () => { sfx('select'); showDeckSelect(); };
+    $('#againBtn').onclick = () => {
+      sfx('select');
+      if (net) { Net.leave(); Net.showOnline(); } else showDeckSelect();
+    };
   }, 1000);
 }
 
 /* ---------- global input ---------- */
 $('#bellImg').src = spriteURL('bell');
 $('#bell').addEventListener('click', playerEndTurn);
-panelOf(1).addEventListener('click', onEnemyPanel);
+$('#cpuPanel').addEventListener('click', onEnemyPanel);
 $('#helpBtn').addEventListener('click', showRules);
+
+/* ---------- card / character makers ---------- */
+// They're separate pages, so open them in a frame over the game instead of navigating:
+// leaving index.html would unload the game and stop the music. Their localStorage
+// writes still reach this page through 'storage' events, so the deck builder stays live.
+const MAKER_PAGE = /^(cardmaker|charmaker)\.html$/;
+function openMaker(href) {
+  const f = $('#maker');
+  f.src = href;
+  f.classList.remove('hidden');
+  f.focus();
+}
+function closeMaker() {
+  const f = $('#maker');
+  f.classList.add('hidden');
+  f.src = 'about:blank';
+}
+document.addEventListener('click', (e) => {
+  const a = e.target.closest('a[href]');
+  if (!a || e.defaultPrevented || e.button || e.ctrlKey || e.metaKey || e.shiftKey) return;
+  if (!MAKER_PAGE.test(a.getAttribute('href'))) return;
+  e.preventDefault();
+  sfx('select');
+  openMaker(a.getAttribute('href'));
+});
+$('#maker').addEventListener('load', () => {
+  const f = $('#maker');
+  let doc;
+  try { doc = f.contentDocument; } catch (err) { return; }
+  if (!doc || f.classList.contains('hidden')) return;
+  // Anything that would bring the game itself into the frame closes the frame instead.
+  if (!MAKER_PAGE.test(doc.location.pathname.split('/').pop())) { closeMaker(); return; }
+  doc.addEventListener('click', (e) => {
+    const a = e.target.closest('a[href]');
+    if (a && /(^|\/)(index\.html)?$/.test(a.getAttribute('href'))) { e.preventDefault(); sfx('select'); closeMaker(); }
+  });
+});
 $('#concedeBtn').addEventListener('click', showConcede);
 $('#muteBtn').addEventListener('click', () => {
   Sfx.muted = !Sfx.muted;
