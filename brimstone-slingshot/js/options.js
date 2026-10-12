@@ -38,6 +38,13 @@ const PALETTES = {
     onDark: '#f06a64', onDarkHi: '#f6a09a', onDarkDim: '#c86460', shade: '#0e0a0b',
     bd: ['#3a3033', '#453a3d', '#514447', '#5e4f52', '#f06a64'], tab: ['#3a2e30', '#4a3a3c', '#2e2426'],
   },
+  // Ember's cool twin: soft teal on blue-green charcoal, inverted the same way.
+  nightshade: {
+    name: 'NIGHTSHADE', ink: '#58c8b8', dark: '#2c3836', mid: '#2f9488', light: '#2f6e67', paper: '#1e2524', white: '#232c2b',
+    artbg: '#181e1d', accent: '#33a898', bg: '#0f1414',
+    onDark: '#58c8b8', onDarkHi: '#9ae4d8', onDarkDim: '#4aa89c', shade: '#0a0e0e',
+    bd: ['#2e3836', '#384442', '#43504e', '#4f5d5b', '#58c8b8'], tab: ['#2c3836', '#3a4846', '#232c2b'],
+  },
   lavender: {
     name: 'LAVENDER', ink: '#241a33', dark: '#43345c', mid: '#75659a', light: '#ab9dcb', paper: '#ddd4ee', white: '#f2edf9',
     artbg: '#cfc4e6', accent: '#c25d7c', bg: '#130e1c',

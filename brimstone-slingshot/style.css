@@ -445,7 +445,7 @@ body[data-crt="off"] .ttl-hero { animation: none; }
 .opt-toggle .btn.on, .opt-toggle .btn.on:hover { background: var(--accent); color: var(--white); }
 .opt-pal { display: flex; align-items: center; gap: 8px; }
 .opt-pal .db-step { width: 28px; height: 28px; font-family: var(--pixel); font-size: 16px; line-height: 20px; }
-.opt-pval { font-family: var(--pixel); font-size: 16px; letter-spacing: 2px; width: 132px; text-align: center; }
+.opt-pval { font-family: var(--pixel); font-size: 16px; letter-spacing: 2px; width: 156px; text-align: center; }
 .opt-btn-row { justify-content: center; }
 .opt-btn-row .btn { width: 260px; }
 
