@@ -530,7 +530,9 @@ const RunMap = (() => {
     // Your figurine: the character sprite standing up off the board.
     const fig = document.createElement('div');
     fig.className = 'rm-st rm-fig';
-    fig.innerHTML = `<img src="${spriteURL('hero')}" alt="">`;
+    // Inner .tilt gets the same hover lean, pop and glare as cards and the title portrait;
+    // the outer standee keeps its own transform for standing up.
+    fig.innerHTML = `<div class="rm-fig-t tilt" style="--spr: url(${spriteURL('hero')})"><img src="${spriteURL('hero')}" alt=""><div class="c-glare"></div></div>`;
     pl.append(fig);
     const place = (x, y) => { fig.style.left = x - FIG / 2 + 'px'; fig.style.top = y - FIG - 2 + 'px'; };
     const here = nodes[run.cur];

@@ -725,6 +725,8 @@ a.btn { text-decoration: none; display: inline-block; }
 .rm-nd canvas { display: block; width: 100%; height: 100%; image-rendering: pixelated; }
 .rm-nd.reach { cursor: pointer; }
 .rm-fig { width: 78px; height: 78px; }
+.rm-fig-t { position: relative; width: 100%; height: 100%; pointer-events: auto; }
+.rm-fig-t .c-glare { -webkit-mask: var(--spr) 0 0 / 100% 100% no-repeat; mask: var(--spr) 0 0 / 100% 100% no-repeat; }
 .rm-fig img { display: block; width: 100%; height: 100%; image-rendering: pixelated; animation: rmBob 1.2s steps(2) infinite; }
 @keyframes rmBob { 50% { transform: translateY(-3px); } }
 body[data-crt="off"] .rm-fig img, .rm-fig.hopping img { animation: none; }
