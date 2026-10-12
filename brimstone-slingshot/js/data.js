@@ -136,7 +136,7 @@ const SPRITES = {
     '..#+#+++', '..##.#++', '.....#++', '.....#+#', '.....#+w', '......#w', '......##', '........',
   ],
 
-  /* Land art is generated from each colour's energy icon (see below COLORS). */
+  /* Land art is generated from each color's energy icon (see below COLORS). */
 
   /* ---------- MISC ---------- */
   hero: [
@@ -252,7 +252,7 @@ const SPRITES = {
   ],
 };
 
-/* 7x7 one-colour icons */
+/* 7x7 one-color icons */
 const ICONS = {
   paw:       ['.#.#.#.', '.#.#.#.', '.......', '..###..', '.#####.', '.#####.', '..#.#..'],
   bone:      ['.#####.', '#######', '#..#..#', '#######', '.##.##.', '.#####.', '.#.#.#.'],
@@ -301,6 +301,11 @@ const ICONS = {
   chip:      ['.#.#.#.', '#######', '#..#..#', '#.#.#.#', '#..#..#', '#######', '.#.#.#.'],
   spring:    ['..#.#..', '.#.#...', '..#.#..', '.......', '#.....#', '#######', '.#####.'],
   pool:      ['.......', '..#.#..', '.#.#.#.', '.......', '.#####.', '#######', '.#####.'],
+  slots:     ['#####.#', '#####.#', '#.#.#.#', '#.#.###', '#####..', '#####..', '#####..'],
+  crossbones:['#.....#', '##...##', '..#.#..', '...#...', '..#.#..', '##...##', '#.....#'],
+  skull:     ['.#####.', '#######', '#..#..#', '#..#..#', '###.###', '.#####.', '.#.#.#.'],
+  wheel:     ['..###..', '.#.#.#.', '#..#..#', '#######', '#..#..#', '.#.#.#.', '..###..'],
+  card:      ['.#####.', '.#...#.', '.#.#.#.', '.#.#.#.', '.#...#.', '.#...#.', '.#####.'],
 };
 
 const COLOR_KEYS = ['paw', 'bone', 'gem', 'hat'];
@@ -323,7 +328,17 @@ function iconSprite(name) {
   return px.map((r) => r.join(''));
 }
 for (const k of COLOR_KEYS) SPRITES['land_' + k] = iconSprite(COLORS[k].icon);
-for (const k of ['battle', 'fire', 'altar', 'tooth', 'event', 'chip', 'spring', 'pool']) SPRITES['ri_' + k] = iconSprite(k);
+for (const k of ['battle', 'fire', 'altar', 'tooth', 'event', 'chip', 'spring', 'pool', 'slots', 'wheel']) SPRITES['ri_' + k] = iconSprite(k);
+/* The slot machine's lever: a long cracked bone standing upright, lit from the left (16 wide, so not mirrored). */
+SPRITES.slot_bone = [
+  '..####....####..', '.#wwww#..#www-#.', '#wwwwww##wwww-+#', '#wwwwwwwwwwww-+#', '#wwwwwwwwwww-++#',
+  '.#wwwwwwwwww-+#.', '..##wwwwwww-##..',
+  ...Array(30).fill('...#wwwwww-+#...'),
+  '...#w#wwww-+#...', '...##w##ww-+#...', '...#wwww##-+#...', '...#wwwwww#+#...', '...#wwwwww-##...',
+  ...Array(11).fill('...#wwwwww-+#...'),
+  '..##wwwwww-+##..', '.#wwwwwwwww-++#.', '#wwwwwwwwww-+++#', '#wwwwwwwwwww-++#', '#wwwww-+##ww-++#',
+  '.#ww-++#..#w-+#.', '..####....####..',
+];
 
 const SIGILS = {
   airborne:   { name: 'Airborne',   icon: 'airborne',   text: () => 'May attack the enemy directly, even while they control creatures, unless they control an Airborne creature.' },
@@ -373,7 +388,7 @@ creature('mooseking', 'Moose King', 'paw', '3PP',  6, 6, ['trample', 'rally'], {
 // Bone
 creature('rat',       'Grave Rat',  'bone', 'K',   1, 1, ['bonespawn']);
 creature('bat',       'Vampire Bat','bone', '1K',  1, 2, ['airborne', 'leech']);
-creature('draugr',    'Draugr',     'bone', '1K',  1, 3, ['bonespawn'], { flavor: 'Something still stirs inside the armour.' });
+creature('draugr',    'Draugr',     'bone', '1K',  1, 3, ['bonespawn'], { flavor: 'Something still stirs inside the armor.' });
 creature('ghoul',     'Ghoul',      'bone', '2K',  2, 2, ['deathtouch']);
 creature('crow',      'Plague Crow','bone', '2K',  1, 2, ['airborne', 'deathtouch']);
 creature('revenant',  'Revenant',   'bone', '2KK', 4, 4, ['leech']);
@@ -384,7 +399,7 @@ creature('shard',     'Mox Shard',  'gem', 'G',    0, 4, ['guardian'], { flavor:
 creature('golem',     'Stone Golem','gem', '1G',   2, 3, ['regen']);
 creature('moth',      'Crystal Moth','gem','1G',   1, 2, ['airborne', 'regen']);
 creature('geode',     'Heal Geode', 'gem', '1G',   1, 3, ['mend'], { mend: 3 });
-creature('sentinel',  'Gem Sentinel','gem','2G',   2, 5, ['guardian']);
+creature('sentinel',  'Gem Sentinel','gem','2G',   1, 5, ['guardian']);
 creature('shardblade','Shardblade', 'gem', '1GG',  3, 2, ['quick']);
 creature('drake',     'Prism Drake','gem', '2GG',  3, 4, ['airborne']);
 creature('colossus',  'Gem Colossus','gem','3GG',  5, 7, ['guardian', 'regen'], { flavor: 'A mountain that learned to walk.' });

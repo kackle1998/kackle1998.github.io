@@ -111,7 +111,7 @@ function dbRemove(id) {
   return true;
 }
 
-/* Fill the deck to 30: creatures up to 18 in the deck's colours, then lands by colour demand. */
+/* Fill the deck to 30: creatures up to 18 in the deck's colors, then lands by color demand. */
 function dbAutoComplete() {
   const list = DB.deck.list;
   const count = (pred) => Object.entries(list).filter(([id]) => pred(CARDS[id])).reduce((a, [, n]) => a + n, 0);
@@ -128,14 +128,14 @@ function dbAutoComplete() {
   for (let guard = 0; creatures < 18 && room > 0 && guard < 200; guard++) {
     const open = pool.filter((c) => (list[c.id] || 0) < MAX_COPIES);
     if (!open.length) break;
-    // Favour a low curve: cheap cards are more likely.
+    // Favor a low curve: cheap cards are more likely.
     const weighted = open.flatMap((c) => Array(Math.max(1, 6 - costTotal(c.cost))).fill(c));
     const pick = weighted[Math.floor(Math.random() * weighted.length)];
     list[pick.id] = (list[pick.id] || 0) + 1;
     creatures++; room--;
   }
 
-  // Lands: split what's left by coloured pip demand (largest remainder).
+  // Lands: split what's left by colored pip demand (largest remainder).
   let left = DECK_SIZE - deckCount(list);
   if (left <= 0) { DB.dirty = true; return; }
   const demand = {};
@@ -364,7 +364,7 @@ function dbRender() {
 
   // filters
   $('#dbTabs').innerHTML = ['all', ...COLOR_KEYS].map((k) =>
-    `<button class="db-tab${DB.tab === k ? ' on' : ''}" data-k="${k}" title="${k === 'all' ? 'All colours' : COLORS[k].name}">${k === 'all' ? 'ALL' : ico(COLORS[k].icon)}</button>`).join('');
+    `<button class="db-tab${DB.tab === k ? ' on' : ''}" data-k="${k}" title="${k === 'all' ? 'All colors' : COLORS[k].name}">${k === 'all' ? 'ALL' : ico(COLORS[k].icon)}</button>`).join('');
   const nCustom = customIds.length;
   $('#dbSource').innerHTML = [['all', 'ALL CARDS'], ['base', 'BASE'], ['custom', `MINE (${nCustom})`]].map(([k, label]) =>
     `<button class="db-tab${DB.source === k ? ' on' : ''}" data-s="${k}">${label}</button>`).join('');

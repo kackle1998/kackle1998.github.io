@@ -11,7 +11,7 @@
   --tab: #8e9868;     /* deck tablets: face, highlight, shadow */
   --tab-hi: #a6af7f;
   --tab-lo: #7c8659;
-  /* All colours above are overwritten by the chosen palette (js/options.js). */
+  /* All colors above are overwritten by the chosen palette (js/options.js). */
   /* Optional per-palette overrides, for palettes like Ember whose ink is lighter than --dark. */
   --on-dark: var(--paper);      /* text on --dark surfaces (buttons, logo) */
   --on-dark-hi: var(--white);   /* bright text on land cards */
@@ -389,7 +389,7 @@ body[data-crt="off"] .card.rare:not(.tilting) .c-glare { animation: none; opacit
   font-family: var(--pixel); font-size: 78px; line-height: 1; color: var(--on-dark); letter-spacing: 6px;
   text-shadow: 5px 5px 0 var(--shade), -3px -3px 0 var(--dark), 3px -3px 0 var(--dark), -3px 3px 0 var(--dark);
 }
-/* Second word of the name: same size, colour and outline as the first. */
+/* Second word of the name: same size, color and outline as the first. */
 .logo span { margin-top: 6px; }
 @keyframes bob { 50% { transform: translateY(-5px); } }
 
@@ -438,11 +438,8 @@ body[data-crt="off"] .ttl-hero { animation: none; }
 /* ---------- options ---------- */
 .opt { width: 760px; padding: 18px 26px 22px; display: flex; flex-direction: column; gap: 10px; }
 .opt-title { font-family: var(--pixel); font-size: 30px; letter-spacing: 3px; text-align: center; margin-bottom: 4px; }
-.opt-row { display: flex; align-items: center; gap: 18px; padding: 8px 12px; border: 3px solid transparent; }
-.opt-row.on { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.opt-row { display: flex; align-items: center; gap: 18px; padding: 8px 12px; }
 .opt-label { font-family: var(--pixel); font-size: 18px; letter-spacing: 2px; width: 170px; flex: none; }
-.opt-label::before { content: '\25B6  '; visibility: hidden; color: var(--accent); }
-.opt-row.on .opt-label::before { visibility: visible; }
 .opt-toggle { display: flex; gap: 10px; }
 .opt-toggle .btn { width: 84px; }
 .opt-toggle .btn.on, .opt-toggle .btn.on:hover { background: var(--accent); color: var(--white); }
@@ -451,7 +448,6 @@ body[data-crt="off"] .ttl-hero { animation: none; }
 .opt-pval { font-family: var(--pixel); font-size: 16px; letter-spacing: 2px; width: 132px; text-align: center; }
 .opt-btn-row { justify-content: center; }
 .opt-btn-row .btn { width: 260px; }
-.opt-btn-row.on .btn { background: var(--accent); color: var(--white); }
 
 .ds { display: flex; flex-direction: column; align-items: center; gap: 22px; }
 .ds-title { font-family: var(--pixel); font-size: 34px; color: var(--ink); letter-spacing: 3px; }
@@ -468,6 +464,9 @@ body[data-crt="off"] .ttl-hero { animation: none; }
 .t-art img { width: 128px; height: 128px; }
 .t-icons { height: 56px; gap: 18px; }
 .t-icons .ico { width: 35px; height: 35px; }
+.t-life { display: flex; align-items: center; gap: 4px; }
+.t-life .ico { width: 21px; height: 21px; }
+.t-life b { font-family: var(--pixel); font-size: 18px; font-weight: normal; color: var(--ink); }
 .t-name { font-family: var(--pixel); font-size: 18px; text-align: center; color: var(--ink); }
 .t-desc { font-size: 19px; line-height: 18px; text-align: center; min-height: 54px; }
 .t-list { font-size: 15px; line-height: 14px; color: var(--dark); text-align: center; }
@@ -707,13 +706,14 @@ a.btn { text-decoration: none; display: inline-block; }
 .rm-view { position: absolute; inset: 0; perspective: 1100px; perspective-origin: 50% 40%; }
 .rm-pl {
   position: absolute; left: 50%; top: 50%; width: 760px; height: 900px; margin: -450px 0 0 -380px;
-  transform: translateY(-20px) rotateX(56deg); transform-style: preserve-3d;
+  /* A fairly high camera, so standing pieces (your figurine, spires) hide less of the
+     board behind them; pushed back a little so the casino still fits at the top. */
+  transform: translateY(-10px) translateZ(-170px) rotateX(46deg); transform-style: preserve-3d;
 }
 .rm-ly { position: absolute; left: 0; top: 0; width: 760px; height: 900px; image-rendering: pixelated; }
 .rm-fx { transform: translateZ(.5px); }
 /* Standees stand up off the board: spires, columns, obelisks and your figurine. */
 .rm-st { position: absolute; transform-origin: 50% 100%; transform: rotateX(-90deg); pointer-events: none; }
-.rm-rune { position: absolute; left: 4px; top: 28px; width: 14px; height: 20px; image-rendering: pixelated; }
 .rm-nd { position: absolute; width: 38px; height: 38px; transform: translateZ(1px); }
 .rm-casino { position: absolute; transform-style: preserve-3d; }
 .rm-casino canvas { display: block; image-rendering: pixelated; }
@@ -724,10 +724,10 @@ a.btn { text-decoration: none; display: inline-block; }
 .rm-casino.reach { cursor: pointer; }
 .rm-nd canvas { display: block; width: 100%; height: 100%; image-rendering: pixelated; }
 .rm-nd.reach { cursor: pointer; }
-.rm-fig { width: 60px; height: 60px; }
+.rm-fig { width: 78px; height: 78px; }
 .rm-fig img { display: block; width: 100%; height: 100%; image-rendering: pixelated; animation: rmBob 1.2s steps(2) infinite; }
 @keyframes rmBob { 50% { transform: translateY(-3px); } }
-body[data-crt="off"] .rm-fig img { animation: none; }
+body[data-crt="off"] .rm-fig img, .rm-fig.hopping img { animation: none; }
 .rm-em { position: absolute; inset: 0; width: 100%; height: 100%; image-rendering: pixelated; pointer-events: none; }
 .rhud { position: absolute; left: 16px; top: 16px; width: 236px; padding: 12px; display: flex; flex-direction: column; gap: 6px; }
 .rh-who { display: flex; align-items: center; gap: 8px; border-bottom: 2px solid var(--light); padding-bottom: 8px; margin-bottom: 2px; }
@@ -738,13 +738,6 @@ body[data-crt="off"] .rm-fig img { animation: none; }
 .rh-row .ico { width: 16px; height: 16px; }
 .rh-row b { margin-left: auto; font-family: var(--pixel); font-size: 16px; font-weight: normal; }
 .rhud .btn { margin-top: 6px; font-size: 14px; padding: 8px 10px; }
-.rh-lands { border-top: 2px solid var(--light); padding-top: 6px; display: flex; flex-direction: column; gap: 4px; }
-.rh-h { font-family: var(--pixel); font-size: 11px; letter-spacing: 2px; color: var(--mid); }
-.rh-land { display: flex; align-items: center; gap: 6px; font-size: 19px; }
-.rh-land .ico { width: 16px; height: 16px; }
-.rh-land span { flex: 1; }
-.rh-land b { min-width: 26px; text-align: center; font-family: var(--pixel); font-size: 15px; font-weight: normal; }
-.rh-land .mini-btn { width: 24px; height: 24px; font-size: 18px; line-height: 16px; }
 .rm-btns { position: absolute; right: 16px; top: 16px; display: flex; gap: 10px; }
 .rm-btns .btn { font-size: 14px; padding: 8px 14px; }
 .rm-tick {
@@ -793,6 +786,68 @@ body[data-crt="off"] .rm-fig img { animation: none; }
 .rn-art { width: 128px; height: 128px; flex: none; background: var(--artbg); border: 3px solid var(--ink); image-rendering: pixelated; }
 .rn-event p { margin: 0; font-size: 24px; line-height: 23px; }
 .rn-outcome { margin: 0; padding: 14px 10px; text-align: center; font-size: 24px; line-height: 23px; }
+/* The slot machine (a ? stop event): a bone-carved cabinet that fills the panel, three tall reels,
+   a payout readout and a pull lever. Textures are hard-stop stripes and checker dithers of palette tones. */
+.rn-slots { height: 680px; }
+.rn-slots .rn-body { flex: 1; display: flex; overflow: hidden; }
+.slot-mach { flex: 1; display: flex; align-items: stretch; padding: 0 0 6px; }
+.slot-cab { flex: 1; display: flex; border: 4px solid var(--ink); box-shadow: 6px 6px 0 var(--ink); }
+.slot-pillar {
+  width: 34px; flex: none; display: flex; flex-direction: column; align-items: center; justify-content: space-around;
+  background: conic-gradient(var(--paper) 25%, var(--artbg) 0 50%, var(--paper) 0 75%, var(--artbg) 0) 0 0 / 4px 4px;
+}
+.slot-pillar:first-child { border-right: 4px solid var(--ink); }
+.slot-pillar:last-child { border-left: 4px solid var(--ink); }
+.slot-pillar img { width: 21px; height: 21px; image-rendering: pixelated; }
+.slot-main {
+  flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 10px; padding: 10px 14px 12px;
+  background: repeating-linear-gradient(0deg, var(--light) 0 3px, var(--artbg) 3px 6px);
+}
+/* The sign and the readout share one text style. */
+.slot-top, .slot-readout {
+  display: flex; align-items: center; justify-content: center; gap: 14px; min-height: 40px; box-sizing: border-box; padding: 4px 12px;
+  background: var(--dark); border: 3px solid var(--ink);
+  font-family: var(--pixel); font-size: 18px; letter-spacing: 3px; color: var(--on-dark);
+}
+.slot-top img { width: 21px; height: 21px; image-rendering: pixelated; }
+.slot-reels {
+  position: relative; flex: 1; min-height: 0; display: flex; gap: 8px; padding: 8px; background: var(--ink);
+  box-shadow: inset 4px 4px 0 var(--dark), inset -4px -4px 0 var(--ink);
+}
+.slot-reels::before, .slot-reels::after { content: ''; position: absolute; z-index: 2; top: 50%; margin-top: -10px; border: 10px solid transparent; }
+.slot-reels::before { left: -16px; border-left-color: var(--accent); }
+.slot-reels::after { right: -16px; border-right-color: var(--accent); }
+.slot-reel { position: relative; flex: 1; display: flex; flex-direction: column; background: var(--white); overflow: hidden; }
+.slot-reel::after { content: ''; position: absolute; left: 0; right: 0; top: 50%; height: 2px; margin-top: -1px; background: var(--accent); }
+.slot-band { height: 30px; flex: none; background: conic-gradient(var(--white) 25%, var(--paper) 0 50%, var(--white) 0 75%, var(--paper) 0) 0 0 / 4px 4px; }
+.slot-band:first-child { border-top: 18px solid var(--light); box-shadow: inset 0 3px 0 var(--paper); }
+.slot-band:last-child { border-bottom: 18px solid var(--light); box-shadow: inset 0 -3px 0 var(--paper); }
+.slot-face { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; }
+.slot-sym { position: relative; z-index: 1; width: 168px; height: 168px; image-rendering: pixelated; filter: drop-shadow(8px 8px 0 var(--light)); }
+.slot-face.spinning .slot-sym { animation: slotRoll .07s steps(2) infinite; }
+@keyframes slotRoll { from { transform: translateY(-40px); } to { transform: translateY(40px); } }
+.slot-text { flex: 1; text-align: center; }
+.slot-readout .btn { flex: none; letter-spacing: 1px; }
+/* The lever: a bone on an axle from the cabinet's side, pivoting at the cabinet's middle. The axle runs
+   behind the bone's lower knob; a pull flips the bone down around it. */
+.slot-lever { position: relative; flex: none; width: 64px; align-self: stretch; margin-left: 14px; padding: 0; background: none; border: 0; cursor: pointer; }
+.slot-lever::before { content: ''; position: absolute; left: -20px; top: 50%; width: 52px; height: 14px; margin-top: -11px; background: var(--dark); border: 4px solid var(--ink); border-left: 0; box-shadow: inset 0 4px 0 var(--mid); }
+.slot-bone { position: absolute; z-index: 1; left: 0; bottom: calc(50% - 14px); width: 64px; height: 240px; image-rendering: pixelated; transform-origin: 50% calc(100% - 14px); transition: transform .18s steps(3); }
+.slot-lever:hover .slot-bone { transform: translateY(-4px); }
+.slot-lever.pulled { cursor: default; }
+.slot-lever.pulled .slot-bone { transform: scaleY(-1); }
+.slot-see { width: auto; }
+/* The sigil wheel (a ? stop event) reuses the slot cabinet. The wheel itself is a 112px canvas drawn in
+   palette tones (Run.wheelDraw) and shown 3x; an accent pin at the top marks where it lands. */
+.wh-stage {
+  position: relative; flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; background: var(--ink);
+  box-shadow: inset 4px 4px 0 var(--dark), inset -4px -4px 0 var(--ink);
+}
+.wh-disk { width: 336px; height: 336px; image-rendering: pixelated; }
+.wh-disk.live { cursor: pointer; }
+.wh-pin { position: absolute; left: 50%; top: calc(50% - 180px); margin-left: -18px; border: 18px solid transparent; border-top: 30px solid var(--ink); border-bottom: 0; }
+.wh-pin::after { content: ''; position: absolute; left: -14px; top: -30px; border: 14px solid transparent; border-top: 24px solid var(--accent); border-bottom: 0; }
+.wh-got { width: 21px; height: 21px; margin-right: 12px; vertical-align: -3px; image-rendering: pixelated; }
 .rn-need { width: 100%; text-align: center; font-size: 18px; color: var(--mid); }
 .rn-deckwrap { position: absolute; inset: 0; z-index: 5; display: flex; align-items: center; justify-content: center; background: color-mix(in srgb, var(--bg) 72%, transparent); }
 
@@ -826,3 +881,14 @@ body[data-crt="off"] .rm-fig img { animation: none; }
 .vs-t.on { opacity: 1; animation: vsPop .3s steps(4); }
 @keyframes vsPop { from { transform: translateY(-50%) scale(2); } to { transform: translateY(-50%) scale(1); } }
 .vs-t.low { top: 84%; font-size: 52px; -webkit-text-stroke-width: 4px; }
+/* Land counts inside the run's VIEW DECK window. */
+.rn-lands { display: flex; justify-content: center; gap: 32px; padding: 2px 0 8px; border-bottom: 2px solid var(--light); }
+.rn-land { display: flex; align-items: center; gap: 8px; font-family: var(--pixel); font-size: 14px; }
+.rn-land .ico { width: 18px; height: 18px; }
+.rn-land span { margin-right: 6px; }
+.rn-land b { min-width: 28px; text-align: center; font-size: 16px; font-weight: normal; }
+.rm-band canvas { display: block; width: 100%; height: 100%; image-rendering: pixelated; }
+/* The table frame around the run map board. */
+.rm-frame { position: absolute; image-rendering: pixelated; }
+.rm-frame-side { transform-origin: 0 0; }
+.rm-frame-up canvas { display: block; width: 100%; height: 100%; image-rendering: pixelated; }

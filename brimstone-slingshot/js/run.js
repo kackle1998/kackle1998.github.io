@@ -13,9 +13,20 @@ const RUN_MIN_DECK = 15;                                // BURN A CARD or taking
 const RUN_MAX_LANDS = 20;                               // of each land type
 const RUN_ROW_Y = [840, 710, 580, 450, 320, 190, 70];   // map units: start, rows 1-5, boss
 const DEALER_LIFE = [0, 8, 8, 12, 12, 14];              // a battle's Dealer life, by row
-const DEALER_COST_CAP = [0, 3, 3, 4, 4, 99];            // the Dealer's priciest card, by row
+const DEALER_COST_CAP = [0, 2, 2, 3, 3, 4];              // the Dealer's priciest card, by row
+const RUN_WIN_HEAL = 4;                                 // life back after each battle won
 const BOSS_LIFE = 16;
-/* The Dealer's hand in a run battle is named by its two colours (shown on the VS splash). */
+const BOSS_COST_CAP = 4;                                // the boss Dealer's priciest card
+/* Each starting deck's run: its starting (and max) life, and cards swapped into its starting 11
+   (from: to). Tuned by simulation so the game's AI clears the run about 65% of the time with each. */
+const RUN_DECKS = {
+  'Wild Hunt':     { life: 23 },
+  'Crypt Arcana':  { life: 25, swap: { counter: 'firebolt', opengrave: 'battlemage' } },
+  'Crystal Wilds': { life: 24 },
+  'Prism Sorcery': { life: 20, swap: { insight: 'battlemage' } },
+};
+const runDeck = (def) => RUN_DECKS[def.name] || { life: RUN_MAX_LIFE };
+/* The Dealer's hand in a run battle is named by its two colors (shown on the VS splash). */
 const DEALER_DECK_NAMES = {
   'bone+paw': 'Wild Hunt', 'bone+hat': 'Crypt Arcana', 'gem+paw': 'Crystal Wilds',
   'gem+hat': 'Prism Sorcery', 'hat+paw': 'Feral Arcana', 'bone+gem': 'Grave Geodes',
@@ -109,15 +120,17 @@ function genRunMap(R) {
 const RUN_EVENTS = [
   {
     id: 'cracked', title: 'CRACKED CHIP', art: 'ri_chip',
-    text: 'A cracked chip hums in the dirt. Press it into a creature in your deck: it gains +2 attack, but forgets one of its sigils at random.',
+    text: 'A cracked chip hums in the dirt. Press it in hard and a creature gains +2 attack, but forgets one of its sigils at random. Press it in gently and it gains just +1 attack.',
     choices: [
-      { label: 'IMPLANT IN A CREATURE', pick: (d) => d.sigils.length > 0, need: 'Needs a creature with a sigil.',
+      { label: 'PRESS HARD (+2, LOSE A SIGIL)', pick: (d) => d.sigils.length > 0, need: 'Needs a creature with a sigil.',
         act: (run, d) => {
           const rc = run.rc(d.rid), k = rc.sigils.splice(Math.floor(Math.random() * rc.sigils.length), 1)[0];
           rc.atk += 2;
           delete rc[k];
           return `${d.name} gained +2 attack and forgot ${SIGILS[k].name}.`;
         } },
+      { label: 'PRESS GENTLY (+1)', pick: () => true, need: 'Needs a creature.',
+        act: (run, d) => { run.rc(d.rid).atk += 1; return `${d.name} gained +1 attack.`; } },
       { label: 'LEAVE IT', act: () => 'You leave the chip humming to itself.' },
     ],
   },
@@ -154,7 +167,7 @@ const RUN_EVENTS = [
     id: 'offer', title: "THE DEALER'S OFFER", art: 'dealer',
     text: 'The Dealer slides a card across the table. "A gift. I\'ll take my due at the next hand."',
     choices: [
-      { label: 'ACCEPT', ok: (run) => runPool(run.s.colors).some((c) => costTotal(c.cost) >= 4), need: 'Nothing on offer for your colours.',
+      { label: 'ACCEPT', ok: (run) => runPool(run.s.colors).some((c) => costTotal(c.cost) >= 4), need: 'Nothing on offer for your colors.',
         act: (run) => {
           const pool = runPool(run.s.colors).filter((c) => costTotal(c.cost) >= 4);
           const c = pool[Math.floor(Math.random() * pool.length)];
@@ -200,7 +213,30 @@ const RUN_EVENTS = [
       { label: 'WALK PAST', act: () => 'They go back to shuffling.' },
     ],
   },
+  /* Runs its own screen (Run.slots) instead of choices. */
+  {
+    id: 'slots', title: 'BONE SLOTS', art: 'ri_slots', screen: 'slots',
+    text: 'A one-armed machine rattles in the dark. Every pull pays out.', choices: [],
+  },
+  {
+    id: 'wheel', title: 'SIGIL WHEEL', art: 'ri_wheel', screen: 'wheel',
+    text: 'A bone wheel ringed with sigils. It turns once, and only once.', choices: [],
+  },
 ];
+
+/* The slot machine: the first pull is free, each reroll costs teeth. Nothing is at risk,
+   so its buff is smaller than the campfire's (+1 attack or +2 health, on a creature you pick). */
+const SLOT_REROLL = 1;
+const SLOT_HEAL = 4;
+const SLOT_ATK_ODDS = 1 / 3;                            // a buff is +1 attack this often, else +1 health
+const SLOT_SYMS = { card: 'card', buff: 'might', heal: 'hp' };
+const SLOT_FILL = ['card', 'might', 'hp', 'tooth', 'chip', 'bone'];
+
+/* The sigil wheel: one free spin, no rerolls, and the sigil it lands on goes to a creature you pick. */
+const WHEEL_N = 8;                                      // segments round the wheel
+const WHEEL_PX = 112;                                   // drawn at this size, shown 3x
+const WHEEL_SKIP = ['snipe', 'mend'];                   // sigils with an amount stay off the wheel
+const WHEEL_SPIN_MS = 4200;
 
 const Run = {
   s: null,           // the saved run, or null
@@ -255,7 +291,7 @@ const Run = {
   creatures() { return this.cards().filter((d) => d.type === 'creature'); },
   landCount() { return Object.values(this.s.lands).reduce((a, b) => a + b, 0); },
   deckSize() { return this.s.deck.length + this.landCount(); },
-  /* Add (d = 1) or take out (d = -1) a land of colour k, from the map. Returns false if not allowed. */
+  /* Add (d = 1) or take out (d = -1) a land of color k, from the map. Returns false if not allowed. */
   setLands(k, d) {
     const s = this.s, n = s.lands[k] || 0;
     if (d < 0 && n <= 0) { sfx('err'); return false; }
@@ -304,12 +340,12 @@ const Run = {
         <div class="tablets">${DECKS.map((d, i) => `
           <div class="tablet" data-i="${i}">
             <div class="t-art"><img src="${spriteURL(d.feature)}" alt=""></div>
-            <div class="t-icons">${d.colors.map((c) => ico(COLORS[c].icon)).join('')}</div>
+            <div class="t-icons">${d.colors.map((c) => ico(COLORS[c].icon)).join('')}<span class="t-life" title="Starting life">${ico('hp')}<b>${runDeck(d).life}</b></span></div>
             <div class="t-name">${d.name.toUpperCase()}</div>
             <div class="t-desc">${d.desc}</div>
           </div>`).join('')}
         </div>
-        <div class="ds-foot">You start with its 11 cheapest cards and 9 lands. Your life carries over between battles.</div>
+        <div class="ds-foot">You start with 11 of its cards, cheap to pricey, and 9 lands. Each deck starts with its own life, and it carries over between battles.</div>
         <button class="btn" id="rdBack">BACK</button>
       </div>`);
     $$('.tablet').forEach((t) => {
@@ -322,14 +358,17 @@ const Run = {
   start(def) {
     const colors = def.colors.slice(0, 2);
     const ids = Object.entries(def.list).filter(([id]) => CARDS[id] && CARDS[id].type !== 'land').flatMap(([id, n]) => Array(n).fill(id));
-    const pick = ids.sort((a, b) => costTotal(CARDS[a].cost) - costTotal(CARDS[b].cost)).slice(0, 11);
+    // 11 cards spread evenly across the deck's cost curve, so the run starts with a real curve.
+    const sorted = ids.sort((a, b) => costTotal(CARDS[a].cost) - costTotal(CARDS[b].cost));
+    const rd = runDeck(def), swap = rd.swap || {};
+    const pick = Array.from({ length: 11 }, (_, i) => sorted[Math.floor((i * sorted.length) / 11)]).map((id) => swap[id] || id);
     // Split the 9 lands by how many of each symbol the starting cards ask for.
     const demand = colors.map((k) => 1 + pick.reduce((a, id) => a + (CARDS[id].cost[k] || 0), 0));
     const first = Math.max(3, Math.min(6, Math.round((9 * demand[0]) / (demand[0] + demand[1]))));
     this.s = {
       v: 1, seed: (Math.random() * 2 ** 31) >>> 0, name: def.name, colors, deck: [], nextRid: 1,
       lands: { [colors[0]]: first, [colors[1]]: 9 - first },
-      life: RUN_MAX_LIFE, maxLife: RUN_MAX_LIFE, teeth: 0,
+      life: rd.life, maxLife: rd.life, teeth: 0,
       cur: 0, done: [], visited: [0], node: null, events: [], dealerBonus: 0,
       stats: { stops: 0, battles: 0, teeth: 0 },
     };
@@ -452,18 +491,18 @@ const Run = {
   },
 
   /* ---------- battle ---------- */
-  /* The opponent's hand: a rival plays their own deck's colours, the boss Dealer a random pair. */
+  /* The opponent's hand: a rival plays their own deck's colors, the boss Dealer a random pair. */
   dealerDeck(n, rival) {
     const boss = n.t === 'boss', R = this.rand(100 + n.id);
     const home = rival && DECKS[rival.deck];
     const colors = home ? home.colors.slice(0, 2) : runShuffle(R, COLOR_KEYS.slice()).slice(0, 2);
-    const pool = runPool(colors, boss ? 99 : DEALER_COST_CAP[n.row]);
+    const pool = runPool(colors, boss ? BOSS_COST_CAP : DEALER_COST_CAP[n.row]);
     const list = {}, lands = boss ? 5 : 4;
     colors.forEach((k) => (list['land_' + k] = lands));
     for (let k = 0, guard = 0; k < (boss ? 10 : 10) && guard < 200; guard++) {
       const open = pool.filter((c) => (list[c.id] || 0) < 2);
       if (!open.length) break;
-      const c = runPickN(R, open, 1, (x) => (x.type === 'creature' ? 3 : 1) * (1 + costTotal(x.cost)))[0];
+      const c = runPickN(R, open, 1, (x) => (x.type === 'creature' ? 3 : 1))[0]; // any cost up to the cap, equally
       list[c.id] = (list[c.id] || 0) + 1;
       k++;
     }
@@ -511,7 +550,7 @@ const Run = {
     s.stats.battles++;
     if (n.t === 'boss') return this.finish(true);
     s.dealerBonus = 0;
-    s.life = Math.max(1, Math.min(s.maxLife, youLife));
+    s.life = Math.max(1, Math.min(s.maxLife, youLife + RUN_WIN_HEAL));
     const teeth = Math.max(1, -oppLife);
     this.gainTeeth(teeth);
     s.node = { id: n.id, phase: 'reward', teeth };
@@ -524,7 +563,7 @@ const Run = {
     const want = 2 + Math.floor(n.row / 2); // later rows lean toward pricier cards
     const offers = runPickN(R, runPool(s.colors), 3, (c) => (costTotal(c.cost) >= want ? 3 : 1));
     this.screen('ri_battle', 'SPOILS',
-      `The Dealer pays ${node.teeth} ${node.teeth === 1 ? 'tooth' : 'teeth'} for the overkill. Take one card for your deck.`,
+      `The Dealer pays ${node.teeth} ${node.teeth === 1 ? 'tooth' : 'teeth'} for the overkill, and you catch your breath (+${RUN_WIN_HEAL} life). Take one card for your deck.`,
       '', '<button class="btn" id="rnSkip">SKIP (+1 TOOTH)</button>');
     this.cardGrid($('#rnBody'), offers, (c) => {
       this.add(c.id);
@@ -709,6 +748,7 @@ const Run = {
       this.save();
     }
     const ev = RUN_EVENTS.find((e) => e.id === node.ev);
+    if (ev.screen) return this[ev.screen](n, ev);
     if (node.choice != null) {
       const ch = ev.choices[node.choice];
       if (ch.transfer) return this.transfer({ icon: ev.art, title: ev.title, consume: false, cost: ch.cost });
@@ -733,7 +773,261 @@ const Run = {
     }));
   },
 
+  /* ---------- the slot machine (a ? stop event) ----------
+     node.spin holds the current payout, rolled and saved before the reels spin,
+     so a reload shows the same one instead of a free reroll. */
+  slotRoll(prev) {
+    const s = this.s, mons = this.creatures(), pool = runPool(s.colors);
+    const kinds = [];
+    if (pool.length) kinds.push('card');
+    if (mons.length) kinds.push('buff');
+    if (s.life < s.maxLife || !kinds.length) kinds.push('heal');
+    const pick = (a) => a[Math.floor(Math.random() * a.length)];
+    let out;
+    for (let tries = 0; tries < 6; tries++) { // a reroll tries not to land on the same payout again
+      const k = pick(kinds);
+      if (k === 'card') out = { k, id: pick(pool).id };
+      else if (k === 'buff') out = { k, rid: pick(mons).rid, stat: Math.random() < SLOT_ATK_ODDS ? 'atk' : 'hp', by: 1 };
+      else out = { k, n: SLOT_HEAL };
+      if (!prev || JSON.stringify(out) !== JSON.stringify(prev)) break;
+    }
+    return out;
+  },
+
+  /* The payout, spelled out on the cabinet's readout strip. Card and buff payouts can open the card. */
+  slotReadout(t, spinning) {
+    const s = this.s, el = $('#slRead');
+    const say = (txt, see) => {
+      el.innerHTML = `<span class="slot-text">${txt}</span>${see ? '<button class="btn sm" id="slSee">SEE CARD</button>' : ''}`;
+    };
+    if (spinning) return say('. . .');
+    if (!t) return say('PULL THE LEVER. THE FIRST PULL IS FREE.');
+    if (t.k === 'heal') return say(`+${Math.min(t.n, s.maxLife - s.life)} LIFE &gt; ${s.life} TO ${Math.min(s.maxLife, s.life + t.n)}`);
+    const buff = t.k === 'buff', d = buff ? { ...this.card(t.rid) } : CARDS[t.id];
+    if (buff) {
+      const was = `${d.atk}/${d.hp}`;
+      d[t.stat] += t.by;
+      say(`+${t.by} ${t.stat === 'atk' ? 'ATTACK' : 'HEALTH'} &gt; ${escapeHTML(d.name.toUpperCase())} ${was} TO ${d.atk}/${d.hp}`, true);
+    } else say(`NEW CARD &gt; ${escapeHTML(d.name.toUpperCase())}`, true);
+    $('#slSee').onclick = () => {
+      sfx('select');
+      const wrap = document.createElement('div');
+      wrap.className = 'rn-deckwrap';
+      wrap.innerHTML = `<div class="rn panel slot-see"><div class="rn-body" id="slSeeBody"></div>
+        <div class="rn-btns"><button class="btn" id="slSeeClose">CLOSE</button></div></div>`;
+      $('#screen').appendChild(wrap);
+      this.cardGrid($('#slSeeBody'), [d], null);
+      $('#slSeeClose').onclick = () => { sfx('select'); wrap.remove(); };
+    };
+  },
+
+  slots(n, ev, spinning = false) {
+    const s = this.s, node = s.node;
+    if (node.spin && node.spin.k === 'buff' && !this.rc(node.spin.rid)) node.spin = null;
+    const t = node.spin, sym = t && !spinning ? SLOT_SYMS[t.k] : null;
+    const reel = (i) => `<div class="slot-reel"><div class="slot-band"></div><div class="slot-face"><img class="slot-sym" src="${iconURL(sym || SLOT_FILL[i])}" alt=""></div><div class="slot-band"></div></div>`;
+    const pillar = `<div class="slot-pillar">${Array.from({ length: 8 }, (_, i) => `<img src="${iconURL(i % 2 ? 'crossbones' : 'skull', PAL['+'])}" alt="">`).join('')}</div>`;
+    const skull = `<img src="${iconURL('skull', Palette.cur.accent)}" alt="">`;
+    const tooth = `${SLOT_REROLL} ${ico('tooth')}`;
+    this.screen(ev.art, ev.title,
+      spinning ? 'The reels spin...' : t ? `It pays out. Take it, or pull again for ${SLOT_REROLL} ${SLOT_REROLL === 1 ? 'tooth' : 'teeth'}.`
+        : 'A one-armed machine rattles in the dark. Every pull pays out.',
+      `<div class="slot-mach">
+        <div class="slot-cab">${pillar}
+          <div class="slot-main">
+            <div class="slot-top">${skull}BONE SLOTS${skull}</div>
+            <div class="slot-reels">${[0, 1, 2].map(reel).join('')}</div>
+            <div class="slot-readout" id="slRead"></div>
+          </div>${pillar}
+        </div>
+        <button class="slot-lever${spinning ? ' pulled' : ''}" id="slLever" title="${t ? 'Reroll' : 'Pull the lever'}"><img class="slot-bone" src="${spriteURL('slot_bone')}" alt=""></button>
+      </div>`,
+      t ? `<button class="btn" id="slTake" ${spinning ? 'disabled' : ''}>TAKE IT</button><button class="btn" id="slPull" ${spinning ? 'disabled' : ''}>REROLL (${tooth})</button>`
+        : `<button class="btn" id="slPull" ${spinning ? 'disabled' : ''}>PULL THE LEVER</button><button class="btn" id="rnLeave" ${spinning ? 'disabled' : ''}>LEAVE</button>`);
+    $('.rn').classList.add('rn-slots');
+    this.slotReadout(t, spinning);
+    if (spinning) return;
+
+    const pull = () => {
+      const cost = node.spin ? SLOT_REROLL : 0;
+      if (s.teeth < cost) { toast(`You need ${cost} ${cost === 1 ? 'tooth' : 'teeth'}.`); sfx('err'); return; }
+      s.teeth -= cost;
+      node.spin = this.slotRoll(node.spin);
+      this.save();
+      sfx('lever');
+      this.slots(n, ev, true);
+      this.slotSpin(SLOT_SYMS[node.spin.k], () => { sfx('payout'); this.slots(n, ev); });
+    };
+    $('#slPull').onclick = pull;
+    $('#slLever').onclick = pull;
+    if (!t) { $('#rnLeave').onclick = () => { sfx('select'); this.leave(); }; return; }
+    $('#slTake').onclick = () => {
+      let text;
+      if (t.k === 'card') { this.add(t.id); text = `${CARDS[t.id].name} joins your deck.`; sfx('place'); }
+      else if (t.k === 'buff') {
+        this.rc(t.rid)[t.stat] += t.by;
+        text = `${this.card(t.rid).name} gained +${t.by} ${t.stat === 'atk' ? 'attack' : 'health'}.`;
+        sfx('spell');
+      } else { text = `You recover ${this.heal(t.n)} life.`; sfx('heal'); }
+      this.finishStop(ev.art, ev.title, text);
+    };
+  },
+
+  /* Spin the reels on screen, stop them left to right on `sym`, then call done. */
+  slotSpin(sym, done) {
+    const imgs = $$('.slot-reel .slot-sym'), stops = [800, 1150, 1500], step = 70;
+    if (FAST) return done();
+    let t = 0;
+    imgs.forEach((img) => img.parentElement.classList.add('spinning'));
+    const timer = setInterval(() => {
+      if (!imgs[0].isConnected) return clearInterval(timer);
+      t += step;
+      imgs.forEach((img, i) => {
+        if (t < stops[i]) img.src = iconURL(SLOT_FILL[Math.floor(Math.random() * SLOT_FILL.length)]);
+        else if (img.parentElement.classList.contains('spinning')) {
+          img.src = iconURL(sym);
+          img.parentElement.classList.remove('spinning');
+          sfx('reelStop', i);
+        }
+      });
+      if (t < stops[2]) sfx('reel', (t / step) % 3);
+      else { clearInterval(timer); setTimeout(done, 350); }
+    }, step);
+  },
+
+  /* ---------- the sigil wheel (a ? stop event) ----------
+     node.segs holds the wheel's sigils and node.rot its angle. node.hit is rolled and saved
+     before the wheel turns, so a reload lands on the same sigil instead of a second spin. */
+  wheelTakers(k) { return this.creatures().filter((d) => this.canTake(d, k, null)); },
+  /* Only sigils some creature can still take go on the wheel; fewer than WHEEL_N repeat round it. */
+  wheelSegs() {
+    const ks = Object.keys(SIGILS).filter((k) => !WHEEL_SKIP.includes(k) && this.wheelTakers(k).length);
+    const pick = runPickN(Math.random, ks, WHEEL_N);
+    return pick.length ? Array.from({ length: WHEEL_N }, (_, i) => pick[i % pick.length]) : [];
+  },
+
+  /* Draw the wheel pixel by pixel in palette tones, turned `rot` degrees clockwise.
+     The sigils stay upright as they go round; `lit` fills the landed segment with the accent. */
+  wheelDraw(cv, segs, rot, lit = null) {
+    const P = Palette.cur, W = WHEEL_PX, c = W / 2, seg = 360 / segs.length, rad = Math.PI / 180;
+    const rgb = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+    const [ink, dark, mid, paper, white, accent] = [P.ink, P.dark, P.mid, P.paper, P.white, P.accent].map(rgb);
+    const x = cv.getContext('2d'), img = x.createImageData(W, W), px = img.data;
+    for (let y = 0; y < W; y++) for (let xx = 0; xx < W; xx++) {
+      const dx = xx + 0.5 - c, dy = y + 0.5 - c, d = Math.hypot(dx, dy);
+      if (d > 55) continue;
+      const a = (((Math.atan2(dx, -dy) / rad - rot) % 360) + 360) % 360; // wheel's own angle, clockwise from the top
+      let col;
+      if (d > 53 || (d > 45 && d <= 47) || (d > 12 && d <= 14)) col = ink;
+      else if (d > 47) { // the bone rim, pegged every 22.5 degrees
+        const st = a % 22.5;
+        col = d > 49 && d <= 51 && Math.min(st, 22.5 - st) * rad * d < 1.2 ? mid : d > 52 ? paper : white;
+      } else if (d > 14) { // the segments, split by ink spokes
+        const off = (a + seg / 2) % seg, i = Math.floor(((a + seg / 2) % 360) / seg);
+        col = Math.min(off, seg - off) * rad * d < 0.7 ? ink : i === lit ? accent : i % 2 ? paper : white;
+      } else col = dark;
+      const o = (y * W + xx) * 4;
+      [px[o], px[o + 1], px[o + 2], px[o + 3]] = [...col, 255];
+    }
+    x.putImageData(img, 0, 0);
+    const stamp = (name, cx, cy, color) => {
+      x.fillStyle = color;
+      ICONS[name].forEach((r, iy) => [...r].forEach((ch, ix) => { if (ch === '#') x.fillRect(cx - 7 + ix * 2, cy - 7 + iy * 2, 2, 2); }));
+    };
+    segs.forEach((k, i) => {
+      const t = (rot + i * seg) * rad;
+      stamp(SIGILS[k].icon, Math.round(c + 30 * Math.sin(t)), Math.round(c - 30 * Math.cos(t)), P.ink);
+    });
+    stamp('skull', c, c, Palette.onDarkHi);
+  },
+
+  wheel(n, ev, spinFrom = null) {
+    const s = this.s, node = s.node, spinning = spinFrom != null;
+    if (!node.segs) { node.segs = this.wheelSegs(); node.rot = Math.floor(Math.random() * 360); this.save(); }
+    const segs = node.segs, k = node.hit != null ? segs[node.hit] : null;
+    const leaveBtn = `<button class="btn" id="rnLeave" ${spinning ? 'disabled' : ''}>LEAVE</button>`;
+    const wire = () => { if ($('#rnLeave')) $('#rnLeave').onclick = () => { sfx('select'); this.leave(); }; };
+
+    if (!segs.length) {
+      this.screen(ev.art, ev.title, 'None of your creatures can bear another sigil.',
+        `<div class="rn-event"><img class="rn-art" src="${spriteURL(ev.art)}" alt=""><p>${escapeHTML(ev.text)}</p></div>`, leaveBtn);
+      return wire();
+    }
+    if (k && node.pick) { // the sigil is won: pick who bears it
+      const name = escapeHTML(SIGILS[k].name), takers = this.wheelTakers(k);
+      this.screen(ev.art, ev.title, takers.length ? `Which creature receives ${name}?` : `None of your creatures can bear ${name}.`,
+        '', `<button class="btn" id="rnBack">BACK</button>${leaveBtn}`);
+      this.cardGrid($('#rnBody'), takers, (d) => {
+        this.rc(d.rid).sigils.push(k);
+        sfx('spell');
+        this.finishStop(ev.art, ev.title, `${d.name} gained ${SIGILS[k].name}.`);
+      }, takers.length > 7);
+      $('#rnBack').onclick = () => { sfx('select'); node.pick = false; this.save(); this.wheel(n, ev); };
+      return wire();
+    }
+
+    const skull = `<img src="${iconURL('skull', Palette.cur.accent)}" alt="">`;
+    const pillar = `<div class="slot-pillar">${Array.from({ length: 8 }, (_, i) => `<img src="${iconURL(i % 2 ? 'crossbones' : 'skull', PAL['+'])}" alt="">`).join('')}</div>`;
+    const landed = k && !spinning;
+    this.screen(ev.art, ev.title,
+      spinning ? 'The wheel turns...' : landed ? `It lands on ${escapeHTML(SIGILS[k].name)}: ${escapeHTML(SIGILS[k].text({}))}` : escapeHTML(ev.text),
+      `<div class="slot-mach">
+        <div class="slot-cab">${pillar}
+          <div class="slot-main">
+            <div class="slot-top">${skull}SIGIL WHEEL${skull}</div>
+            <div class="wh-stage"><canvas class="wh-disk${k ? '' : ' live'}" id="whDisk" width="${WHEEL_PX}" height="${WHEEL_PX}"></canvas><div class="wh-pin"></div></div>
+            <div class="slot-readout"><span class="slot-text">${spinning ? '. . .' : landed
+              ? `<img class="wh-got" src="${iconURL(SIGILS[k].icon, Palette.onDarkHi)}" alt="">${escapeHTML(SIGILS[k].name.toUpperCase())}`
+              : 'ONE SPIN. NO SECOND CHANCES.'}</span></div>
+          </div>${pillar}
+        </div>
+      </div>`,
+      landed ? `<button class="btn" id="whGive">GIVE ${escapeHTML(SIGILS[k].name.toUpperCase())}</button>${leaveBtn}`
+        : `<button class="btn" id="whSpin" ${k ? 'disabled' : ''}>SPIN THE WHEEL</button>${leaveBtn}`);
+    $('.rn').classList.add('rn-slots');
+    const cv = $('#whDisk');
+    this.wheelDraw(cv, segs, spinning ? spinFrom : node.rot, landed ? node.hit : null);
+    wire();
+    if (spinning) return;
+    if (landed) {
+      $('#whGive').onclick = () => { sfx('select'); node.pick = true; this.save(); this.wheel(n, ev); };
+      return;
+    }
+    const spin = () => {
+      if (node.hit != null) return;
+      const seg = 360 / segs.length, from = node.rot;
+      node.hit = Math.floor(Math.random() * segs.length);
+      // Come to rest somewhere inside the hit segment, after at least four full turns.
+      const land = ((-node.hit * seg + (Math.random() - 0.5) * seg * 0.7) % 360 + 360) % 360;
+      node.rot = from - (from % 360) + 360 * 5 + land;
+      this.save();
+      sfx('wheel');
+      this.wheel(n, ev, from);
+      this.wheelSpin(segs, from, node.rot, () => { sfx('payout'); this.wheel(n, ev); });
+    };
+    $('#whSpin').onclick = spin;
+    cv.onclick = spin;
+  },
+
+  /* Turn the wheel from `from` to `to` degrees, slowing to a stop, with a click for each spoke that passes the pin. */
+  wheelSpin(segs, from, to, done) {
+    if (FAST) return done();
+    const cv = $('#whDisk'), seg = 360 / segs.length, t0 = performance.now();
+    let last = Math.floor((from + seg / 2) / seg);
+    const frame = (now) => {
+      if (!cv.isConnected) return;
+      const p = Math.min(1, (now - t0) / WHEEL_SPIN_MS), rot = from + (to - from) * (1 - (1 - p) ** 4);
+      this.wheelDraw(cv, segs, rot);
+      const at = Math.floor((rot + seg / 2) / seg);
+      if (at !== last) { last = at; sfx('wheelTick'); }
+      if (p < 1) requestAnimationFrame(frame);
+      else setTimeout(done, 450);
+    };
+    requestAnimationFrame(frame);
+  },
+
   /* ---------- the deck, as seen from the map ---------- */
+  /* The deck from the map: every run card, plus the lands, which are free to add or take out here. */
   showDeck(host) {
     const s = this.s, wrap = document.createElement('div');
     wrap.className = 'rn-deckwrap';
@@ -741,12 +1035,24 @@ const Run = {
       <div class="rn panel rn-deck">
         <div class="rn-head"><img class="rn-icon" src="${spriteURL('hero')}" alt="">
           <div class="rn-headtext"><div class="rn-title">YOUR DECK</div>
-          <div class="rn-sub">${this.deckSize()} cards &middot; lands: ${Object.entries(s.lands).map(([k, n]) => `${n} ${ico(COLORS[k].icon)}`).join(' ')}</div></div></div>
+          <div class="rn-sub"><span id="rnDeckN">${this.deckSize()}</span> cards. Lands are free to add or take out.</div></div></div>
+        <div class="rn-lands">${s.colors.map((k) => `
+          <div class="rn-land" data-k="${k}">${ico(COLORS[k].icon)}<span>${COLORS[k].land.toUpperCase()}</span>
+            <button class="mini-btn" data-d="-1" title="Remove a ${COLORS[k].land}">-</button><b>${s.lands[k] || 0}</b><button class="mini-btn" data-d="1" title="Add a ${COLORS[k].land}">+</button>
+          </div>`).join('')}
+        </div>
         <div class="rn-body" id="rnDeckBody"></div>
         <div class="rn-btns"><button class="btn" id="rnDeckClose">CLOSE</button></div>
       </div>`;
     host.appendChild(wrap);
     this.cardGrid($('#rnDeckBody'), this.cards().sort((a, b) => COLOR_KEYS.indexOf(a.color) - COLOR_KEYS.indexOf(b.color) || costTotal(a.cost) - costTotal(b.cost)), null, true);
+    wrap.querySelectorAll('.rn-land').forEach((row) => row.querySelectorAll('[data-d]').forEach((b) => (b.onclick = () => {
+      if (!this.setLands(row.dataset.k, +b.dataset.d)) return;
+      row.querySelector('b').textContent = s.lands[row.dataset.k];
+      $('#rnDeckN').textContent = this.deckSize();
+      const hud = $('#rhDeck');
+      if (hud) hud.textContent = this.deckSize();
+    })));
     $('#rnDeckClose').onclick = () => { sfx('select'); wrap.remove(); };
   },
 

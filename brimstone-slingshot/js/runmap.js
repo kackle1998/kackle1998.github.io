@@ -3,8 +3,8 @@
    BRIMSTONE SLINGSHOT — the Dealer's Run map: a 2.5D board tilted in
    CSS 3D, Inscryption style. Paths are circuit traces between stop pads;
    spires, lava and rune circles stand around them, and your character
-   walks the traces as a figurine. Every colour comes from the current
-   palette (Palette.cur), so the map recolours with OPTIONS.
+   walks the traces as a figurine. Every color comes from the current
+   palette (Palette.cur), so the map recolors with OPTIONS.
    Map units: the board is W x H; its canvases are drawn at half size.
    ============================================================ */
 
@@ -141,59 +141,99 @@ const RunMap = (() => {
     obel.forEach(([x, y]) => props.push({ x, y, k: 'obelisk', h: 86, w: 22 }));
     props.sort((a, b) => a.y - b.y);
 
-    const frag = document.createDocumentFragment();
+    // Props are baked into one pixel canvas per thin depth band (BAND map units), stood up at the
+    // band's front edge, instead of one 3D element each: a few dozen layers to composite, not
+    // hundreds. Each prop is filled row by row in flat palette colors (1 px = 2 map units).
+    const BAND = 16, bands = new Map();
     for (const p of props) {
-      const el = document.createElement('div');
-      el.className = 'rm-st';
-      let { w, h } = p;
-      const l = lvl(lightAt(p.x, p.y), p.x | 0, p.y | 0), hi = C[l + 1], li = C[Math.max(1, l)], dk = C[Math.max(0, l - 1)];
-      if (p.k === 'spike') {
-        el.style.clipPath = 'polygon(50% 0, 100% 100%, 0 100%)';
-        el.style.background = `linear-gradient(90deg, ${hi} 0 14%, ${li} 14% 50%, ${dk} 50%)`;
-      } else if (p.k === 'basalt') {
-        h *= 0.6; w *= 1.3;
-        el.style.clipPath = 'polygon(0 8%, 50% 0, 100% 8%, 100% 100%, 0 100%)';
-        el.style.background = `linear-gradient(90deg, ${hi} 0 33%, ${li} 33% 66%, ${dk} 66%)`;
-      } else if (p.k === 'crystal') {
-        el.style.clipPath = 'polygon(50% 0, 100% 100%, 0 100%)';
-        el.style.background = `linear-gradient(90deg, ${C[7]} 0 50%, ${C[8]} 50%)`;
-      } else {
-        el.style.clipPath = 'polygon(50% 0, 100% 12%, 100% 100%, 0 100%, 0 12%)';
-        el.style.background = `linear-gradient(90deg, ${C[2]} 0 50%, ${C[1]} 50%)`;
-        const c = document.createElement('canvas');
-        c.width = 5; c.height = 7;
-        c.className = 'rm-rune';
-        pix(c, RUNE, { '#': C[4] });
-        el.appendChild(c);
+      const b = Math.floor(p.y / BAND);
+      if (!bands.has(b)) bands.set(b, []);
+      bands.get(b).push(p);
+    }
+    const frag = document.createDocumentFragment();
+    for (const list of bands.values()) {
+      // Each prop's drawn box in canvas pixels, and the canvas that holds them all.
+      const shapes = list.map((p) => {
+        let { w, h } = p;
+        if (p.k === 'basalt') { h *= 0.6; w *= 1.3; }
+        return { p, w: Math.max(2, Math.round(w / 2)), h: Math.max(2, Math.round(h / 2)), cx: p.x / 2 };
+      });
+      const left = Math.floor(Math.min(...shapes.map((s) => s.cx - s.w / 2))) - 1;
+      const right = Math.ceil(Math.max(...shapes.map((s) => s.cx + s.w / 2))) + 1;
+      const tall = Math.max(...shapes.map((s) => s.h));
+      const cv = document.createElement('canvas');
+      cv.width = right - left; cv.height = tall;
+      const x = cv.getContext('2d');
+      const fill = (u, v, n, k) => { if (n > 0) { x.fillStyle = k; x.fillRect(u, v, n, 1); } };
+      for (const s of shapes) {
+        const { p } = s, u0 = Math.round(s.cx - s.w / 2) - left, top = tall - s.h;
+        const l = lvl(lightAt(p.x, p.y), p.x | 0, p.y | 0), hi = C[l + 1], li = C[Math.max(1, l)], dk = C[Math.max(0, l - 1)];
+        // Columns across the prop's width: [end fraction, color], as the old gradients were.
+        const tones = p.k === 'spike' ? [[0.14, hi], [0.5, li], [1, dk]]
+          : p.k === 'basalt' ? [[1 / 3, hi], [2 / 3, li], [1, dk]]
+          : p.k === 'crystal' ? [[0.5, C[7]], [1, C[8]]]
+          : [[0.5, C[2]], [1, C[1]]];
+        for (let r = 0; r < s.h; r++) {
+          const f = (r + 0.5) / s.h; // 0 at the top, 1 at the base
+          // The silhouette's half-width at this row, as a fraction of the prop's width.
+          const half = p.k === 'spike' || p.k === 'crystal' ? f / 2
+            : p.k === 'basalt' ? (f < 0.08 ? 0.5 * (f / 0.08) : 0.5)
+            : (f < 0.12 ? 0.5 * (f / 0.12) : 0.5);
+          const a = Math.round(s.w * (0.5 - half)), b = Math.round(s.w * (0.5 + half));
+          let from = a;
+          for (const [end, k] of tones) { const to = Math.min(b, Math.round(s.w * end)); fill(u0 + from, top + r, to - from, k); from = Math.max(from, to); }
+        }
+        if (p.k === 'obelisk') pix(cv, RUNE, { '#': C[4] }, u0 + 3, top + 14);
       }
-      el.style.left = p.x - w / 2 + 'px';
-      el.style.top = p.y - h + 'px';
-      el.style.width = w + 'px';
-      el.style.height = h + 'px';
+      const back = Math.max(...list.map((p) => p.y));
+      const el = document.createElement('div');
+      el.className = 'rm-st rm-band';
+      el.style.cssText = `left:${left * 2}px;top:${back - tall * 2}px;width:${cv.width * 2}px;height:${tall * 2}px`;
+      el.appendChild(cv);
       frag.appendChild(el);
     }
     pl.appendChild(frag);
   }
 
   /* ---------- the animated layer: lava, rune circles, traces ---------- */
-  function fxDrawer(fx, C, edges, runes, live, walked) {
-    const line = (p0, p1, w, c) => {
-      fx.fillStyle = c;
+  /* The traces don't change while the map is up, so they're painted once onto the static ground;
+     each animation frame only redraws the lava (one pixel buffer, one putImageData), the turning
+     rune circles, and the pulses running along the live traces. */
+  function fxDrawer(fx, ground, C, edges, runes, live, walked) {
+    const lineOn = (ctx) => (p0, p1, w, c) => {
+      ctx.fillStyle = c;
       const x0 = p0[0] / 2, y0 = p0[1] / 2, dx = p1[0] / 2 - x0, dy = p1[1] / 2 - y0, n = Math.max(Math.abs(dx), Math.abs(dy), 1), o = w >> 1;
-      for (let i = 0; i <= n; i++) fx.fillRect(Math.round(x0 + dx * i / n) - o, Math.round(y0 + dy * i / n) - o, w, w);
+      for (let i = 0; i <= n; i++) ctx.fillRect(Math.round(x0 + dx * i / n) - o, Math.round(y0 + dy * i / n) - o, w, w);
     };
+    // Static traces and vias, once.
+    const gl = lineOn(ground);
+    for (const e of edges) {
+      const on = live.has(e.i), was = walked.has(e.i), col = was ? C[7] : on ? C[8] : C[3];
+      for (let i = 1; i < e.p.length; i++) gl(e.p[i - 1], e.p[i], 4, C[1]);
+      for (let i = 1; i < e.p.length; i++) gl(e.p[i - 1], e.p[i], 2, col);
+      for (let i = 1; i < e.p.length - 1; i++) {
+        const [x, y] = e.p[i];
+        ground.fillStyle = C[1]; ground.fillRect(x / 2 - 3, y / 2 - 3, 6, 6);
+        ground.fillStyle = was ? C[7] : on ? C[8] : C[4]; ground.fillRect(x / 2 - 2, y / 2 - 2, 4, 4);
+        ground.fillStyle = C[1]; ground.fillRect(x / 2 - 1, y / 2 - 1, 2, 2);
+      }
+    }
+    // Lava goes through a reused pixel buffer.
+    const img = fx.createImageData(CW, CH), buf = new Uint32Array(img.data.buffer);
+    const u32 = (h) => { const [r, g, b] = rgb(h); return ((255 << 24) | (b << 16) | (g << 8) | r) >>> 0; };
+    const crust = u32(C[1]), hot = u32(C[7]), glow = u32(C[8]);
     const lava = (f, t) => {
       for (let y = 0; y < CH; y++) {
         const { c, w } = f(y * 2), cc = c / 2, ww = w / 2;
-        for (let x = Math.floor(cc - ww - 2); x <= cc + ww + 2; x++) {
+        for (let x = Math.max(0, Math.floor(cc - ww - 2)); x <= Math.min(CW - 1, cc + ww + 2); x++) {
           const d = Math.abs(x - cc) / ww;
-          fx.fillStyle = d > 1 ? C[1]
-            : d > 0.4 ? (Math.sin(y * 0.21 - t * 2.2 + x) > 0.8 ? C[7] : C[8])
-            : (Math.sin(y * 0.35 - t * 3 + x * 0.6) > 0.5 ? C[7] : C[8]);
-          fx.fillRect(x, y, 1, 1);
+          buf[y * CW + x] = d > 1 ? crust
+            : d > 0.4 ? (Math.sin(y * 0.21 - t * 2.2 + x) > 0.8 ? hot : glow)
+            : (Math.sin(y * 0.35 - t * 3 + x * 0.6) > 0.5 ? hot : glow);
         }
       }
     };
+    const line = lineOn(fx);
     const rune = (cx, cy, t) => {
       const X = cx / 2, Y = cy / 2;
       fx.fillStyle = C[2];
@@ -208,28 +248,17 @@ const RunMap = (() => {
         fx.fillRect(px - 1, py, 3, 1); fx.fillRect(px, py - 1, 1, 3);
       }
     };
+    const pulses = edges.filter((e) => live.has(e.i));
     return (t) => {
-      fx.clearRect(0, 0, CW, CH);
+      buf.fill(0);
       lava(lavaL, t);
       lava(lavaR, t + 3);
+      fx.putImageData(img, 0, 0);
       runes.forEach(([x, y]) => rune(x, y, t));
-      for (const e of edges) {
-        const on = live.has(e.i), was = walked.has(e.i), col = was ? C[7] : on ? C[8] : C[3];
-        for (let i = 1; i < e.p.length; i++) line(e.p[i - 1], e.p[i], 4, C[1]);
-        for (let i = 1; i < e.p.length; i++) line(e.p[i - 1], e.p[i], 2, col);
-        for (let i = 1; i < e.p.length - 1; i++) {
-          const [x, y] = e.p[i];
-          fx.fillStyle = C[1]; fx.fillRect(x / 2 - 3, y / 2 - 3, 6, 6);
-          fx.fillStyle = was ? C[7] : on ? C[8] : C[4]; fx.fillRect(x / 2 - 2, y / 2 - 2, 4, 4);
-          fx.fillStyle = C[1]; fx.fillRect(x / 2 - 1, y / 2 - 1, 2, 2);
-        }
-        if (on) {
-          let s = 0;
-          for (const q of e.s) {
-            s++;
-            if (((s - Math.floor(t * 10)) % 6 + 6) % 6 === 0) { fx.fillStyle = C[7]; fx.fillRect(Math.round(q[0] / 2) - 1, Math.round(q[1] / 2) - 1, 2, 2); }
-          }
-        }
+      fx.fillStyle = C[7];
+      for (const e of pulses) {
+        let s = 0;
+        for (const q of e.s) if (((++s - Math.floor(t * 10)) % 6 + 6) % 6 === 0) fx.fillRect(Math.round(q[0] / 2) - 1, Math.round(q[1] / 2) - 1, 2, 2);
       }
     };
   }
@@ -336,6 +365,53 @@ const RunMap = (() => {
   });
   const casinoCarpet = (C, lit) => paint(8, 4, C, (rect) => { rect(0, 0, 8, 4, 1); rect(1, 0, 6, 4, lit ? 8 : 5); });
 
+  /* The table: a raised obsidian rim around the board with gold corner fittings, the inner lip
+     faces the camera can see, and the table's front apron dropping below the board, so the map
+     reads as a game board on the Dealer's table rather than ending in nothing.
+     Map units; canvases are 1 px = 2 units. */
+  const RIM = 28, RIM_H = 14, DROP = 60;
+  function frame(pl, C) {
+    const put = (cv, css, cls = 'rm-frame') => { cv.className = cls; cv.style.cssText = css; pl.appendChild(cv); return cv; };
+    const stood = (cv, css) => { const s = document.createElement('div'); s.className = 'rm-st rm-frame-up'; s.style.cssText = css; s.appendChild(cv); pl.appendChild(s); };
+    const R2 = RIM / 2, OW = (W + RIM * 2) / 2, OH = (H + RIM * 2) / 2;
+    // Rim tops: an obsidian band, lit on its outer edge, shadowed on its inner edge, with studs.
+    const band = (w, h, outer, inner) => paint(w, h, C, (rect) => {
+      rect(0, 0, w, h, 1);
+      if (outer === 'top') rect(0, 0, w, 1, 3); else if (outer === 'bottom') rect(0, h - 1, w, 1, 3); else if (outer === 'left') rect(0, 0, 1, h, 3); else rect(w - 1, 0, 1, h, 3);
+      if (inner === 'top') rect(0, 0, w, 1, 0); else if (inner === 'bottom') rect(0, h - 1, w, 1, 0); else if (inner === 'left') rect(0, 0, 1, h, 0); else rect(w - 1, 0, 1, h, 0);
+      const across = w > h;
+      for (let i = 12; i < (across ? w : h) - 6; i += 12) rect(across ? i : (w >> 1), across ? (h >> 1) : i, 1, 1, 2);
+    });
+    const z = `transform:translateZ(${RIM_H}px)`;
+    put(band(OW, R2, 'top', 'bottom'), `left:${-RIM}px;top:${-RIM}px;width:${OW * 2}px;height:${RIM}px;${z}`);
+    put(band(OW, R2, 'bottom', 'top'), `left:${-RIM}px;top:${H}px;width:${OW * 2}px;height:${RIM}px;${z}`);
+    put(band(R2, H / 2, 'left', 'right'), `left:${-RIM}px;top:0;width:${RIM}px;height:${H}px;${z}`);
+    put(band(R2, H / 2, 'right', 'left'), `left:${W}px;top:0;width:${RIM}px;height:${H}px;${z}`);
+    // Gold corner fittings.
+    for (const [x, y] of [[-RIM, -RIM], [W, -RIM], [-RIM, H], [W, H]]) {
+      put(paint(R2, R2, C, (rect) => { rect(0, 0, R2, R2, 1); rect(1, 1, R2 - 2, R2 - 2, 8); rect(2, 2, 2, 1, 7); rect((R2 >> 1) - 1, (R2 >> 1) - 1, 2, 2, 1); }),
+        `left:${x}px;top:${y}px;width:${RIM}px;height:${RIM}px;transform:translateZ(${RIM_H + 1}px)`);
+    }
+    // Inner lip faces the camera can see: the back wall and the two side walls.
+    const lip = (w) => paint(w, RIM_H / 2, C, (rect) => { rect(0, 0, w, RIM_H / 2, 2); rect(0, RIM_H / 2 - 2, w, 2, 1); });
+    stood(lip(W / 2), `left:0;top:${-RIM_H}px;width:${W}px;height:${RIM_H}px`);
+    for (const x of [0, W]) {
+      const side = paint(RIM_H / 2, H / 2, C, (rect) => { rect(0, 0, RIM_H / 2, H / 2, 2); rect(0, 0, 2, H / 2, 1); });
+      put(side, `left:${x}px;top:0;width:${RIM_H}px;height:${H}px;transform:rotateY(-90deg)`, 'rm-frame rm-frame-side');
+    }
+    // The table's front apron, from below the board up to the rim.
+    const AH = (DROP + RIM_H) / 2;
+    const apron = paint(OW, AH, C, (rect) => {
+      rect(0, 0, OW, AH, 1);
+      rect(0, 0, OW, 1, 3); rect(0, 2, OW, 1, 2);
+      for (const [x0, x1] of [[8, OW / 2 - 4], [OW / 2 + 4, OW - 8]]) {
+        rect(x0, 7, x1 - x0, 1, 2); rect(x0, AH - 5, x1 - x0, 1, 2); rect(x0, 7, 1, AH - 11, 2); rect(x1 - 1, 7, 1, AH - 11, 2);
+      }
+      for (let x = 4; x < OW - 2; x += 10) rect(x, 4, 1, 1, 8);
+    });
+    stood(apron, `left:${-RIM}px;top:${H + RIM - (DROP + RIM_H)}px;width:${OW * 2}px;height:${DROP + RIM_H}px;transform:translateZ(${-DROP}px) rotateX(-90deg)`);
+  }
+
 
   /* A stop's pad: reachable = solid accent (no blinking), visited = mid, the rest = paper. */
   function drawPad(c, n, state, C) {
@@ -348,6 +424,8 @@ const RunMap = (() => {
     const ic = PAD_ICONS[n.t];
     pix(c, ic, { '#': C[1] }, 3, Math.floor((17 - ic.length) / 2));
   }
+
+  const FIG = 78; // figurine size in map units (1.3x the original 60)
 
   let walking = false;
 
@@ -386,13 +464,6 @@ const RunMap = (() => {
           <div class="rh-row">${ico('hp')}<span>LIFE</span><b>${run.life}/${run.maxLife}</b></div>
           <div class="rh-row">${ico('tooth')}<span>TEETH</span><b>${run.teeth}</b></div>
           <div class="rh-row">${ico('spell')}<span>DECK</span><b id="rhDeck">${Run.deckSize()}</b></div>
-          <div class="rh-lands">
-            <div class="rh-h">LANDS</div>
-            ${run.colors.map((k) => `
-            <div class="rh-land" data-k="${k}">${ico(COLORS[k].icon)}<span>${COLORS[k].land.toUpperCase()}</span>
-              <button class="mini-btn" data-d="-1" title="Remove a ${COLORS[k].land}">-</button><b>${run.lands[k] || 0}</b><button class="mini-btn" data-d="1" title="Add a ${COLORS[k].land}">+</button>
-            </div>`).join('')}
-          </div>
           <button class="btn" id="rmDeck">VIEW DECK</button>
         </div>
         <div class="rm-btns"><button class="btn" id="rmMenu">MENU</button><button class="btn" id="rmQuit">ABANDON</button></div>
@@ -404,6 +475,7 @@ const RunMap = (() => {
 
     drawGround($('#rmGnd'), R, C);
     placeProps(pl, R, C, block, runes, obel);
+    frame(pl, C);
 
     // Stop pads, and the casino for the boss.
     for (const n of nodes) {
@@ -460,7 +532,7 @@ const RunMap = (() => {
     fig.className = 'rm-st rm-fig';
     fig.innerHTML = `<img src="${spriteURL('hero')}" alt="">`;
     pl.append(fig);
-    const place = (x, y) => { fig.style.left = x - 30 + 'px'; fig.style.top = y - 62 + 'px'; };
+    const place = (x, y) => { fig.style.left = x - FIG / 2 + 'px'; fig.style.top = y - FIG - 2 + 'px'; };
     const here = nodes[run.cur];
     place(here.x, here.t === 'boss' ? BOSS_PIN_Y + 34 : here.y);
 
@@ -469,29 +541,35 @@ const RunMap = (() => {
       const e = edges.find((x) => x.a === run.cur && x.b === id), pts = e.s.slice();
       if (nodes[id].t === 'boss') pts.push([pts[pts.length - 1][0], BOSS_PIN_Y + 34]);
       walking = true;
+      // Hop along the trace: a whole number of jumps (about one per 40 map units), each arcing up
+      // HOP_H and landing with a tick, in stepped heights to match the pixel art.
+      const HOP_H = 36, hops = Math.max(2, Math.round((pts.length * 4) / 40));
+      const img = fig.querySelector('img');
+      fig.classList.add('hopping');
+      let landed = 0;
+      const t0 = performance.now(), dur = hops * 260;
       sfx('place');
-      const t0 = performance.now(), dur = pts.length * 14;
       (function step() {
         if (!fig.isConnected) return;
         const k = Math.min(1, (performance.now() - t0) / dur), i = Math.min(pts.length - 1, Math.floor(k * (pts.length - 1)));
+        const phase = k * hops, h = HOP_H * Math.sin(Math.PI * (phase % 1));
         place(pts[i][0], pts[i][1]);
-        if (k < 1) return requestAnimationFrame(step);
+        img.style.transform = `translateY(${-Math.round(h / 6) * 6}px)`;
+        if (Math.floor(phase) > landed && k < 1) { landed = Math.floor(phase); sfx('tick'); }
+        if (k < 1) return setTimeout(step, 33); // ~30fps, stepped like the rest of the pixel art
+        img.style.transform = '';
+        fig.classList.remove('hopping');
+        sfx('place');
         setTimeout(() => { walking = false; Run.go(id); }, 250);
       })();
     }
 
     $('#rmDeck').onclick = () => { sfx('select'); Run.showDeck($('#rmap')); };
-    // Lands are free to add or take out any time you're on the map.
-    $$('.rh-land').forEach((row) => row.querySelectorAll('[data-d]').forEach((b) => (b.onclick = () => {
-      if (!Run.setLands(row.dataset.k, +b.dataset.d)) return;
-      row.querySelector('b').textContent = run.lands[row.dataset.k];
-      $('#rhDeck').textContent = Run.deckSize();
-    })));
     $('#rmMenu').onclick = () => { sfx('select'); showTitle(); };
     $('#rmQuit').onclick = () => Run.confirmAbandon(() => show());
 
     // Animate the lava, runes, pulses and rising embers at a stepped ~12fps.
-    const draw = fxDrawer($('#rmFx').getContext('2d'), C, edges, runes, live, walked);
+    const draw = fxDrawer($('#rmFx').getContext('2d'), $('#rmGnd').getContext('2d'), C, edges, runes, live, walked);
     const em = $('#rmEm'), ex = em.getContext('2d'), embers = [];
     let last = 0;
     (function loop(now) {

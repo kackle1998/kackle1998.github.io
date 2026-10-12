@@ -120,7 +120,15 @@ function sfx(name, n = 1) {
     case 'win': [523, 659, 784, 1046].forEach((f, i) => S.tone(f, 0.22, 'square', 0.05, null, i * 0.15)); break;
     case 'dice': S.noise(0.025, 0.05); S.tone(900 + Math.random() * 500, 0.025, 'square', 0.018); break;
     case 'diceLand': S.noise(0.07, 0.09); S.tone(140, 0.09, 'square', 0.045, 70); break;
-    case 'lose': [392, 330, 262, 196].forEach((f, i) => S.tone(f, 0.32, 'square', 0.05, null, i * 0.22)); break;
+    // The slot machine: lever clunk, a reel ticking past a symbol, a reel catching, and the payout.
+    case 'lever': S.noise(0.06, 0.06); S.tone(180, 0.12, 'square', 0.045, 90); S.tone(520, 0.05, 'square', 0.02, null, 0.1); break;
+    case 'reel': S.tone(1100 + n * 40, 0.018, 'square', 0.014); S.noise(0.012, 0.025); break;
+    case 'reelStop': S.noise(0.05, 0.08); S.tone(240 + n * 60, 0.1, 'square', 0.045, 120); break;
+    case 'payout': [784, 988, 1175, 1568].forEach((f, i) => S.tone(f, 0.09, 'square', 0.035, null, i * 0.07)); S.tone(1568, 0.3, 'triangle', 0.03, null, 0.28); break;
+    // The sigil wheel: a heave to set it turning, then a peg clicking past the pointer.
+    case 'wheel': S.noise(0.14, 0.06); S.tone(220, 0.22, 'square', 0.04, 440); break;
+    case 'wheelTick': S.tone(1500, 0.015, 'square', 0.016); S.noise(0.01, 0.03); break;
+    case 'lose':[392, 330, 262, 196].forEach((f, i) => S.tone(f, 0.32, 'square', 0.05, null, i * 0.22)); break;
   }
 }
 /* ---------- music (gapless WebAudio loops) ---------- */
@@ -1026,11 +1034,11 @@ function getRecord() { return { wins: 0, losses: 0, ...Store.read(RECORD_KEY, {}
 function titleMenu() {
   return [
     { label: 'OFFLINE PLAY', desc: "Sit at the Dealer's table: a quick match, or a run along the circuit.", go: showOfflineMenu },
-    Cloud.enabled && { label: 'ONLINE ARENA', desc: 'Duel another spellslinger in real time. Needs an account.', go: () => Net.showOnline() },
+    Cloud.enabled && { label: 'ONLINE ARENA', desc: 'Duel another player in real time.', go: () => Net.showOnline() },
     { label: 'DECK BUILDER', desc: 'Bind 30 cards into a spellbook of your own.', go: () => showDeckBuilder() },
     { label: 'CARD MAKER', desc: 'Draw and enchant a card of your own.', go: () => CardMaker.show() },
     { label: 'CHARACTER', desc: 'Change the face you bring to the table.', go: () => CharMaker.show() },
-    { label: 'OPTIONS', desc: 'Sound, screen and colours. How to play lives here too.', go: () => openOptions(false) },
+    { label: 'OPTIONS', desc: 'Sound, screen and colors.', go: () => openOptions(false) },
   ].filter(Boolean);
 }
 
@@ -1289,6 +1297,7 @@ function rollForFirst() {
       // The Dealer's die settles a beat later for a little suspense.
       await Promise.all([tumble(dieYou, you, 14), tumble(dieCpu, cpu, 17)]);
       await sleep(350);
+      if (!dieYou.isConnected) return; // the roll screen was closed mid-roll
       if (you === cpu) {
         msg.textContent = `Both rolled ${you}. A tie - roll again!`;
         CRT.glitch();

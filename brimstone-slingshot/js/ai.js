@@ -8,7 +8,7 @@ const AI = {
     return g.attackOf(c) * 1.5 + hpLeft(c) + costTotal(c.cost) + c.sigils.length;
   },
 
-  /* Play the land colour our hand needs most. */
+  /* Play the land color our hand needs most. */
   chooseLand(g, p) {
     if (p.landPlayed) return -1;
     const lands = p.hand.map((c, i) => ({ c, i })).filter((x) => x.c.type === 'land');

@@ -166,7 +166,7 @@ class Game {
       }
       if (need > 0) return null;
     }
-    // Pay generic with whichever colour we have the most of left over.
+    // Pay generic with whichever color we have the most of left over.
     let g = cost.g || 0;
     while (g > 0) {
       const rem = free.filter((x) => !used.has(x.i));

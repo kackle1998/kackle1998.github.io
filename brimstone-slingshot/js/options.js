@@ -1,7 +1,7 @@
 'use strict';
 /* ============================================================
-   BRIMSTONE SLINGSHOT — options: sound, CRT and colour palettes
-   A palette sets the CSS colour tokens, the 4 sprite tones (PAL),
+   BRIMSTONE SLINGSHOT — options: sound, CRT and color palettes
+   A palette sets the CSS color tokens, the 4 sprite tones (PAL),
    the swirl backdrop's tones and the deck-tablet tones.
    ============================================================ */
 
@@ -74,17 +74,13 @@ const Palette = {
 Palette.apply(Store.read(PALETTE_KEY, 'moss'));
 
 /* ---------- options screen ----------
-   Rows: sound, CRT, palette, how to play, back. Up/Down pick a row,
-   Left/Right change its value, Enter opens a button row, Esc goes back.
+   Rows: sound, CRT, palette, how to play, back. Esc goes back.
    Opened from the title, or over a match from the gear button, where
    BACK becomes RESUME and returns to the table. */
-const OPT_ROWS = 5;
-let optSel = 0;
 let optInMatch = false;
 
 function openOptions(inMatch) {
   optInMatch = inMatch;
-  optSel = 0;
   showOptions();
 }
 
@@ -110,8 +106,6 @@ function showOptions() {
       <div class="opt-row opt-btn-row" data-row="4"><button class="btn" id="optBack">${optInMatch ? 'RESUME' : 'BACK'}</button></div>
     </div>`, true);
 
-  const pick = (i) => { optSel = i; $$('.opt-row').forEach((r) => r.classList.toggle('on', +r.dataset.row === i)); };
-  $$('.opt-row').forEach((r) => (r.onmouseenter = () => pick(+r.dataset.row)));
   $$('#optSound .btn').forEach((b) => (b.onclick = () => optSound(b.dataset.v === 'on')));
   $$('#optCrt .btn').forEach((b) => (b.onclick = () => optCrt(b.dataset.v === 'on')));
   $$('#optPal .db-step').forEach((b) => (b.onclick = () => stepPalette(+b.dataset.d)));
@@ -121,7 +115,6 @@ function showOptions() {
     if (optInMatch) hideScreen();
     else showTitle();
   };
-  pick(optSel);
 }
 
 function optSound(on) {
@@ -143,7 +136,7 @@ function stepPalette(step) {
   Palette.apply(keys[(keys.indexOf(Palette.key) + step + keys.length) % keys.length]);
   sfx('select');
   CRT.pulse(0.6);
-  if (optInMatch && game) { render(); inspectDefault(); } // redraw the table behind in the new colours
+  if (optInMatch && game) { render(); inspectDefault(); } // redraw the table behind in the new colors
   showOptions();
 }
 
@@ -151,21 +144,7 @@ function stepPalette(step) {
    is never handled twice. */
 document.addEventListener('keydown', (e) => {
   if (!$('.opt') || $('#screen').classList.contains('hidden')) return;
-  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
-    e.preventDefault();
-    $$('.opt-row')[(optSel + (e.key === 'ArrowDown' ? 1 : OPT_ROWS - 1)) % OPT_ROWS].onmouseenter();
-    sfx('select');
-  } else if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
-    e.preventDefault();
-    const step = e.key === 'ArrowRight' ? 1 : -1;
-    if (optSel === 0) optSound(Sfx.muted);
-    else if (optSel === 1) optCrt(CRT.level === 'off');
-    else if (optSel === 2) stepPalette(step);
-  } else if (e.key === 'Enter' && document.activeElement === document.body) {
-    e.preventDefault();
-    if (optSel === 3) $('#optRules').onclick();
-    else if (optSel === 4) $('#optBack').onclick();
-  } else if (e.key === 'Escape') {
+  if (e.key === 'Escape') {
     e.preventDefault();
     $('#optBack').onclick();
   }

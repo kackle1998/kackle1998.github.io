@@ -118,7 +118,7 @@ const CardMaker = (() => {
     $$('.cm-color').forEach((b) => (b.onclick = () => {
       const old = cur.color;
       cur.color = b.dataset.k;
-      // Move the old colour's pips to the new colour, which is what you almost always want.
+      // Move the old color's pips to the new color, which is what you almost always want.
       if (old !== cur.color && cur.cost[old]) { cur.cost[cur.color] += cur.cost[old]; cur.cost[old] = 0; setVal(cur.color, cur.cost[cur.color]); }
       changed();
     }));
@@ -320,11 +320,11 @@ const CardMaker = (() => {
           <label class="cm-field"><span>NAME</span>
             <input class="db-input" id="fName" maxlength="16" spellcheck="false">
           </label>
-          <div class="cm-field"><span>COLOUR</span><div class="cm-colors" id="fColor"></div></div>
+          <div class="cm-field"><span>COLOR</span><div class="cm-colors" id="fColor"></div></div>
           <div class="cm-field"><span>COST</span><div class="cm-steppers" id="fCost"></div></div>
           <div class="cm-field"><span>STATS</span><div class="cm-steppers" id="fStats"></div></div>
           <div class="cm-field"><span>SIGILS <em class="muted">(up to 4)</em></span><div class="cm-sigils" id="fSigils"></div></div>
-          <label class="cm-field"><span>FLAVOUR TEXT</span>
+          <label class="cm-field"><span>FLAVOR TEXT</span>
             <input class="db-input" id="fFlavor" maxlength="80" spellcheck="true">
           </label>
           <div class="cm-balance" id="balance"></div>
