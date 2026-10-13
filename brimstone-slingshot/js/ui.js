@@ -104,6 +104,10 @@ function sfx(name, n = 1) {
     case 'callout': [0, 4, 7].forEach((st, i) => S.tone(523 * 2 ** ((n - 2 + st) / 12), 0.2, 'triangle', 0.05, null, i * 0.07)); break;
     case 'warp': S.tone(70, 2.4, 'sawtooth', 0.04, 1300); S.tone(105, 2.4, 'square', 0.025, 1900); S.noise(0.6, 0.05); break;
     case 'tick': S.tone(900, 0.02, 'square', 0.015); break;
+    // Building a slingshot: a hammer strike per course (rising), the band strung, the old one crumbling.
+    case 'build': S.noise(0.035, 0.07); S.tone(560 + n * 50, 0.06, 'square', 0.03, 280); S.tone(1400 + n * 100, 0.03, 'triangle', 0.02, null, 0.03); break;
+    case 'twang': S.tone(150, 0.22, 'sawtooth', 0.03, 380); S.tone(300, 0.12, 'square', 0.015, 520, 0.02); break;
+    case 'poof': S.noise(0.22, 0.05); S.tone(240, 0.18, 'triangle', 0.045, 80); break;
     case 'tally': S.tone(1320, 0.15, 'triangle', 0.04); break;
     case 'select': S.tone(660, 0.04, 'square', 0.025); break;
     case 'place': S.tone(220, 0.07, 'square', 0.035); S.tone(330, 0.08, 'square', 0.035, null, 0.06); break;
@@ -1037,7 +1041,6 @@ function titleMenu() {
     Cloud.enabled && { label: 'ONLINE ARENA', desc: 'Duel another player in real time.', go: () => Net.showOnline() },
     { label: 'DECK BUILDER', desc: 'Bind 30 cards into a spellbook of your own.', go: () => showDeckBuilder() },
     { label: 'CARD MAKER', desc: 'Draw and enchant a card of your own.', go: () => CardMaker.show() },
-    { label: 'CHARACTER', desc: 'Change the face you bring to the table.', go: () => CharMaker.show() },
     { label: 'OPTIONS', desc: 'Sound, screen and colors.', go: () => openOptions(false) },
   ].filter(Boolean);
 }
@@ -1132,7 +1135,7 @@ function showOfflineMenu() {
   const modes = [
     { name: "DEALER'S RUN", art: 'dealer', go: () => Run.open(),
       desc: 'Walk the brimstone circuit to the Dealer. Your deck grows and changes, and your life carries over.',
-      note: run ? `RUN IN PROGRESS &middot; ${ico('hp')} ${run.life}/${run.maxLife}` : 'ONE REGION &middot; ABOUT 10 MINUTES' },
+      note: run ? `RUN IN PROGRESS &middot; ${ico('hp')} ${run.life}/${run.maxLife}` : '' },
     { name: 'QUICK MATCH', art: 'ri_battle', go: () => showDeckSelect(),
       desc: 'One hand against the Dealer with any deck you like.', note: 'PREMADE OR YOUR OWN DECKS' },
   ];
@@ -1491,18 +1494,24 @@ const VORTEX = { x: 640, y: 360 };
 /* Copy every card on the table and in hand into #fx at the same spot, so they
    outlive the game screen fading out. Nearest the core goes first. */
 function liftCards() {
-  return [...$$('#board .card, #hand .card')].map((c) => {
+  return [...$$('#board .card:not(.dying), #hand .card')].map((c) => {
     const r = relRect(c), w = c.offsetWidth, h = c.offsetHeight;
     const x = r.x + r.w / 2, y = r.y + r.h / 2;
+    // Keep a tapped card's turn and shrink (mid-animation if it's tapping right now).
+    const cs = getComputedStyle(c);
+    const rot = cs.rotate === 'none' ? 0 : parseFloat(cs.rotate) || 0;
+    const scl = cs.scale === 'none' ? 1 : parseFloat(cs.scale) || 1;
     const el = c.cloneNode(true);
-    el.classList.remove('tilting', 'selected', 'playable', 'ready', 'targetable', 'enter', 'unplayable');
-    el.style.cssText = `position:absolute;left:${x - w / 2}px;top:${y - h / 2}px;margin:0;z-index:2;pointer-events:none`;
+    el.classList.remove('tilting', 'selected', 'playable', 'ready', 'targetable', 'enter', 'unplayable', 'tapped', 'tap-in', 'tap-out');
+    el.style.cssText = `position:absolute;left:${x - w / 2}px;top:${y - h / 2}px;margin:0;z-index:2;pointer-events:none;transform:none;animation:none`;
     $('#fx').appendChild(el);
-    return { el, x, y, d: Math.hypot(x - VORTEX.x, y - VORTEX.y) };
+    return { el, x, y, rot, scl, d: Math.hypot(x - VORTEX.x, y - VORTEX.y) };
   }).sort((a, b) => a.d - b.d);
 }
 
-/* Orbit a lifted card clockwise (the way the vortex turns), tightening into the core. */
+/* Orbit a lifted card clockwise (the way the vortex turns), tightening into the core.
+   Uses the individual translate/rotate/scale properties: translate applies first, in
+   screen space, so a card's own turn or shrink can't bend its path off the core. */
 function suckIn(c, delay, duration) {
   const a0 = Math.atan2(c.y - VORTEX.y, c.x - VORTEX.x), N = 36, keys = [];
   for (let s = 0; s <= N; s++) {
@@ -1511,7 +1520,9 @@ function suckIn(c, delay, duration) {
     const r = c.d * (1 - p) ** 1.3;
     const dx = VORTEX.x + Math.cos(a) * r - c.x, dy = VORTEX.y + Math.sin(a) * r - c.y;
     keys.push({
-      transform: `translate(${dx.toFixed(1)}px, ${dy.toFixed(1)}px) rotate(${((a - a0) * 180 / Math.PI).toFixed(1)}deg) scale(${(1 - 0.88 * p).toFixed(3)})`,
+      translate: `${dx.toFixed(1)}px ${dy.toFixed(1)}px`,
+      rotate: `${(c.rot + (a - a0) * 180 / Math.PI).toFixed(1)}deg`,
+      scale: (c.scl * (1 - 0.88 * p)).toFixed(3),
       opacity: p > 0.95 ? 0 : 1,
     });
   }

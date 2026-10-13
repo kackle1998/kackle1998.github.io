@@ -13,7 +13,7 @@ const PALETTE_KEY = 'cardgrave.palette.v1';
 const PALETTES = {
   moss: {
     name: 'MOSS', ink: '#1f2418', dark: '#3b4430', mid: '#6e7a52', light: '#a9b47e', paper: '#d9dfb3', white: '#eef1d6',
-    artbg: '#cdd4a4', accent: '#d97a2b', bg: '#12160e',
+    artbg: '#cdd4a4', accent: '#b0953a', bg: '#12160e',
     bd: ['#8f9a6c', '#a3ad7f', '#b3bc8a', '#c3cb9b', '#3b4430'], tab: ['#8e9868', '#a6af7f', '#7c8659'],
   },
   pocket: {

@@ -11,10 +11,17 @@ const RUN_RECORD_KEY = 'cardgrave.runRecord.v1';
 const RUN_MAX_LIFE = 20;
 const RUN_MIN_DECK = 15;                                // BURN A CARD or taking out lands can't go below this
 const RUN_MAX_LANDS = 20;                               // of each land type
-const RUN_ROW_Y = [840, 710, 580, 450, 320, 190, 70];   // map units: start, rows 1-5, boss
-const DEALER_LIFE = [0, 8, 8, 12, 12, 14];              // a battle's Dealer life, by row
-const DEALER_COST_CAP = [0, 2, 2, 3, 3, 4];              // the Dealer's priciest card, by row
-const RUN_WIN_HEAL = 4;                                 // life back after each battle won
+const RUN_ROWS = 10;                                    // rows of stops between the base and the casino
+const RUN_ROW_GAP = 150;                                // map units between rows
+// Map y by row: the base (row 0) at the bottom, the casino (row RUN_ROWS + 1) at y 70.
+const RUN_ROW_Y = Array.from({ length: RUN_ROWS + 2 }, (_, r) => 70 + (RUN_ROWS + 1 - r) * RUN_ROW_GAP);
+const RUN_BATTLE_ROWS = [1, 4, 7];                      // all battles; the last row is battles plus one campfire
+const RUN_COL_X = { 2: [250, 510], 3: [170, 380, 590] }; // map units: a row's stops, by count
+const RUN_LAYOUT = 3;                                   // bumped when the map's shape changes
+// By row (1..RUN_ROWS): a battle's Dealer life, and the Dealer's priciest card.
+const DEALER_LIFE = [0, 8, 8, 8, 10, 10, 10, 12, 12, 12, 14];
+const DEALER_COST_CAP = [0, 2, 2, 2, 2, 2, 2, 3, 3, 3, 4];
+const RUN_WIN_HEAL = 6;                                 // life back after each battle won
 const BOSS_LIFE = 16;
 const BOSS_COST_CAP = 4;                                // the boss Dealer's priciest card
 /* Each starting deck's run: its starting (and max) life, and cards swapped into its starting 11
@@ -74,30 +81,31 @@ function runPool(colors, maxCost = 99) {
 const runPrice = (c) => Math.min(4, Math.max(2, costTotal(c.cost)));
 function getRunRecord() { return { wins: 0, losses: 0, ...Store.read(RUN_RECORD_KEY, {}) }; }
 
-/* Start, 5 rows of 2-3 stops, then the boss. Links run in sorted order, so traces never cross. */
+/* Start, 5 rows of 2-3 stops, then the boss. Links run in sorted order, so the map's arcs never cross. */
 function genRunMap(R) {
   const even = (v) => Math.round(v / 2) * 2;
   const nodes = [{ id: 0, row: 0, x: 380, y: RUN_ROW_Y[0], t: 'start' }];
   const rows = [[0]];
-  for (let r = 1; r <= 5; r++) {
+  for (let r = 1; r <= RUN_ROWS; r++) {
     const k = R() < 0.5 ? 2 : 3;
-    const xs = k === 2 ? [280, 480] : [210, 380, 550];
+    const xs = RUN_COL_X[k];
     let types;
-    if (r === 1 || r === 3) types = Array(k).fill('battle');
-    else if (r === 5) { types = Array(k).fill('battle'); types[runRand(R, k)] = 'fire'; }
-    else types = runShuffle(R, ['fire', 'trade', 'altar', 'event']).slice(0, k);
+    if (RUN_BATTLE_ROWS.includes(r)) types = Array(k).fill('battle');
+    else if (r === RUN_ROWS) { types = Array(k).fill('battle'); types[runRand(R, k)] = 'fire'; }
+    // Every other row has a ? stop, plus one or two of campfire, trader and altar.
+    else types = runShuffle(R, ['event', ...runShuffle(R, ['fire', 'trade', 'altar']).slice(0, k - 1)]);
     rows.push(xs.map((x, i) => {
       const n = { id: nodes.length, row: r, x: even(x + (R() - 0.5) * 40), y: even(RUN_ROW_Y[r] + (R() - 0.5) * 20), t: types[i] };
       nodes.push(n);
       return n.id;
     }));
   }
-  nodes.push({ id: nodes.length, row: 6, x: 380, y: RUN_ROW_Y[6], t: 'boss' });
+  nodes.push({ id: nodes.length, row: RUN_ROWS + 1, x: 380, y: RUN_ROW_Y[RUN_ROWS + 1], t: 'boss' });
   rows.push([nodes.length - 1]);
 
   const edges = [];
   const at = (row, i) => (row.length === 1 ? 0.5 : i / (row.length - 1));
-  for (let r = 0; r < 6; r++) {
+  for (let r = 0; r <= RUN_ROWS; r++) {
     const A = rows[r], B = rows[r + 1];
     let i = 0, j = 0;
     edges.push([A[0], B[0]]);
@@ -111,7 +119,20 @@ function genRunMap(R) {
       edges.push([A[i], B[j]]);
     }
   }
-  return { nodes, edges };
+  return { nodes, edges, layout: RUN_LAYOUT };
+}
+
+/* Respace a map saved under the old layout (rows 130 apart, stops 170 apart) to the current one,
+   keeping each stop's jitter, so a run in progress gets the roomier board too. */
+function respaceRunMap(map) {
+  // Layout 2 (5 rows, the roomy spacing) still plays as saved: the board sizes itself to the map.
+  if (map.layout >= 2) return;
+  const oldY = [840, 710, 580, 450, 320, 190, 70], newY = [960, 810, 660, 510, 360, 210, 70], even = (v) => Math.round(v / 2) * 2;
+  for (const n of map.nodes) {
+    n.y = even(newY[n.row] + (n.y - oldY[n.row]));
+    n.x = even(380 + (n.x - 380) * (210 / 170));
+  }
+  map.layout = 2;
 }
 
 /* ---------- events at ? stops ----------
@@ -144,11 +165,11 @@ const RUN_EVENTS = [
   },
   {
     id: 'pool', title: 'MOLTEN POOL', art: 'ri_pool',
-    text: 'A pool of slow fire. Dip a creature from your deck in: half the time it comes out with Haste, half the time it melts away for good.',
+    text: 'A pool of slow fire. Dip a creature from your deck in: three times in four it comes out with Haste, but one time in four it melts away for good.',
     choices: [
       { label: 'DIP A CREATURE', pick: (d) => !d.sigils.includes('haste') && d.sigils.length < 4, need: 'Needs a creature without Haste.',
         act: (run, d) => {
-          if ((run.debugRoll ?? Math.random()) < 0.5) { run.remove(d.rid); return `${d.name} melted away.`; }
+          if ((run.debugRoll ?? Math.random()) < 0.25) { run.remove(d.rid); return `${d.name} melted away.`; }
           run.rc(d.rid).sigils.push('haste');
           return `${d.name} came out with Haste.`;
         } },
@@ -222,6 +243,54 @@ const RUN_EVENTS = [
     id: 'wheel', title: 'SIGIL WHEEL', art: 'ri_wheel', screen: 'wheel',
     text: 'A bone wheel ringed with sigils. It turns once, and only once.', choices: [],
   },
+  {
+    id: 'shrine', title: 'BONE SHRINE', art: 'ri_altar',
+    text: 'A shrine of stacked skulls asks for an offering. It promises to make you harder to kill.',
+    choices: [
+      { label: 'OFFER YOUR WEAKEST', ok: (run) => run.creatures().length > 0 && run.deckSize() > RUN_MIN_DECK, need: `Needs a creature to offer, and more than ${RUN_MIN_DECK} cards.`,
+        act: (run) => {
+          const d = run.creatures().sort((a, b) => costTotal(a.cost) - costTotal(b.cost) || a.atk + a.hp - (b.atk + b.hp))[0];
+          run.remove(d.rid);
+          run.s.maxLife += 3;
+          const h = run.heal(3);
+          return `The shrine takes your ${d.name}. Your max life rises by 3, and you recover ${h}.`;
+        } },
+      { label: 'LEAVE', act: () => 'The skulls watch you go.' },
+    ],
+  },
+  {
+    id: 'forge', title: 'CRYSTAL FORGE', art: 'golem',
+    text: 'A forge burning with gem-light. For 2 teeth, the smith will temper one of your creatures.',
+    choices: [
+      { label: 'PAY 2 TEETH', ok: (run) => run.s.teeth >= 2, pick: (d) => true, need: 'Needs 2 teeth and a creature.',
+        act: (run, d) => { run.s.teeth -= 2; const rc = run.rc(d.rid); rc.atk += 1; rc.hp += 1; return `${d.name} comes out tempered: +1 attack, +1 health.`; } },
+      { label: 'LEAVE', act: () => 'The forge burns on without you.' },
+    ],
+  },
+  {
+    id: 'mirror', title: 'MIRROR POOL', art: 'mirrorward',
+    text: 'A still black pool. Whatever looks into it looks back out. It costs a little blood to wake.',
+    choices: [
+      { label: 'PAY 4 LIFE', ok: (run) => run.s.life > 4, pick: (d) => true, need: 'Needs more than 4 life and a creature.',
+        act: (run, d) => {
+          run.s.life -= 4;
+          const src = run.rc(d.rid), copy = run.add(src.base);
+          for (const k of ['atk', 'hp', 'snipe', 'mend']) if (src[k] != null) copy[k] = src[k];
+          copy.sigils = [...(src.sigils || [])];
+          return `A second ${d.name} climbs out of the pool, just like the first.`;
+        } },
+      { label: 'LEAVE', act: () => 'Your reflection waves you off.' },
+    ],
+  },
+  {
+    id: 'cache', title: 'EMBER CACHE', art: 'ri_tooth',
+    text: 'Teeth glint in a bed of live coals. You could reach in, if you don\'t mind the burns.',
+    choices: [
+      { label: 'REACH IN (-3 LIFE)', ok: (run) => run.s.life > 3, need: 'Needs more than 3 life.',
+        act: (run) => { run.s.life -= 3; run.gainTeeth(3); return 'You pull out 3 teeth, and a few blisters.'; } },
+      { label: 'LEAVE', act: () => 'The coals hiss as you walk away.' },
+    ],
+  },
 ];
 
 /* The slot machine: the first pull is free, each reroll costs teeth. Nothing is at risk,
@@ -241,12 +310,13 @@ const WHEEL_SPIN_MS = 4200;
 const Run = {
   s: null,           // the saved run, or null
   ids: [],           // CARDS ids registered for the current run
-  debugRoll: null,   // console: force the 50% rolls (0 = the bad outcome)
+  debugRoll: null,   // console: force the 25% death rolls (0 = the bad outcome)
   debugEvent: null,  // console: force the next ? stop's event id
 
   load() {
     const s = Store.read(RUN_KEY, null);
     this.s = s && s.map && s.deck ? s : null;
+    if (this.s) respaceRunMap(this.s.map);
     this.register();
     return this.s;
   },
@@ -329,7 +399,8 @@ const Run = {
         </div>
       </div>`, true);
     $('#runGo').onclick = () => { sfx('place'); this.resume(); };
-    $('#runQuit').onclick = () => this.confirmAbandon(() => this.open());
+    // Abandoning from here means you came to start a run, so go straight to picking a deck.
+    $('#runQuit').onclick = () => this.confirmAbandon(() => this.open(), () => this.pickDeck());
     $('#runBack').onclick = () => { sfx('select'); showOfflineMenu(); };
   },
 
@@ -434,7 +505,8 @@ const Run = {
     $('#rnOk').onclick = () => { sfx('select'); this.leave(); };
   },
 
-  confirmAbandon(back) {
+  /* `back` returns to where you were; `after` is where to go once the run is gone. */
+  confirmAbandon(back, after = showTitle) {
     sfx('select');
     showScreen(`
       <div class="result panel">
@@ -449,7 +521,7 @@ const Run = {
       sfx('lose');
       const rec = getRunRecord(); rec.losses++; Store.write(RUN_RECORD_KEY, rec);
       this.clear();
-      showTitle();
+      after();
     };
     $('#abNo').onclick = () => { sfx('select'); back(); };
   },
@@ -560,7 +632,7 @@ const Run = {
 
   reward(n) {
     const s = this.s, node = s.node, R = this.rand(200 + n.id);
-    const want = 2 + Math.floor(n.row / 2); // later rows lean toward pricier cards
+    const want = 2 + Math.floor(n.row / 3); // later rows lean toward pricier cards
     const offers = runPickN(R, runPool(s.colors), 3, (c) => (costTotal(c.cost) >= want ? 3 : 1));
     this.screen('ri_battle', 'SPOILS',
       `The Dealer pays ${node.teeth} ${node.teeth === 1 ? 'tooth' : 'teeth'} for the overkill, and you catch your breath (+${RUN_WIN_HEAL} life). Take one card for your deck.`,
@@ -588,11 +660,11 @@ const Run = {
     } else {
       const d = this.card(node.rid), k = node.n || 0;
       this.screen('ri_fire', 'CAMPFIRE',
-        k ? `It has taken the heat ${k} time${k > 1 ? 's' : ''}. Again? There's a 50% chance the fire takes it.` : 'The first warmth is free. After that, each boost risks the fire taking it.',
+        k ? `It has taken the heat ${k} time${k > 1 ? 's' : ''}. Again? There's a 25% chance the fire takes it.` : 'The first warmth is free. After that, each boost risks the fire taking it.',
         '', `<button class="btn" id="rnAtk">+1 ATTACK</button><button class="btn" id="rnHp">+2 HEALTH</button><button class="btn" id="rnLeave">LEAVE</button>`);
       this.cardGrid($('#rnBody'), [d], null);
       const boost = (stat, by) => {
-        if (k >= 1 && (this.debugRoll ?? Math.random()) < 0.5) {
+        if (k >= 1 && (this.debugRoll ?? Math.random()) < 0.25) {
           sfx('die');
           CRT.pulse(0.8, true);
           this.remove(d.rid);
