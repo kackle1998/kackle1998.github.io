@@ -10,7 +10,7 @@
 
 const RunMap = (() => {
   // H grows with the run: a run's board is as long as its map (show() sets it; 1020 is the classic size).
-  const W = 760, CW = W / 2, BOARD_BASE = 1020;
+  const W = RUN_MAP_W, CW = W / 2, BOARD_BASE = 1020; // W: see js/run.js
   let H = BOARD_BASE, CH = H / 2;
   const BOSS_PIN_Y = 104;
   const BAY = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
@@ -28,6 +28,15 @@ const RunMap = (() => {
 
   const lavaL = (y) => ({ c: 36 + 12 * Math.sin(y / 46) + 6 * Math.sin(y / 14), w: 10 + 4 * Math.sin(y / 26 + 1) });
   const lavaR = (y) => ({ c: W - 36 - 12 * Math.sin(y / 40) - 6 * Math.sin(y / 17), w: 10 + 4 * Math.sin(y / 22) });
+  /* Whether a standee at (x, y), half-width hw and height h, keeps clear of the rivers: its base
+     off the lava and its crust, and its top too, since the camera's perspective leans a standee
+     outward as it rises, by up to LEAN map units per unit of height at the board's edge (measured
+     in the 3D view; less toward the middle). riverRoom is the space left over (< 0: too close). */
+  const LEAN = 0.5;
+  const riverRoom = (x, y, hw, h) => {
+    const l = lavaL(y), r = lavaR(y);
+    return Math.min(x - (l.c + l.w + 4), r.c - r.w - 4 - x) - hw - 4 - h * LEAN * Math.abs(x - W / 2) / (W / 2);
+  };
   // Lit from above the middle of the board; on a longer board the lit middle stretches with it.
   const lightAt = (x, y) => {
     const d = y - H * 0.53, dy = Math.sign(d) * Math.max(0, Math.abs(d) - (H - BOARD_BASE) / 2);
@@ -153,8 +162,22 @@ const RunMap = (() => {
       ring(18, Math.abs(Math.sin(ph * 1.6)) * 7 + 1, 8);
       R(cx - 4, cy - 4, 8, 8, 1); R(cx - 3, cy - 3, 6, 6, 5); R(cx - 3, cy - 3, 3, 3, 7); R(cx - 1, cy - 26, 2, 6, 8);
     };
+    // A landmark's look only changes now and then (an armillary 4 times a second, a dice tower
+    // when its top die tumbles or lands), so it is repainted only then: a canvas on the 3D board
+    // goes back to the GPU each time it is drawn.
+    const look = ({ k, seed }, t) => {
+      if (k === 'armillary') return Math.floor(t * 4);
+      const beat = t / 5 + seed * 0.37, n = Math.floor(beat);
+      return beat - n < 0.1 ? 'T' + Math.floor(t * 12) : n;
+    };
     return (t) => {
-      for (const m of live) { m.g.clearRect(0, 0, m.w, m.h); (m.k === 'dice' ? dice : armillary)(m, t); }
+      for (const m of live) {
+        const key = look(m, t);
+        if (key === m.key) continue;
+        m.key = key;
+        m.g.clearRect(0, 0, m.w, m.h);
+        (m.k === 'dice' ? dice : armillary)(m, t);
+      }
     };
   }
 
@@ -175,8 +198,8 @@ const RunMap = (() => {
       return Math.abs(x - l.c) < l.w + pad || Math.abs(x - r.c) < r.w + pad || x < l.c || x > r.c;
     };
     const props = [];
-    const scale = H / BOARD_BASE; // more board, more props
-    for (let t = 0; t < 3200 * scale && props.length < 380 * scale; t++) {
+    const scale = H / BOARD_BASE; // more board, more props (at most 220 per classic board: any more and the terrain gets too busy)
+    for (let t = 0; t < 3200 * scale && props.length < 220 * scale; t++) {
       const x = 20 + R() * (W - 40), y = 8 + R() * (H - 16);
       if (onLava(x, y, 8)) continue;
       const d = near(x, y);
@@ -186,6 +209,13 @@ const RunMap = (() => {
       if (y < 50) h += 60 + R() * 120; // a wall of tall spires along the far edge
       let w = 8 + h * 0.2 * (0.7 + R() * 0.6);
       h = Math.max(16, Math.min(h, capBehind(x, y, w)));
+      w = Math.min(w, 8 + h * 0.3);
+      // Keep it off the rivers (see riverRoom; a basalt column is 1.3x as wide): one near a river
+      // is kept short enough that its lean doesn't reach it, or left out.
+      const room = riverRoom(x, y, w * 0.65, 0);
+      if (room < 0) continue;
+      h = Math.min(h, room / (LEAN * Math.abs(x - W / 2) / (W / 2)));
+      if (h < 16) continue;
       w = Math.min(w, 8 + h * 0.3);
       props.push({ x, y, k: R() < 0.8 ? 'spike' : 'basalt', h, w });
     }
@@ -278,14 +308,27 @@ const RunMap = (() => {
       ground.fillStyle = C[8];
       for (let k = 0; k < 48; k += 2) { const a = k / 48 * 6.283; ground.fillRect(Math.round(x / 2 + Math.cos(a) * ORB.rx), Math.round(y / 2 + Math.sin(a) * ORB.ry), 2, 1); }
     }
-    // Lava goes through a reused pixel buffer.
+    // Lava goes through a reused pixel buffer. The rivers never move, only their colors churn, so
+    // each row's span is worked out once, the rest of the buffer stays clear for good, and each
+    // frame copies just the two narrow strips the rivers run in onto the layer.
     const img = fx.createImageData(CW, CH), buf = new Uint32Array(img.data.buffer);
     const u32 = (h) => { const [r, g, b] = rgb(h); return ((255 << 24) | (b << 16) | (g << 8) | r) >>> 0; };
     const crust = u32(C[1]), hot = u32(C[7]), glow = u32(C[8]);
-    const lava = (f, t) => {
+    const river = (f) => {
+      const rows = [];
+      let x0 = CW, x1 = 0;
       for (let y = 0; y < CH; y++) {
-        const { c, w } = f(y * 2), cc = c / 2, ww = w / 2;
-        for (let x = Math.max(0, Math.floor(cc - ww - 2)); x <= Math.min(CW - 1, cc + ww + 2); x++) {
+        const { c, w } = f(y * 2), cc = c / 2, ww = w / 2, a = Math.max(0, Math.floor(cc - ww - 2)), b = Math.min(CW - 1, Math.floor(cc + ww + 2));
+        rows.push([cc, ww, a, b]);
+        x0 = Math.min(x0, a); x1 = Math.max(x1, b);
+      }
+      return { rows, x0, x1 };
+    };
+    const rivers = [river(lavaL), river(lavaR)];
+    const lava = ({ rows }, t) => {
+      for (let y = 0; y < CH; y++) {
+        const [cc, ww, a, b] = rows[y];
+        for (let x = a; x <= b; x++) {
           const d = Math.abs(x - cc) / ww;
           buf[y * CW + x] = d > 1 ? crust
             : d > 0.4 ? (Math.sin(y * 0.21 - t * 2.2 + x) > 0.8 ? hot : glow)
@@ -310,10 +353,10 @@ const RunMap = (() => {
     };
     const comets = edges.filter((e) => live.has(e.i));
     return (t) => {
-      buf.fill(0);
-      lava(lavaL, t);
-      lava(lavaR, t + 3);
-      fx.putImageData(img, 0, 0);
+      fx.clearRect(0, 0, CW, CH);
+      lava(rivers[0], t);
+      lava(rivers[1], t + 3);
+      for (const { x0, x1 } of rivers) fx.putImageData(img, 0, 0, x0, 0, x1 - x0 + 1, CH);
       runes.forEach(([x, y]) => rune(x, y, t));
       // A comet runs each live arc toward its stop, its tail stepping down in flat palette tones.
       for (const e of comets) {
@@ -351,11 +394,14 @@ const RunMap = (() => {
     const u32 = (h) => { const [r, gg, b] = rgb(h); return ((255 << 24) | (b << 16) | (gg << 8) | r) >>> 0; };
     const U = C.map(u32), P = SKY_PAD;
     let w = 0, h = 0, LW = 0, img, buf, lane, stars, rings, cx, cy, cam0 = null, ex = 0, ey = 0;
+    let cA, sQ, cQ, sR, cR, sP, cP, sS, cS; // the nebula's per-column and per-row sines
     const fit = () => {
       const nw = Math.max(1, Math.round(cv.clientWidth / SKY)), nh = Math.max(1, Math.round(cv.clientHeight / SKY));
       if (nw === w && nh === h) return;
       w = cv.width = nw; h = cv.height = nh; LW = w + P * 2;
       img = g.createImageData(w, h); buf = new Uint32Array(img.data.buffer);
+      [cA, sQ, cQ, sR, cR] = Array.from({ length: 5 }, () => new Float64Array(w));
+      [sP, cP, sS, cS] = Array.from({ length: 4 }, () => new Float64Array(h));
       const s = w / 320;
       cx = w / 2; cy = h * 0.17;
       rings = Array.from({ length: 8 }, (_, i) => (50 + i * 36) * s);
@@ -381,12 +427,28 @@ const RunMap = (() => {
       ex += (camX - cam0[0] - ex) * 0.3; ey += (camY - cam0[1] - ey) * 0.3;
       const fx = Math.max(-P, Math.min(P, Math.round(ex * SKY_FAR))), fy = Math.max(-P, Math.min(P, Math.round(ey * SKY_FAR)));
       const nx = Math.round(ex * SKY_NEAR), ny = Math.round(ey * SKY_NEAR);
-      const d = t * 2;
-      for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
-        const X = x - fx, Y = y - fy, xs = X * 320 / w, ys = Y * 320 / w;
-        let n = Math.sin(xs * 0.02 + d * 0.05) + Math.sin(ys * 0.035 - xs * 0.01 + d * 0.03) + Math.sin((xs + ys) * 0.013 + 1.7) * 1.2 - 0.4;
-        const l = lane[(Y + P) * LW + X + P], c = Math.floor(Math.max(0, n * Math.min(1, l) + (l > 1 ? 0.35 : 0)) * 1.4 + BAY[(x & 3) + (y & 3) * 4] / 16);
-        buf[y * w + x] = U[c >= 2 ? 2 : c >= 1 ? 1 : 0];
+      // The nebula is three sine waves: sin(a(x)) + sin(p(y) - q(x)) + 1.2 sin(r(x) + s(y)) - 0.4.
+      // Split by angle-sum identities, every sine is worked out once per column or row, not per
+      // pixel (a whole-screen nebula at three sines a pixel was most of the map's frame time).
+      const d = t * 2, k = 320 / w;
+      for (let x = 0; x < w; x++) {
+        const xs = (x - fx) * k;
+        cA[x] = Math.sin(xs * 0.02 + d * 0.05);
+        sQ[x] = Math.sin(xs * 0.01); cQ[x] = Math.cos(xs * 0.01);
+        sR[x] = Math.sin(xs * 0.013 + 1.7); cR[x] = Math.cos(xs * 0.013 + 1.7);
+      }
+      for (let y = 0; y < h; y++) {
+        const ys = (y - fy) * k;
+        sP[y] = Math.sin(ys * 0.035 + d * 0.03); cP[y] = Math.cos(ys * 0.035 + d * 0.03);
+        sS[y] = Math.sin(ys * 0.013); cS[y] = Math.cos(ys * 0.013);
+      }
+      for (let y = 0; y < h; y++) {
+        const sp = sP[y], cp = cP[y], ss = sS[y], cs = cS[y], row = (y - fy + P) * LW - fx + P, by = (y & 3) * 4;
+        for (let x = 0; x < w; x++) {
+          const n = cA[x] + sp * cQ[x] - cp * sQ[x] + 1.2 * (sR[x] * cs + cR[x] * ss) - 0.4;
+          const l = lane[row + x], c = Math.floor(Math.max(0, n * Math.min(1, l) + (l > 1 ? 0.35 : 0)) * 1.4 + BAY[(x & 3) + by] / 16);
+          buf[y * w + x] = U[c >= 2 ? 2 : c >= 1 ? 1 : 0];
+        }
       }
       // Stars (the near layer, wrapping round): the dim ones, plus a few twinkling into crosses.
       stars.forEach((st, i) => {
@@ -527,8 +589,13 @@ const RunMap = (() => {
     const letters = [];
     let lu = 35 - Math.ceil(signWidth('CASINO') / 2);
     for (const ch of 'CASINO') { letters.push([ch, lu]); lu += SIGN[ch][0].length * 2 + 2; }
-    return (t) => {
-      const step = Math.floor(t * 6);
+    // Everything below keys off a 6-a-second step, so the lights are only repainted when it ticks
+    // over (a canvas on the 3D board goes back to the GPU each time it is drawn).
+    let last = -1;
+    return (time) => {
+      const step = Math.floor(time * 6), t = step / 6;
+      if (step === last) return;
+      last = step;
       // Crown: bulbs chase along its top edge and across its foot, in opposite directions.
       bulbs.forEach(([u, v], i) => S(u, v, 1, 1, ((i - step) % 3 + 3) % 3 === 0 ? 7 : 8));
       for (let u = 2, i = 0; u < 68; u += 3, i++) S(u, 17, 1, 1, ((i + step) % 3 + 3) % 3 === 0 ? 7 : 4);
@@ -600,26 +667,32 @@ const RunMap = (() => {
      the ground inside it. Reachable = diamond and icon in accent (no blinking), visited = a dimmed
      icon, the rest = ink. Anything not drawn in ink gets a 1px ink outline, so it reads on any
      ground whatever the palette's accent is; an ink icon gets a paper outline instead, so it
-     stands off the dark speckle of the stone. */
+     stands off the dark speckle of the stone. The icon is its own small canvas, drawn 15% larger
+     than the diamond's pixels (ICON_X) and centred in it. */
   const BEACON = 29, DIAMOND = 12, BEACON_X = 3; // canvas px; the diamond's radius; drawn at 3x on the board (87 map units)
-  function drawBeacon(c, n, state, C) {
-    const x = c.getContext('2d'), m = BEACON >> 1;
-    x.clearRect(0, 0, c.width, c.height);
-    // Collect the beacon's pixels with their colors, then outline the non-ink ones and draw them all.
-    const px = [], rim = state === 'reach' ? C[8] : C[1], ink = state === 'reach' ? C[8] : state === 'done' ? C[2] : C[1];
-    const rect = (u, v, w, h, k, icon) => { for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) px.push([u + i, v + j, k, icon]); };
-    for (let d = -DIAMOND; d <= DIAMOND; d += 2) { const w = DIAMOND - Math.abs(d); rect(m - w, m + d, 1, 1, rim); rect(m + w, m + d, 1, 1, rim); }
-    for (const [u, v] of [[0, -DIAMOND], [0, DIAMOND], [-DIAMOND, 0], [DIAMOND, 0]]) rect(m + u - 1, m + v - 1, 3, 3, rim);
-    const ic = n.t === 'start' ? ['#####', '#####', '#####', '#####', '#####'] : BEACON_ICONS[n.t];
-    const u0 = m - (ic[0].length >> 1), v0 = m - (ic.length >> 1);
-    ic.forEach((r, j) => [...r].forEach((ch, i) => { if (ch === '#') rect(u0 + i, v0 + j, 1, 1, ink, true); }));
-    // Outlines first (paper round an ink icon, ink round anything else), then the pixels over them.
-    for (const [u, v, k, icon] of px) {
-      if (k === C[1] && !icon) continue;
-      x.fillStyle = k === C[1] ? C[6] : C[1];
-      x.fillRect(u - 1, v, 3, 1); x.fillRect(u, v - 1, 1, 3);
-    }
-    for (const [u, v, k] of px) { x.fillStyle = k; x.fillRect(u, v, 1, 1); }
+  const ICON = 13, ICON_X = 1.15; // the icon canvas (11 px icons plus their outline); its scale against the diamond's
+  function drawBeacon(c, icv, n, state, C) {
+    const rim = state === 'reach' ? C[8] : C[1], ink = state === 'reach' ? C[8] : state === 'done' ? C[2] : C[1];
+    // Collect a canvas's pixels with their colors, then draw the outlines (paper round an ink icon,
+    // ink round anything not ink; an ink diamond needs none) and the pixels over them.
+    const paint = (cv, px) => {
+      const x = cv.getContext('2d');
+      x.clearRect(0, 0, cv.width, cv.height);
+      for (const [u, v, k, icon] of px) {
+        if (k === C[1] && !icon) continue;
+        x.fillStyle = k === C[1] ? C[6] : C[1];
+        x.fillRect(u - 1, v, 3, 1); x.fillRect(u, v - 1, 1, 3);
+      }
+      for (const [u, v, k] of px) { x.fillStyle = k; x.fillRect(u, v, 1, 1); }
+    };
+    const m = BEACON >> 1, dia = [];
+    for (let d = -DIAMOND; d <= DIAMOND; d += 2) { const w = DIAMOND - Math.abs(d); dia.push([m - w, m + d, rim], [m + w, m + d, rim]); }
+    for (const [u, v] of [[0, -DIAMOND], [0, DIAMOND], [-DIAMOND, 0], [DIAMOND, 0]]) for (let j = -1; j <= 1; j++) for (let i = -1; i <= 1; i++) dia.push([m + u + i, m + v + j, rim]);
+    paint(c, dia);
+    const ic = n.t === 'start' ? ['#####', '#####', '#####', '#####', '#####'] : BEACON_ICONS[n.t], mi = ICON >> 1, icon = [];
+    const u0 = mi - (ic[0].length >> 1), v0 = mi - (ic.length >> 1);
+    ic.forEach((r, j) => [...r].forEach((ch, i) => { if (ch === '#') icon.push([u0 + i, v0 + j, ink, true]); }));
+    paint(icv, icon);
   }
 
   const FIG = 78; // figurine size in map units (1.3x the original 60)
@@ -699,19 +772,23 @@ const RunMap = (() => {
     ];
     const clear = (x, y, r) => block.every((b) => Math.hypot(x - b[0], y - b[1]) - b[2] > r);
     // Rune circles and obelisks: the classic spots, repeated down a longer board.
-    const tile = (spots) => Array.from({ length: Math.ceil(H / BOARD_BASE) }, (_, k) => spots.map(([x, y]) => [x, y + k * BOARD_BASE]).filter(([, y]) => y < H - 20)).flat();
+    // (Spots were placed on the 760-wide board: x scales with the board's width.)
+    const tile = (spots) => Array.from({ length: Math.ceil(H / BOARD_BASE) }, (_, k) => spots.map(([x, y]) => [Math.round(x * W / 760), y + k * BOARD_BASE]).filter(([, y]) => y < H - 20)).flat();
     const runes = tile([[110, 610], [650, 640], [650, 370], [110, 260], [640, 140], [120, 430]]).filter(([x, y]) => clear(x, y, 34)).slice(0, Math.round(3 * H / BOARD_BASE));
     runes.forEach(([x, y]) => block.push([x, y, 34]));
-    const obel = tile([[92, 400], [668, 180], [92, 150], [300, 34], [460, 34], [672, 520], [110, 770], [652, 800]]).filter(([x, y]) => clear(x, y, 14));
+    // An obelisk too close to a river for its height (see riverRoom) is moved in toward the middle.
+    const inward = ([x, y]) => { for (let i = 0; i < 12 && riverRoom(x, y, 15, 86) < 0; i++) x += x < W / 2 ? 8 : -8; return [x, y]; };
+    const obel = tile([[92, 400], [668, 180], [92, 150], [300, 34], [460, 34], [672, 520], [110, 770], [652, 800]]).map(inward).filter(([x, y]) => riverRoom(x, y, 15, 86) >= 0 && clear(x, y, 14));
     obel.forEach(([x, y]) => block.push([x, y, 18]));
     // Landmarks: two dice towers and an armillary, or the reverse, each on clear ground, off the
     // lava and well apart. Their own random stream, so the rest of the board is laid out as before.
     const LR = mulberry32((run.seed ^ 0xd1ce) >>> 0), marks = [];
     const kinds = LR() < 0.5 ? ['dice', 'dice', 'armillary'] : ['armillary', 'armillary', 'dice'];
-    const offLava = (x, y) => { const l = lavaL(y), r = lavaR(y); return x > l.c + l.w + 24 && x < r.c - r.w - 24; };
+    // Off the rivers, top included (see riverRoom): MARK sizes are canvas px, 2 map units each.
+    const offLava = (x, y, k) => riverRoom(x, y, MARK[k].w, MARK[k].h * 2) >= 0;
     for (let t = 0; t < 400 && marks.length < kinds.length; t++) {
       const x = 60 + LR() * (W - 120), y = 180 + LR() * (H - 300);
-      if (!offLava(x, y) || !clear(x, y, 34) || marks.some((m) => Math.hypot(m.x - x, m.y - y) < 220)) continue;
+      if (!offLava(x, y, kinds[marks.length]) || !clear(x, y, 34) || marks.some((m) => Math.hypot(m.x - x, m.y - y) < 220)) continue;
       marks.push({ x, y, k: kinds[marks.length], seed: marks.length });
       block.push([x, y, 30]);
     }
@@ -787,8 +864,12 @@ const RunMap = (() => {
         el.className = 'rm-nd';
         c.width = BEACON; c.height = BEACON;
         el.style.cssText = `left:${n.x - BEACON * BEACON_X / 2}px;top:${n.y - BEACON * BEACON_X / 2}px;width:${BEACON * BEACON_X}px;height:${BEACON * BEACON_X}px`;
-        drawBeacon(c, n, state, C);
-        el.appendChild(c);
+        const icv = document.createElement('canvas'), isz = ICON * BEACON_X * ICON_X;
+        icv.width = icv.height = ICON;
+        icv.className = 'rm-nd-ic';
+        icv.style.cssText = `left:${(BEACON * BEACON_X - isz) / 2}px;top:${(BEACON * BEACON_X - isz) / 2}px;width:${isz}px;height:${isz}px`;
+        drawBeacon(c, icv, n, state, C);
+        el.append(c, icv);
       }
       el.classList.toggle('reach', state === 'reach');
       pl.appendChild(el);

@@ -59,6 +59,18 @@ function costHTML(cost) {
   return h;
 }
 
+/* Rare and mythical cards wear a frame just inside their edge (style.css); commons keep the plain one.
+   It comes first in the face, so the band, cost and stats sit on top of it. */
+function rarityFrame(c) {
+  const r = rarityOf(c);
+  return r === 'common' ? '' : `<div class="c-frame ${r}"></div>`;
+}
+/* ' · rare' for the inspector's type line; nothing for commons. */
+function rarityTag(c) {
+  const r = rarityOf(c);
+  return r === 'common' ? '' : ` &middot; ${RARITIES[r].name.toLowerCase()}`;
+}
+
 /* Inner markup of a card face. `atk`/`hpNow` let the game show buffs and damage. */
 function cardInnerHTML(c, atk = c.atk, hpNow = c.hp - (c.dmg || 0)) {
   const name = escapeHTML(c.name);
@@ -71,7 +83,7 @@ function cardInnerHTML(c, atk = c.atk, hpNow = c.hp - (c.dmg || 0)) {
       <div class="c-glare"></div>`;
   }
   if (c.type === 'spell' || c.type === 'trap') {
-    return `
+    return `${rarityFrame(c)}
       <div class="c-band">${ico(COLORS[c.color].icon, '', PAL.w)} ${c.type.toUpperCase()}</div>
       <div class="c-name">${name}</div>
       <img class="c-art" src="${spriteURL(c.sprite)}" alt="">
@@ -79,7 +91,7 @@ function cardInnerHTML(c, atk = c.atk, hpNow = c.hp - (c.dmg || 0)) {
       <div class="c-text">${escapeHTML(c.short)}</div>
       <div class="c-glare"></div>`;
   }
-  return `
+  return `${rarityFrame(c)}
     <div class="c-band">${ico(COLORS[c.color].icon, '', PAL.w)} ${c.token ? 'TOKEN' : 'CREATURE'}</div>
     <div class="c-name">${name}</div>
     <img class="c-art" src="${spriteURL(c.sprite)}" alt="">
@@ -145,6 +157,14 @@ function cardInnerHTML(c, atk = c.atk, hpNow = c.hp - (c.dmg || 0)) {
   document.addEventListener('pointerleave', () => { if (cur) release(cur); cur = null; lastUid = null; });
 })();
 
+/* Fill a fixed-size inspector box, tightening the layout (style.css .i-dense, then .i-tight)
+   until a card with a lot of sigil text fits. */
+function inspectInto(el, html) {
+  el.innerHTML = html;
+  el.classList.remove('i-dense', 'i-tight');
+  for (const cls of ['i-dense', 'i-tight']) if (el.scrollHeight > el.clientHeight + 1) el.classList.add(cls);
+}
+
 /* Full description used by the inspector panels. */
 function inspectHTML(c, atk = c.atk, hpNow = c.hp - (c.dmg || 0)) {
   const name = escapeHTML(c.name);
@@ -161,14 +181,14 @@ function inspectHTML(c, atk = c.atk, hpNow = c.hp - (c.dmg || 0)) {
       : 'Pay its cost on your turn to set it face-down. It springs by itself during the enemy\'s turn, then goes to your grave.';
     return `
       <div class="i-head"><span class="i-name">${name}</span><span class="i-cost">${costHTML(c.cost)}</span></div>
-      <div class="i-type">${COLORS[c.color].name} ${c.type}</div>
+      <div class="i-type">${COLORS[c.color].name} ${c.type}${rarityTag(c)}</div>
       <div class="i-body"><img class="i-art" src="${spriteURL(c.sprite)}" alt=""></div>
       <div class="i-sigil">${ico(c.type)}<div>${escapeHTML(c.text)}</div></div>
       <div class="i-sigil muted">${how}</div>`;
   }
   return `
     <div class="i-head"><span class="i-name">${name}</span><span class="i-cost">${costHTML(c.cost)}</span></div>
-    <div class="i-type">${COLORS[c.color].name} ${c.token ? 'token' : 'creature'}${c.custom ? ' &middot; custom' : ''}</div>
+    <div class="i-type">${COLORS[c.color].name} ${c.token ? 'token' : 'creature'}${c.custom ? ' &middot; custom' : ''}${rarityTag(c)}</div>
     <div class="i-body">
       <img class="i-art" src="${spriteURL(c.sprite)}" alt="">
       <div class="i-stats">${ico('atk')} ${atk}${atk > c.atk ? ` <span class="muted">(${c.atk}+${atk - c.atk})</span>` : ''}<br>${ico('hp')} ${hpNow}/${c.hp}</div>

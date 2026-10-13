@@ -337,7 +337,7 @@ function dbInfoDefault() {
 
 function dbInfo(c) {
   const p = c.type === 'creature' ? `<div class="db-power muted">Power ${cardPower(c)} &middot; budget ~${cardBudget(c)}</div>` : '';
-  $('#dbInfo').innerHTML = `<div class="db-info-in">${inspectHTML(c)}${p}</div>`;
+  inspectInto($('#dbInfo'), `<div class="db-info-in">${inspectHTML(c)}${p}</div>`);
 }
 
 function dbCardEl(c) {

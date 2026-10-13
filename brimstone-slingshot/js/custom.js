@@ -144,7 +144,10 @@ function savedDeckToDef(d) {
 }
 
 /* Rough power estimate shared by the card maker's balance meter. */
-const SIGIL_WEIGHT = { airborne: 2, guardian: 1, haste: 1, deathtouch: 2, leech: 1, trample: 1, quick: 1, bonespawn: 1, regen: 1, scholar: 1, snipe: 0, mend: 0, rally: 2 };
+const SIGIL_WEIGHT = {
+  airborne: 2, guardian: 1, haste: 1, deathtouch: 2, leech: 1, trample: 1, quick: 1, bonespawn: 1, regen: 1, scholar: 1, snipe: 0, mend: 0, rally: 2,
+  thorns: 1, bloodlust: 1, reach: 1, spite: 1, grow: 2, undying: 3, shockwave: 2, warcry: 2,
+};
 function cardPower(c) {
   let p = c.atk + c.hp;
   for (const s of c.sigils) p += SIGIL_WEIGHT[s] || 0;

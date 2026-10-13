@@ -12,12 +12,13 @@ const RUN_MAX_LIFE = 20;
 const RUN_MIN_DECK = 15;                                // BURN A CARD or taking out lands can't go below this
 const RUN_MAX_LANDS = 20;                               // of each land type
 const RUN_ROWS = 10;                                    // rows of stops between the base and the casino
-const RUN_ROW_GAP = 150;                                // map units between rows
+const RUN_ROW_GAP = 180;                                // map units between rows
 // Map y by row: the base (row 0) at the bottom, the casino (row RUN_ROWS + 1) at y 70.
 const RUN_ROW_Y = Array.from({ length: RUN_ROWS + 2 }, (_, r) => 70 + (RUN_ROWS + 1 - r) * RUN_ROW_GAP);
 const RUN_BATTLE_ROWS = [1, 4, 7];                      // all battles; the last row is battles plus one campfire
-const RUN_COL_X = { 2: [250, 510], 3: [170, 380, 590] }; // map units: a row's stops, by count
-const RUN_LAYOUT = 3;                                   // bumped when the map's shape changes
+const RUN_MAP_W = 836, RUN_MID = RUN_MAP_W / 2;         // the board's width (map units, js/runmap.js) and middle
+const RUN_COL_X = { 2: [275, 561], 3: [187, 418, 649] }; // map units: a row's stops, by count
+const RUN_LAYOUT = 4;                                   // bumped when the map's shape changes
 // By row (1..RUN_ROWS): a battle's Dealer life, and the Dealer's priciest card.
 const DEALER_LIFE = [0, 8, 8, 8, 10, 10, 10, 12, 12, 12, 14];
 const DEALER_COST_CAP = [0, 2, 2, 2, 2, 2, 2, 3, 3, 3, 4];
@@ -78,13 +79,39 @@ function runPool(colors, maxCost = 99) {
     && colors.includes(c.color) && COLOR_KEYS.every((k) => !c.cost[k] || colors.includes(k))
     && costTotal(c.cost) <= maxCost);
 }
-const runPrice = (c) => Math.min(4, Math.max(2, costTotal(c.cost)));
+
+/* Rarity (data.js RARITIES): every card a stop offers rolls its own, mostly common and rarer the
+   further up the map. A rarity with nothing left to offer falls back to a commoner one. */
+const RUN_RARE_ODDS = [0.18, 0.3];                      // chance an offer is rare: on row 1, rising to row RUN_ROWS
+const RUN_MYTHICAL_ODDS = [0.02, 0.06];                 // ...or mythical
+const RARITY_MARKUP = { common: 0, rare: 2, mythical: 4 }; // the trader's extra teeth
+function runRarity(R, row = 1) {
+  const t = Math.max(0, Math.min(1, (row - 1) / (RUN_ROWS - 1)));
+  const at = ([lo, hi]) => lo + (hi - lo) * t;
+  const r = R(), m = at(RUN_MYTHICAL_ODDS);
+  return r < m ? 'mythical' : r < m + at(RUN_RARE_ODDS) ? 'rare' : 'common';
+}
+/* n different cards in `colors` for a stop to offer, each of a rolled rarity. `weight` picks among
+   the cards of that rarity, one card is sure to be at least `least`, and `skip` ids are left out. */
+function runOffer(R, colors, n, { row = 1, weight = () => 1, least = 'common', skip = [] } = {}) {
+  const pool = runPool(colors).filter((c) => !skip.includes(c.id)), out = [];
+  for (let i = 0; i < n; i++) {
+    const roll = Math.max(RARITY_KEYS.indexOf(runRarity(R, row)), i ? 0 : RARITY_KEYS.indexOf(least));
+    let left = [];
+    for (let k = roll; k >= 0 && !left.length; k--) left = pool.filter((c) => rarityOf(c) === RARITY_KEYS[k] && !out.includes(c));
+    if (!left.length) left = pool.filter((c) => !out.includes(c));
+    if (!left.length) break;
+    out.push(runPickN(R, left, 1, weight)[0]);
+  }
+  return runShuffle(R, out);
+}
+const runPrice = (c) => Math.min(4, Math.max(2, costTotal(c.cost))) + RARITY_MARKUP[rarityOf(c)];
 function getRunRecord() { return { wins: 0, losses: 0, ...Store.read(RUN_RECORD_KEY, {}) }; }
 
 /* Start, 5 rows of 2-3 stops, then the boss. Links run in sorted order, so the map's arcs never cross. */
 function genRunMap(R) {
   const even = (v) => Math.round(v / 2) * 2;
-  const nodes = [{ id: 0, row: 0, x: 380, y: RUN_ROW_Y[0], t: 'start' }];
+  const nodes = [{ id: 0, row: 0, x: RUN_MID, y: RUN_ROW_Y[0], t: 'start' }];
   const rows = [[0]];
   for (let r = 1; r <= RUN_ROWS; r++) {
     const k = R() < 0.5 ? 2 : 3;
@@ -100,7 +127,7 @@ function genRunMap(R) {
       return n.id;
     }));
   }
-  nodes.push({ id: nodes.length, row: RUN_ROWS + 1, x: 380, y: RUN_ROW_Y[RUN_ROWS + 1], t: 'boss' });
+  nodes.push({ id: nodes.length, row: RUN_ROWS + 1, x: RUN_MID, y: RUN_ROW_Y[RUN_ROWS + 1], t: 'boss' });
   rows.push([nodes.length - 1]);
 
   const edges = [];
@@ -122,17 +149,28 @@ function genRunMap(R) {
   return { nodes, edges, layout: RUN_LAYOUT };
 }
 
-/* Respace a map saved under the old layout (rows 130 apart, stops 170 apart) to the current one,
-   keeping each stop's jitter, so a run in progress gets the roomier board too. */
+/* Respace a map saved under an old layout to the current one, keeping each stop's jitter, so a
+   run in progress gets the roomier board too. */
 function respaceRunMap(map) {
-  // Layout 2 (5 rows, the roomy spacing) still plays as saved: the board sizes itself to the map.
-  if (map.layout >= 2) return;
-  const oldY = [840, 710, 580, 450, 320, 190, 70], newY = [960, 810, 660, 510, 360, 210, 70], even = (v) => Math.round(v / 2) * 2;
-  for (const n of map.nodes) {
-    n.y = even(newY[n.row] + (n.y - oldY[n.row]));
-    n.x = even(380 + (n.x - 380) * (210 / 170));
+  const even = (v) => Math.round(v / 2) * 2;
+  // Layout 1 (rows 130 apart, stops 170 apart) to layout 2 (rows 150 apart, stops 210 apart).
+  if (!(map.layout >= 2)) {
+    const oldY = [840, 710, 580, 450, 320, 190, 70], newY = [960, 810, 660, 510, 360, 210, 70];
+    for (const n of map.nodes) {
+      n.y = even(newY[n.row] + (n.y - oldY[n.row]));
+      n.x = even(380 + (n.x - 380) * (210 / 170));
+    }
+    map.layout = 2;
   }
-  map.layout = 2;
+  // Layouts 2 and 3 (a 760-wide board, rows 150 apart) to layout 4: the board 10% wider, the
+  // rows 20% further apart. (Layout 2's five rows still play as five: the board sizes itself.)
+  if (map.layout < 4) {
+    for (const n of map.nodes) {
+      n.x = even(RUN_MID + (n.x - 380) * 1.1);
+      n.y = even(70 + (n.y - 70) * (RUN_ROW_GAP / 150));
+    }
+    map.layout = 4;
+  }
 }
 
 /* ---------- events at ? stops ----------
@@ -186,12 +224,12 @@ const RUN_EVENTS = [
   },
   {
     id: 'offer', title: "THE DEALER'S OFFER", art: 'dealer',
-    text: 'The Dealer slides a card across the table. "A gift. I\'ll take my due at the next hand."',
+    text: 'The Dealer slides a card across the table. Its frame glints: rare, or better. "A gift. I\'ll take my due at the next hand."',
     choices: [
-      { label: 'ACCEPT', ok: (run) => runPool(run.s.colors).some((c) => costTotal(c.cost) >= 4), need: 'Nothing on offer for your colors.',
+      { label: 'ACCEPT', ok: (run) => runPool(run.s.colors).some((c) => rarityOf(c) !== 'common'), need: 'Nothing on offer for your colors.',
         act: (run) => {
-          const pool = runPool(run.s.colors).filter((c) => costTotal(c.cost) >= 4);
-          const c = pool[Math.floor(Math.random() * pool.length)];
+          // One gift in four is mythical.
+          const c = runOffer(Math.random, run.s.colors, 1, { row: run.row(), least: Math.random() < 0.25 ? 'mythical' : 'rare' })[0];
           run.add(c.id);
           run.s.dealerBonus = 5;
           return `You take ${c.name}. The Dealer's next hand starts with +5 life.`;
@@ -225,13 +263,33 @@ const RUN_EVENTS = [
       { label: 'TRADE', ok: (run) => run.s.deck.length > 0, need: 'You have no card to trade.',
         act: (run) => {
           const out = run.cards().sort((a, b) => costTotal(a.cost) - costTotal(b.cost))[0];
-          const pool = runPool(run.s.colors).filter((c) => c.id !== out.base);
-          const c = pool[Math.floor(Math.random() * pool.length)];
+          const c = runOffer(Math.random, run.s.colors, 1, { row: run.row(), skip: [out.base] })[0];
           run.remove(out.rid);
           run.add(c.id);
           return `You gave up ${out.name} and got ${c.name}.`;
         } },
       { label: 'WALK PAST', act: () => 'They go back to shuffling.' },
+    ],
+  },
+  /* A choice with `cards` deals some cards to pick one of (Run.eventCards), and `take` keeps it. */
+  {
+    id: 'pack', title: 'SEALED PACK', art: 'ri_pack',
+    text: 'A sealed pack of cards lies in the ash, its foil still bright. Tear it open and keep one card: one of the three is sure to be rare or better.',
+    choices: [
+      { label: 'TEAR IT OPEN', cards: (run) => runOffer(Math.random, run.s.colors, 3, { row: run.row(), least: 'rare' }).map((c) => c.id),
+        take: (run, c) => { run.add(c.id); return `${c.name} joins your deck.`; } },
+      { label: 'SELL IT (+3 TEETH)', act: (run) => { run.gainTeeth(3); return 'A trader will pay 3 teeth for it, still sealed.'; } },
+    ],
+  },
+  {
+    id: 'reliquary', title: 'RELIQUARY', art: 'ri_relic',
+    text: 'Behind a rusted grate, two cards hum like struck bells. Mythical, both of them. The grate only opens for blood: 6 life buys one.',
+    choices: [
+      { label: 'PAY 6 LIFE', ok: (run) => run.s.life > 6 && runPool(run.s.colors).some((c) => rarityOf(c) === 'mythical'),
+        need: 'Needs more than 6 life, and a mythical card in your colors.', prompt: 'Pick one. The grate takes 6 life for it.',
+        cards: (run) => runPickN(Math.random, runPool(run.s.colors).filter((c) => rarityOf(c) === 'mythical'), 2).map((c) => c.id),
+        take: (run, c) => { run.s.life -= 6; run.add(c.id); return `The grate drinks 6 life and swings open. ${c.name} joins your deck.`; } },
+      { label: 'LEAVE', act: () => 'The cards hum on behind the grate.' },
     ],
   },
   /* Runs its own screen (Run.slots) instead of choices. */
@@ -304,7 +362,7 @@ const SLOT_FILL = ['card', 'might', 'hp', 'tooth', 'chip', 'bone'];
 /* The sigil wheel: one free spin, no rerolls, and the sigil it lands on goes to a creature you pick. */
 const WHEEL_N = 8;                                      // segments round the wheel
 const WHEEL_PX = 112;                                   // drawn at this size, shown 3x
-const WHEEL_SKIP = ['snipe', 'mend'];                   // sigils with an amount stay off the wheel
+const WHEEL_SKIP = ['snipe', 'mend', 'undying'];        // sigils with an amount, and the mythicals' Undying, stay off the wheel
 const WHEEL_SPIN_MS = 4200;
 
 const Run = {
@@ -374,6 +432,7 @@ const Run = {
   },
   heal(n) { const h = Math.max(0, Math.min(n, this.s.maxLife - this.s.life)); this.s.life += h; return h; },
   gainTeeth(n) { this.s.teeth += n; this.s.stats.teeth += n; },
+  row() { return this.s.map.nodes[this.s.cur].row; }, // the map row of the stop the run is at
 
   deckDef() {
     const list = {};
@@ -547,7 +606,7 @@ const Run = {
       </div>`, true);
   },
 
-  /* Card faces you can click; `small` shrinks them to fit a whole deck. */
+  /* Card faces you can click; `small` shrinks them to fit a whole deck. Hovering one shows what it does. */
   cardGrid(el, defs, onPick, small = false) {
     el.classList.add('rn-cards');
     el.classList.toggle('small', small);
@@ -555,11 +614,29 @@ const Run = {
       const c = document.createElement('div');
       c.className = `card ${d.type}${d.token ? ' token' : ''}`;
       c.innerHTML = cardInnerHTML(d);
-      if (onPick) c.onclick = () => { sfx('select'); onPick(d); };
+      c.onmouseenter = () => this.tip(c, d);
+      c.onmouseleave = () => this.tip(null);
+      if (onPick) c.onclick = () => { sfx('select'); this.tip(null); onPick(d); };
       else c.classList.add('still');
       el.appendChild(c);
     }
     if (!defs.length) el.innerHTML = '<span class="muted">Nothing here.</span>';
+  },
+
+  /* The card's full text in a panel beside it, like the battle's inspector (null hides it). */
+  tip(el, d) {
+    let t = $('#rnTip');
+    if (!el) { if (t) t.remove(); return; }
+    if (!t) {
+      t = document.createElement('div');
+      t.id = 'rnTip';
+      t.className = 'rn-tip panel';
+      $('#screen').appendChild(t);
+    }
+    t.innerHTML = inspectHTML(d);
+    const r = relRect(el), w = t.offsetWidth, h = t.offsetHeight;
+    t.style.left = `${r.x + r.w + 12 + w <= 1268 ? r.x + r.w + 12 : r.x - 12 - w}px`;
+    t.style.top = `${Math.max(12, Math.min(708 - h, r.y))}px`;
   },
 
   /* ---------- battle ---------- */
@@ -568,7 +645,8 @@ const Run = {
     const boss = n.t === 'boss', R = this.rand(100 + n.id);
     const home = rival && DECKS[rival.deck];
     const colors = home ? home.colors.slice(0, 2) : runShuffle(R, COLOR_KEYS.slice()).slice(0, 2);
-    const pool = runPool(colors, boss ? BOSS_COST_CAP : DEALER_COST_CAP[n.row]);
+    // The Dealer deals itself commons only: the rarer cards are yours to find.
+    const pool = runPool(colors, boss ? BOSS_COST_CAP : DEALER_COST_CAP[n.row]).filter((c) => rarityOf(c) === 'common');
     const list = {}, lands = boss ? 5 : 4;
     colors.forEach((k) => (list['land_' + k] = lands));
     for (let k = 0, guard = 0; k < (boss ? 10 : 10) && guard < 200; guard++) {
@@ -632,8 +710,8 @@ const Run = {
 
   reward(n) {
     const s = this.s, node = s.node, R = this.rand(200 + n.id);
-    const want = 2 + Math.floor(n.row / 3); // later rows lean toward pricier cards
-    const offers = runPickN(R, runPool(s.colors), 3, (c) => (costTotal(c.cost) >= want ? 3 : 1));
+    const want = 2 + Math.floor(n.row / 3); // later rows lean toward pricier cards, and rarer ones
+    const offers = runOffer(R, s.colors, 3, { row: n.row, weight: (c) => (costTotal(c.cost) >= want ? 3 : 1) });
     this.screen('ri_battle', 'SPOILS',
       `The Dealer pays ${node.teeth} ${node.teeth === 1 ? 'tooth' : 'teeth'} for the overkill, and you catch your breath (+${RUN_WIN_HEAL} life). Take one card for your deck.`,
       '', '<button class="btn" id="rnSkip">SKIP (+1 TOOTH)</button>');
@@ -733,10 +811,13 @@ const Run = {
   },
 
   /* ---------- trader ---------- */
+  /* The trader's three cards at stop n: the same ones whenever it is opened. Rarer ones cost more (runPrice). */
+  traderOffers(n) { return runOffer(this.rand(400 + n.id), this.s.colors, 3, { row: n.row }); },
+
   trader(n) {
     const s = this.s, node = s.node;
     if (!node.offers) {
-      node.offers = runPickN(this.rand(400 + n.id), runPool(s.colors), 3).map((c) => ({ id: c.id, price: runPrice(c), sold: false }));
+      node.offers = this.traderOffers(n).map((c) => ({ id: c.id, price: runPrice(c), sold: false }));
       node.tonic = false;
       this.save();
     }
@@ -824,6 +905,7 @@ const Run = {
     if (node.choice != null) {
       const ch = ev.choices[node.choice];
       if (ch.transfer) return this.transfer({ icon: ev.art, title: ev.title, consume: false, cost: ch.cost });
+      if (ch.cards) return this.eventCards(ev, ch);
       this.screen(ev.art, ev.title, 'Pick a creature.', '', '<button class="btn" id="rnBack">BACK</button>');
       const mons = this.creatures().filter(ch.pick);
       this.cardGrid($('#rnBody'), mons, (d) => this.finishStop(ev.art, ev.title, ch.act(this, d)), mons.length > 7);
@@ -840,9 +922,19 @@ const Run = {
       const ch = ev.choices[+b.dataset.ch];
       if (!this.canChoose(ch)) return;
       sfx('select');
-      if (ch.pick || ch.transfer) { node.choice = +b.dataset.ch; this.save(); this.event(n); }
+      if (ch.cards) node.cards = ch.cards(this);
+      if (ch.pick || ch.transfer || ch.cards) { node.choice = +b.dataset.ch; this.save(); this.event(n); }
       else this.finishStop(ev.art, ev.title, ch.act(this));
     }));
+  },
+
+  /* A ? stop's cards to pick one of (a sealed pack, the reliquary). They are dealt once and kept on
+     the stop, so a reload shows the same ones, and there is no going back to choose something else. */
+  eventCards(ev, ch) {
+    const defs = (this.s.node.cards || []).map((id) => CARDS[id]).filter(Boolean);
+    this.screen(ev.art, ev.title, ch.prompt || 'Take one card for your deck.', '', '<button class="btn" id="rnLeave">LEAVE</button>');
+    this.cardGrid($('#rnBody'), defs, (c) => this.finishStop(ev.art, ev.title, ch.take(this, c)));
+    $('#rnLeave').onclick = () => { sfx('select'); this.leave(); };
   },
 
   /* ---------- the slot machine (a ? stop event) ----------
@@ -858,7 +950,7 @@ const Run = {
     let out;
     for (let tries = 0; tries < 6; tries++) { // a reroll tries not to land on the same payout again
       const k = pick(kinds);
-      if (k === 'card') out = { k, id: pick(pool).id };
+      if (k === 'card') out = { k, id: runOffer(Math.random, s.colors, 1, { row: this.row() })[0].id };
       else if (k === 'buff') out = { k, rid: pick(mons).rid, stat: Math.random() < SLOT_ATK_ODDS ? 'atk' : 'hp', by: 1 };
       else out = { k, n: SLOT_HEAL };
       if (!prev || JSON.stringify(out) !== JSON.stringify(prev)) break;

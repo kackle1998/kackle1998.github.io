@@ -408,8 +408,8 @@ async function showReveals() {
 function cardEl(c) {
   const el = document.createElement('div');
   // Pricey cards catch the light now and then, like a special gem.
-  const rare = c.cost && Object.values(c.cost).reduce((s, n) => s + n, 0) >= 4;
-  el.className = `card ${c.type}${c.token ? ' token' : ''}${rare ? ' rare' : ''}`;
+  const pricey = c.cost && Object.values(c.cost).reduce((s, n) => s + n, 0) >= 4;
+  el.className = `card ${c.type}${c.token ? ' token' : ''}${pricey ? ' pricey' : ''}`;
   el.dataset.uid = c.uid;
   el.innerHTML = cardInnerHTML(c, game && c.type === 'creature' ? game.attackOf(c) : c.atk);
   el.addEventListener('mouseenter', () => inspect(c));
@@ -418,8 +418,8 @@ function cardEl(c) {
 
 /* ---------- inspector ---------- */
 function inspect(c) {
-  $('#inspector').innerHTML = inspectHTML(c, game && c.type === 'creature' ? game.attackOf(c) : c.atk) +
-    (c.attacked && game && game.onBoard(c) ? '<div class="i-sigil muted">Tapped: it has attacked and untaps at the start of its owner\'s turn. It still fights back if attacked.</div>' : '');
+  inspectInto($('#inspector'), inspectHTML(c, game && c.type === 'creature' ? game.attackOf(c) : c.atk) +
+    (c.attacked && game && game.onBoard(c) ? '<div class="i-sigil muted">Tapped: it has attacked and untaps at the start of its owner\'s turn. It still fights back if attacked.</div>' : ''));
 }
 
 function inspectDefault() {
@@ -606,7 +606,10 @@ function onHand(c) {
   if (c.type === 'creature' && !you.board.includes(null)) { toast('Your board is full.'); sfx('err'); return; }
   if (c.type === 'trap' && !you.traps.includes(null)) { toast('Your trap zone is full.'); sfx('err'); return; }
   if (c.type === 'spell' && !game.spellUsable(you, c)) {
-    toast(c.target ? 'No valid target for that.' : 'Nothing for that spell to do yet.'); sfx('err'); return;
+    toast(game.spellNeedsSlot(c) && !you.board.includes(null) ? 'Your board is full.'
+      : c.target ? 'No valid target for that.' : 'Nothing for that spell to do yet.');
+    sfx('err');
+    return;
   }
   if (!game.payPlan(you, c.cost)) { toast('Not enough energy.'); sfx('err'); return; }
   if (sel.hand === c.uid) {
@@ -712,9 +715,9 @@ function onEnemyPanel() {
   if (isTarget({ player: OPP })) playerAttack({ player: OPP });
   else {
     const a = selectedAttacker(), foes = game.livingBoard(game.players[OPP]);
-    const flyers = a && has(a, 'airborne') && !foes.some((e) => has(e, 'guardian')) && foes.some((e) => has(e, 'airborne'));
+    const flyers = a && has(a, 'airborne') && !foes.some((e) => has(e, 'guardian')) && foes.some((e) => has(e, 'airborne') || has(e, 'reach'));
     const whose = `${oppTitle()}'s`, Whose = whose[0].toUpperCase() + whose.slice(1);
-    toast(flyers ? `${Whose} flyers block the way! Take them out first.` : `Clear ${whose} creatures first (Airborne ignores this unless ${oppTitle()} has flyers).`);
+    toast(flyers ? `${Whose} flyers and Reach creatures guard the sky! Take them out first.` : `Clear ${whose} creatures first (Airborne ignores this unless ${oppTitle()} has flyers or Reach).`);
     sfx('err');
   }
 }
@@ -1018,8 +1021,9 @@ const RULES_HTML = `
     <li>Attack by choosing an enemy creature: both strike each other at once. <b>Damage stays</b> on creatures.</li>
     <li><b>Spells</b> are cast on your own turn only: they take effect at once, then go to the grave.</li>
     <li><b>Traps</b> are paid for and set face-down on your turn (up to 3). They spring by themselves on the enemy's turn when they attack, summon or cast a spell.</li>
-    <li>You may only hit the Dealer <b>directly</b> when they have no creatures, unless your attacker is <b>Airborne</b> and the Dealer has no Airborne creatures of their own. <b>Guardians</b> must be attacked first.</li>
+    <li>You may only hit the Dealer <b>directly</b> when they have no creatures, unless your attacker is <b>Airborne</b> and the Dealer has no Airborne or <b>Reach</b> creatures of their own. <b>Guardians</b> must be attacked first.</li>
     <li>Ring the <b>bell</b> to end your turn. Drawing from an empty deck hurts, more each time.</li>
+    <li>A card's border shows its rarity: <b>common</b> (plain), <b>rare</b> (a thick frame) or <b>mythical</b> (a double frame with corner studs). Rarer cards are stronger, and turn up less often on the Dealer's circuit.</li>
   </ul>`;
 
 function showScreen(html, dim = false) {

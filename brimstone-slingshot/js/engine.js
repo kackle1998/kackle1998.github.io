@@ -9,6 +9,7 @@ const START_LIFE = 20;
 const START_HAND = 5;
 const BOSS_PHASE_AT = 8;    // a boss Dealer at or below this much life raises the stakes, once
 const BOSS_PHASE_LIFE = 12; // ...healing back up to this
+const GROW_MAX = 2;         // a Grow creature stops growing after this many turns (3 let cheap ones snowball)
 
 let _uid = 1;
 
@@ -112,6 +113,10 @@ class Game {
       if (has(c, 'regen') && c.dmg > 0) {
         this.fx.push({ kind: 'heal', uid: c.uid, n: c.dmg });
         c.dmg = 0;
+      }
+      if (has(c, 'grow') && (c.grown || 0) < GROW_MAX) {
+        c.grown = (c.grown || 0) + 1;
+        this.buffCreature(c, 1);
       }
     }
     if (this.turnNum > 1) this.drawCard(p); // the starting player skips their first draw
@@ -222,10 +227,21 @@ class Game {
 
   graveCreatures(p) { return p.grave.filter((c) => c.type === 'creature' && !c.token); }
 
+  /* Spells that put a creature on the caster's board need an empty slot for it. */
+  spellNeedsSlot(c) { return ['swarm', 'exhume', 'theft'].includes(c.fx); }
+
   spellUsable(p, c) {
+    if (this.spellNeedsSlot(c) && !p.board.includes(null)) return false;
     if (c.target) return this.spellTargets(p, c).length > 0;
-    if (c.fx === 'raise') return this.graveCreatures(p).length > 0;
+    if (c.fx === 'raise' || c.fx === 'exhume') return this.graveCreatures(p).length > 0;
     return true;
+  }
+
+  /* A creature a spell brings onto `p`'s board, into the first empty slot. Like a summon, it waits a turn to attack. */
+  putOnBoard(p, id) {
+    const slot = p.board.indexOf(null);
+    if (slot < 0) return null;
+    return (p.board[slot] = instantiate(id, p.idx));
   }
 
   castSpell(p, handIdx, targetUid) {
@@ -279,6 +295,37 @@ class Game {
         this.say(`${back.name} returned to ${this.possessive(p)} hand.`, p);
         break;
       }
+      case 'swarm': for (let i = 0; i < n; i++) this.putOnBoard(p, c.makes); break;
+      case 'stampede':
+        for (const a of this.livingBoard(p)) {
+          a.atk += n;
+          if (!has(a, 'trample')) a.sigils.push('trample');
+          this.fx.push({ kind: 'heal', uid: a.uid, n });
+        }
+        break;
+      case 'coil': this.damageCreature(t, n, false); this.healPlayer(p, n); break;
+      case 'spark': this.damageCreature(t, n, false); this.drawCard(p); break;
+      case 'chain': this.damageCreature(t, n, false); this.damagePlayer(o, n); break;
+      case 'exhume': {
+        // The priciest creature in the grave; of equals, the last to fall.
+        const back = this.graveCreatures(p).reduce((b, x) => (costTotal(x.cost) >= costTotal(b.cost) ? x : b));
+        p.grave.splice(p.grave.indexOf(back), 1);
+        const risen = this.putOnBoard(p, back.id);
+        this.say(`${back.name} rose from ${this.possessive(p)} grave.`, p);
+        if (risen) this.onSummon(p, risen);
+        break;
+      }
+      case 'petrify': // no death: Bone Spawn, Spite and Undying don't stir
+        o.board[o.board.indexOf(t)] = instantiate(c.makes, o.idx);
+        o.grave.push(t);
+        this.say(`${t.name} turned to stone.`, p);
+        break;
+      case 'theft':
+        o.board[o.board.indexOf(t)] = null;
+        p.board[p.board.indexOf(null)] = t;
+        Object.assign(t, { owner: p.idx, sick: !has(t, 'haste'), attacked: false });
+        this.say(`${this.subj(p)} took control of ${t.name}.`, p);
+        break;
     }
   }
 
@@ -332,10 +379,12 @@ class Game {
     const a = ctx.attacker;
     switch (t.fx) {
       case 'snare': this.damageCreature(a, t.n, false); return a.dead;
-      case 'reflect': this.damageCreature(a, this.attackOf(a), false); return true;
+      case 'reflect': case 'prism': this.damageCreature(a, this.attackOf(a), false); return true;
       case 'stasis': this.livingBoard(this.opp(owner)).forEach((c) => (c.attacked = true)); return true;
       case 'pit': this.damageCreature(ctx.creature, Math.max(1, hpLeft(ctx.creature)), true); return true;
       case 'counter': this.say(`${ctx.spell.name} was countered.`, owner); return true;
+      case 'cage': this.say(`${a.name} was caught in the cage.`, owner); return true;
+      case 'glyph': this.damageCreature(ctx.creature, t.n, false); return ctx.creature.dead; // a summon it kills does nothing
     }
     return false;
   }
@@ -355,6 +404,20 @@ class Game {
       if (t) {
         this.say(`${c.name} blasted ${t.name} for ${c.snipe}.`, p);
         this.damageCreature(t, c.snipe, false);
+      }
+    }
+    if (has(c, 'shockwave')) {
+      const foes = this.livingBoard(this.opp(p));
+      if (foes.length) {
+        this.say(`${c.name} sent out a shockwave.`, p);
+        foes.forEach((e) => this.damageCreature(e, 1, false));
+      }
+    }
+    if (has(c, 'warcry')) {
+      const allies = this.livingBoard(p).filter((a) => a !== c);
+      if (allies.length) {
+        this.say(`${c.name} let out a war cry.`, p);
+        allies.forEach((a) => this.buffCreature(a, 1));
       }
     }
   }
@@ -393,7 +456,8 @@ class Game {
     const guards = enemies.filter((e) => has(e, 'guardian'));
     if (guards.length) return guards.map((e) => ({ uid: e.uid }));
     const t = enemies.map((e) => ({ uid: e.uid }));
-    if (!enemies.length || (has(c, 'airborne') && !enemies.some((e) => has(e, 'airborne')))) t.push({ player: o.idx });
+    const sky = enemies.some((e) => has(e, 'airborne') || has(e, 'reach')); // flyers and Reach guard the sky
+    if (!enemies.length || (has(c, 'airborne') && !sky)) t.push({ player: o.idx });
     return t;
   }
 
@@ -405,10 +469,14 @@ class Game {
     const dKills = dAtk > 0 && (dAtk >= aHp || has(d, 'deathtouch'));
     let toD = aAtk, toA = dAtk, aDies = dKills, dDies = aKills;
     const aQ = has(a, 'quick'), dQ = has(d, 'quick');
-    if (aQ && !dQ && aKills) { toA = 0; aDies = false; }
+    const firstKill = aQ && !dQ && aKills;
+    if (firstKill) { toA = 0; aDies = false; }
     else if (dQ && !aQ && dKills) { toD = 0; dDies = false; }
+    // Thorns prick the attacker, unless its Quick strike killed the thorny one first.
+    const thorns = has(d, 'thorns') && !firstKill ? 1 : 0;
+    if (thorns && (toA + thorns >= aHp || has(d, 'deathtouch'))) aDies = true;
     const pierce = has(a, 'trample') && dDies && toD > 0 ? Math.max(0, aAtk - dHp) : 0;
-    return { aAtk, dAtk, toA, toD, aDies, dDies, pierce };
+    return { aAtk, dAtk, toA, toD, aDies, dDies, pierce, thorns };
   }
 
   resolveAttack(a, target) {
@@ -432,12 +500,26 @@ class Game {
         this.damageCreature(a, r.toA, has(d, 'deathtouch'));
         this.leech(d, o, r.toA);
       }
+      if (r.thorns) {
+        this.say(`${d.name}'s thorns pricked ${a.name}.`, o);
+        this.damageCreature(a, r.thorns, has(d, 'deathtouch'));
+      }
       if (r.pierce > 0) {
         this.say(`${a.name} pierced through for ${r.pierce}.`, p);
         this.damagePlayer(o, r.pierce);
       }
+      this.bloodlust(a, d);
+      this.bloodlust(d, a);
     }
     this.checkOver();
+  }
+
+  /* Bloodlust: a creature that kills in combat, and lives, gains +1 attack for good. */
+  bloodlust(c, victim) {
+    if (!has(c, 'bloodlust') || c.dead || !victim.dead) return;
+    c.atk += 1;
+    this.fx.push({ kind: 'heal', uid: c.uid, n: 1 });
+    this.say(`${c.name}'s bloodlust grew.`, this.players[c.owner]);
   }
 
   /* Leech heals its owner, at most once per turn per creature. */
@@ -487,19 +569,28 @@ class Game {
 
   hasDying() { return this.players.some((p) => p.board.some((c) => c && c.dead)); }
 
-  /* Remove dead creatures; Bone Spawn leaves a Skeleton behind. */
+  /* Remove dead creatures. Bone Spawn leaves a Skeleton behind, Spite hits the enemy,
+     and an Undying creature goes back to its owner's hand instead of the grave. */
   cleanup() {
     const died = [];
     for (const p of this.players) {
       p.board.forEach((c, i) => {
         if (!c || !c.dead) return;
         p.board[i] = null;
-        p.grave.push(c);
         died.push(c);
         this.say(`${c.name} perished.`, p);
+        if (has(c, 'undying')) {
+          p.hand.push(instantiate(c.id, p.idx));
+          this.say(`${c.name} returned to ${this.possessive(p)} hand.`, p);
+        } else p.grave.push(c);
         if (has(c, 'bonespawn')) {
           p.board[i] = instantiate('skeleton', p.idx);
           this.say('A Skeleton rose from the bones.', p);
+        }
+        if (has(c, 'spite')) {
+          const o = this.opp(p);
+          this.say(`${c.name}'s spite struck ${this.obj(o)} for 2.`, p);
+          this.damagePlayer(o, 2);
         }
       });
     }

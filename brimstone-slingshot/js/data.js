@@ -37,6 +37,34 @@ const SPRITES = {
     '....#..#', '....#++#', '#.#.####', '#.#.#...', '#####...', '.#..####', '....#+++', '...#++++',
     '...#+#w+', '...#+##+', '...#++++', '....#+++', '....#+++', '....#-#-', '....#---', '.....###',
   ],
+  porcupine: [
+    '........', '...#..#.', '..#-##-#', '.#-#--#-', '#.#--#--', '.#--#--#', '#-#--#--', '#--#####',
+    '.#-#++++', '#-#+#w++', '.#-+##++', '.##++---', '..#++-##', '...#+---', '....####', '........',
+  ],
+  badger: [
+    '........', '........', '..##....', '.#+-#...', '.#++####', '#+++##ww', '#++###ww', '#+#w##ww',
+    '#+####ww', '#+++##ww', '.#+++##w', '..#++++#', '...#+++#', '....####', '........', '........',
+  ],
+  cub: [
+    '........', '........', '........', '..##....', '.#++#...', '.#+-+###', '..#+++++', '.#++++++',
+    '.#+#w+++', '.#+##+++', '.#+++---', '..#++-##', '...#+---', '....####', '........', '........',
+  ],
+  weaver: [
+    '........', '#.......', '.#...###', '..#.#+++', '#..#+w+w', '.#.#++++', '..##++++', '###+++++',
+    '...#+-+-', '..##+-+-', '.#.#++++', '#..#+-+-', '..#.#+++', '.#...###', '#.......', '........',
+  ],
+  alpha: [
+    '#..#....', '##.#.#..', '#+##-#-#', '#++#####', '#+++++++', '#++++++-', '#++#w+++', '#++##+++',
+    '-#++++++', '-#+++++-', '--#++---', '-#-#+-##', '--#.#---', '-#...#ww', '#.....##', '........',
+  ],
+  oldtusk: [
+    '....####', '...#+-+-', '..#-+-++', '.#++++++', '#-#+++++', '#--#++++', '#--#+#w+', '#--#++++',
+    '#-#+++##', '.##++#++', 'w..#+#++', 'ww.#w#+-', '.ww#w#+-', '..www#++', '....##+-', '......##',
+  ],
+  pup: [
+    '........', '........', '........', '.#......', '.##.....', '.#+#####', '.#++++++', '.#+#w+++',
+    '.#+##+++', '..#+++++', '..#++---', '...#+-##', '....#---', '.....###', '........', '........',
+  ],
 
   /* ---------- BONE ---------- */
   rat: [
@@ -70,6 +98,26 @@ const SPRITES = {
   bonelord: [
     '.#..#..#', '.##.##.#', '.#######', '.#-+-+-+', '..######', '..#wwwww', '.#wwwwww', '.#w###ww',
     '.#w#+#ww', '.#w###ww', '.#wwwww#', '..#wwwww', '...#w#w#', '...#w#w#', '....####', '........',
+  ],
+  hellhound: [
+    '..-...-.', '.-#-.-#-', '.#+#-#+#', '.#++####', '#+++++++', '#++##+++', '#+#ww#++', '#++##+++',
+    '.#++++++', '.#+++###', '..#+#+++', '..#+#w#w', '...#####', '....#-#-', '........', '........',
+  ],
+  banshee: [
+    '....####', '...#----', '..#-----', '.#--####', '.#-#wwww', '#--#w##w', '#--#wwww', '#--#ww##',
+    '#--#ww##', '#---#www', '#--#-###', '.#--#---', '.#-#----', '..#-#---', '...#.#-#', '....#..#',
+  ],
+  robber: [
+    '........', '....####', '...#++++', '...#++++', '########', '..#-----', '..#--#--', '..#+++++',
+    '..#+-+-+', '...#+++#', '....#+##', '.##+####', '#++#++++', '#+++#+++', '#+++#+++', '########',
+  ],
+  nightgaunt: [
+    '....#...', '....#...', '.....#..', '#....###', '##..####', '#+#.####', '#++#####', '#+++####',
+    '#++++###', '#+#++#+#', '##.#+###', '#..#+#++', '...#+#++', '...#+#++', '..#+#.#+', '..##..##',
+  ],
+  dracolich: [
+    '#.......', '#w......', '.#w#....', '..#w####', '..#wwwww', '.#wwwwww', '.#w##www', '#ww#-#ww',
+    '#www##ww', '#wwwwwww', '.#wwww##', '.#w#w#ww', '..#w#w#w', '..######', '...#w#w#', '....####',
   ],
 
   /* ---------- GEM ---------- */
@@ -105,6 +153,30 @@ const SPRITES = {
     '....####', '...#++++', '...#+#w+', '...#++++', '.###++++', '#+++####', '#++#++++', '#++#+##w',
     '#++#+#w-', '#++#+##-', '#++#++++', '####++++', '...#++#+', '...#++#.', '..#+++#.', '..#####.',
   ],
+  bud: [
+    '........', '........', '.##.....', '#w-##...', '#-w--#..', '.#--w-#.', '..##--##', '....#+#.',
+    '....#+#.', '.....#+#', '...###+#', '..#++++#', '.#+-+-++', '.#++++++', '..#+++++', '...#####',
+  ],
+  crab: [
+    '.##.....', '#--#....', '#.##....', '#--#..#.', '.#-#.#w#', '..#..#w#', '..#.###.', '.#-####-',
+    '.#-#w-w-', '#--#-w-w', '#.#-w-w-', '..#---##', '.#.####.', '#.#.#...', '..#.#...', '........',
+  ],
+  obsidian: [
+    '......##', '.....#++', '....#+++', '....#+-+', '...#++++', '...#+###', '...#+#ww', '...#+#w#',
+    '...#+#ww', '...#+###', '...#++++', '...#+-++', '..#+++++', '.#++++++', '#+++++++', '########',
+  ],
+  warden: [
+    '.....###', '....#w--', '...#w---', '...#-#w-', '...#-##-', '.##.#---', '#w-#.###', '#--#####',
+    '#-#++-++', '.#++#www', '.#+-#w-w', '.#++#www', '.#+-+###', '.#++++++', '.#+#+#++', '.####.##',
+  ],
+  diamondwyrm: [
+    '#.......', '##....#.', '#-#..#w.', '#--#.#w#', '#---##-#', '#----#++', '#---#+++', '#--#+#w+',
+    '#-#++##+', '.#+++++w', '..#+++-w', '..#++-##', '...#+-+-', '...#++++', '....#+-+', '.....###',
+  ],
+  statue: [
+    '........', '....####', '...#----', '..#-----', '..#-##--', '..#-----', '...#----', '....#---',
+    '..###---', '.#------', '.#------', '.#------', '..######', '.#++++++', '.#+-+-+-', '########',
+  ],
 
   /* ---------- ARCANE ---------- */
   apprentice: [
@@ -134,6 +206,22 @@ const SPRITES = {
   wyrm: [
     '#.......', '##......', '#+#.....', '#++#.###', '#+++#+++', '#++++#++', '.#+++#w#', '.#++#+##',
     '..#+#+++', '..##.#++', '.....#++', '.....#+#', '.....#+w', '......#w', '......##', '........',
+  ],
+  crane: [
+    '........', '.......#', '......#w', '#.....#w', '##....#w', '#w#...#w', '#ww#..#w', '#w-w#.#w',
+    '#w--w##w', '#w---w#w', '.#w---w#', '..#w----', '...#ww--', '....##w-', '......##', '........',
+  ],
+  monk: [
+    '.....###', '....#+++', '...#++++', '..#++###', '..#+####', '..#+#w##', '..#+####', '..#++###',
+    '.#++#+++', '.#+++#ww', '#+++#w##', '#+++#w#w', '#++++#ww', '#+++++##', '#+++++++', '########',
+  ],
+  djinn: [
+    '......##', '....##ww', '..##----', '.#--#---', '.#---#--', '..######', '..#+++++', '..#+#w++',
+    '..#+++++', '.##+###+', '#++#+++#', '#++#####', '.##+++++', '...#++++', '....#++#', '.....##.',
+  ],
+  phoenix: [
+    '#.....#.', '#+#..#+#', '#++#.#+-', '.#+-#+--', '.#++-#+-', '..#+-+##', '...#++#w', '..#+#+#+',
+    '.#++-#+#', '#+++-#+-', '.#++-+#-', '..#+-#+-', '...##.#+', '.....#+-', '....#+#-', '.....#.#',
   ],
 
   /* Land art is generated from each color's energy icon (see below COLORS). */
@@ -273,6 +361,14 @@ const ICONS = {
   snipe:     ['..###..', '.#...#.', '#..#..#', '#.###.#', '#..#..#', '.#...#.', '..###..'],
   mend:      ['.##.##.', '#..#..#', '#.###.#', '#..#..#', '.#...#.', '..#.#..', '...#...'],
   rally:     ['#####..', '######.', '#####..', '#......', '#......', '#......', '#......'],
+  thorns:    ['...#...', '.#.#.#.', '..###..', '#######', '..###..', '.#.#.#.', '...#...'],
+  bloodlust: ['#######', '.#####.', '..###..', '..###..', '...#...', '.......', '...#...'],
+  reach:     ['#######', '.......', '...#...', '..###..', '.#.#.#.', '...#...', '...#...'],
+  spite:     ['.##.##.', '####.##', '###.###', '####.##', '.##.##.', '..#.#..', '...#...'],
+  grow:      ['##...##', '###.###', '.##.##.', '...#...', '...#...', '..###..', '.#####.'],
+  undying:   ['..###..', '.#...#.', '.#...#.', '..###..', '#######', '...#...', '...#...'],
+  shockwave: ['#..#..#', '.#...#.', '.......', '##.#.##', '.......', '.#...#.', '#..#..#'],
+  warcry:    ['......#', '.....##', '#...###', '#######', '#...###', '.....##', '......#'],
   /* spell & trap art */
   firebolt:  ['....##.', '...##..', '..####.', '.####..', '...##..', '..##...', '.##....'],
   insight:   ['.......', '..###..', '.#...#.', '#..#..#', '.#...#.', '..###..', '.......'],
@@ -289,7 +385,18 @@ const ICONS = {
   mirrorward:['#######', '#.....#', '#.#...#', '#..#..#', '.#...#.', '..#.#..', '...#...'],
   counter:   ['..###..', '.#...#.', '#.#.#.#', '#..#..#', '#.#.#.#', '.#...#.', '..###..'],
   stasisrune:['#######', '.#...#.', '..#.#..', '...#...', '..#.#..', '.#...#.', '#######'],
-  spell:     ['...#...', '..#.#..', '.#...#.', '#..#..#', '.#...#.', '..#.#..', '...#...'],
+  wolfden:   ['#.....#', '##...##', '#######', '#.#.#.#', '#######', '.#####.', '..###..'],
+  stampede:  ['#.....#', '#.....#', '.#####.', '.#.#.#.', '.#####.', '..###..', '..#.#..'],
+  coil:      ['.#####.', '#.....#', '#.###.#', '#.#.#.#', '#.#...#', '#.#####', '.......'],
+  exhume:    ['.#####.', '#..#..#', '#.###.#', '#..#..#', '.#...#.', '.#...#.', '..###..'],
+  petrify:   ['..###..', '.##.##.', '#####.#', '##.####', '#####.#', '.#####.', '.......'],
+  spark:     ['...#...', '...#...', '..###..', '#######', '..###..', '...#...', '...#...'],
+  chainbolt: ['.#...#.', '#...#..', '##..##.', '.#...#.', '#...#..', '##..##.', '.#...#.'],
+  mindtheft: ['#######', '...#...', '.#.#.#.', '.#...#.', '.#...#.', '.#...#.', '.......'],
+  cage:      ['#######', '#.#.#.#', '#.#.#.#', '#.#.#.#', '#.#.#.#', '#.#.#.#', '#######'],
+  prismward: ['#######', '#..#..#', '#.###.#', '##.#.##', '.#...#.', '..#.#..', '...#...'],
+  glyph:     ['...#...', '..#.#..', '..#.#..', '.#.#.#.', '.#...#.', '#######', '.......'],
+  spell:    ['...#...', '..#.#..', '.#...#.', '#..#..#', '.#...#.', '..#.#..', '...#...'],
   trap:      ['#.....#', '##...##', '#.#.#.#', '#..#..#', '#.#.#.#', '##...##', '#.....#'],
   gear:      ['..#.#..', '.#####.', '##...##', '.#...#.', '##...##', '.#####.', '..#.#..'],
   /* Dealer's Run: stops, teeth and event art */
@@ -306,6 +413,8 @@ const ICONS = {
   skull:     ['.#####.', '#######', '#..#..#', '#..#..#', '###.###', '.#####.', '.#.#.#.'],
   wheel:     ['..###..', '.#.#.#.', '#..#..#', '#######', '#..#..#', '.#.#.#.', '..###..'],
   card:      ['.#####.', '.#...#.', '.#.#.#.', '.#.#.#.', '.#...#.', '.#...#.', '.#####.'],
+  pack:      ['#.#.#.#', '#######', '#..#..#', '#.#.#.#', '#..#..#', '#.....#', '#######'],
+  relic:     ['..###..', '.#.#.#.', '#.#.#.#', '#.#.#.#', '#.#.#.#', '#.#.#.#', '#######'],
 };
 
 const COLOR_KEYS = ['paw', 'bone', 'gem', 'hat'];
@@ -328,7 +437,7 @@ function iconSprite(name) {
   return px.map((r) => r.join(''));
 }
 for (const k of COLOR_KEYS) SPRITES['land_' + k] = iconSprite(COLORS[k].icon);
-for (const k of ['battle', 'fire', 'altar', 'tooth', 'event', 'chip', 'spring', 'pool', 'slots', 'wheel']) SPRITES['ri_' + k] = iconSprite(k);
+for (const k of ['battle', 'fire', 'altar', 'tooth', 'event', 'chip', 'spring', 'pool', 'slots', 'wheel', 'pack', 'relic']) SPRITES['ri_' + k] = iconSprite(k);
 /* The slot machine's lever: a long cracked bone standing upright, lit from the left (16 wide, so not mirrored). */
 SPRITES.slot_bone = [
   '..####....####..', '.#wwww#..#www-#.', '#wwwwww##wwww-+#', '#wwwwwwwwwwww-+#', '#wwwwwwwwwww-++#',
@@ -341,7 +450,7 @@ SPRITES.slot_bone = [
 ];
 
 const SIGILS = {
-  airborne:   { name: 'Airborne',   icon: 'airborne',   text: () => 'May attack the enemy directly, even while they control creatures, unless they control an Airborne creature.' },
+  airborne:   { name: 'Airborne',   icon: 'airborne',   text: () => 'May attack the enemy directly, even while they control creatures, unless they control an Airborne or Reach creature.' },
   guardian:   { name: 'Guardian',   icon: 'guardian',   text: () => 'While this is on the board, enemies must attack a Guardian.' },
   haste:      { name: 'Haste',      icon: 'haste',      text: () => 'Can attack the turn it is summoned.' },
   deathtouch: { name: 'Touch of Death', icon: 'deathtouch', text: () => 'Any creature damaged by this perishes.' },
@@ -354,6 +463,14 @@ const SIGILS = {
   snipe:      { name: 'Snipe',      icon: 'snipe',      text: (c) => `When summoned, deal ${c.snipe} damage to the strongest enemy creature.` },
   mend:       { name: 'Mend',       icon: 'mend',       text: (c) => `When summoned, gain ${c.mend} life.` },
   rally:      { name: 'Rally',      icon: 'rally',      text: () => 'Your other creatures get +1 attack.' },
+  thorns:     { name: 'Thorns',     icon: 'thorns',     text: () => 'When an enemy creature attacks this, the attacker takes 1 damage.' },
+  bloodlust:  { name: 'Bloodlust',  icon: 'bloodlust',  text: () => 'When this kills a creature in combat, it gains +1 attack for good.' },
+  reach:      { name: 'Reach',      icon: 'reach',      text: () => 'Guards the sky: enemy Airborne creatures can\'t fly past it to strike you directly.' },
+  spite:      { name: 'Spite',      icon: 'spite',      text: () => 'When this perishes, it deals 2 damage to the enemy.' },
+  grow:       { name: 'Grow',       icon: 'grow',       text: () => `At the start of your turn, it gains +1/+1 for good, up to ${GROW_MAX} times.` },
+  undying:    { name: 'Undying',    icon: 'undying',    text: () => 'When this perishes, it returns to your hand instead of the grave.' },
+  shockwave:  { name: 'Shockwave',  icon: 'shockwave',  text: () => 'When summoned, deal 1 damage to every enemy creature.' },
+  warcry:     { name: 'War Cry',    icon: 'warcry',     text: () => 'When summoned, your other creatures get +1/+1 for good.' },
 };
 
 /* Sigils with an amount show it in their name: 'Snipe 2', 'Mend 3'. */
@@ -372,7 +489,20 @@ function parseCost(s) {
 }
 function costTotal(c) { return (c.g || 0) + COLOR_KEYS.reduce((n, k) => n + (c[k] || 0), 0); }
 
+/* Card rarity, MtG style: the rarer a card, the stronger it is for its cost. Commons sit on the
+   Card Maker's power budget (custom.js cardBudget), rares 2-3 above it, mythicals 4 or more above
+   it or break a rule outright. Rare and mythical cards wear a frame (render.js), and a Dealer's Run
+   deals them out less often (run.js). A card with no rarity is common. */
+const RARITIES = {
+  common:   { name: 'Common' },
+  rare:     { name: 'Rare' },
+  mythical: { name: 'Mythical' },
+};
+const RARITY_KEYS = Object.keys(RARITIES);
+function rarityOf(c) { return c && RARITIES[c.rarity] ? c.rarity : 'common'; }
+
 const CARDS = {};
+/* A name longer than 12 characters is clipped on the card face. */
 function creature(id, name, color, cost, atk, hp, sigils = [], extra = {}) {
   CARDS[id] = { id, name, type: 'creature', color, cost: parseCost(cost), atk, hp, sigils, sprite: id, ...extra };
 }
@@ -385,6 +515,13 @@ creature('boar',      'Raging Boar','paw', '1PP',  3, 3, ['haste']);
 creature('elk',       'Elk',        'paw', '2P',   3, 4, ['trample']);
 creature('grizzly',   'Grizzly',    'paw', '2PP',  5, 5, ['trample'], { flavor: 'The forest goes quiet when it wakes.' });
 creature('mooseking', 'Moose King', 'paw', '3PP',  6, 6, ['trample', 'rally'], { flavor: 'Crowned by the antlers of a hundred rivals.' });
+creature('porcupine', 'Porcupine',  'paw', 'P',    1, 2, ['thorns'], { flavor: 'Pet it once. Only once.' });
+creature('badger',    'Badger',     'paw', '1P',   2, 2, ['bloodlust'], { flavor: 'It does not back down. It never learned how.' });
+creature('cub',       'Bear Cub',   'paw', '1P',   1, 2, ['grow'], { flavor: 'Feed it. Watch it. Then run.' });
+creature('weaver',    'Web Weaver', 'paw', '2P',   2, 4, ['reach'], { flavor: 'The canopy is hers. Nothing flies through it twice.' });
+creature('alpha',     'Alpha Wolf', 'paw', '2PP',  5, 5, ['rally', 'bloodlust'], { rarity: 'rare', flavor: 'The pack hunts as one. It hunts first.' });
+creature('oldtusk',   'Old Tusk',   'paw', '3PP',  7, 7, ['trample', 'thorns', 'warcry'], { rarity: 'mythical', flavor: 'It walked the world before the first card was dealt.' });
+CARDS.pup = { id: 'pup', name: 'Wolf Pup', type: 'creature', color: 'paw', cost: parseCost('0'), atk: 1, hp: 1, sigils: [], sprite: 'pup', token: true };
 // Bone
 creature('rat',       'Grave Rat',  'bone', 'K',   1, 1, ['bonespawn']);
 creature('bat',       'Vampire Bat','bone', '1K',  1, 2, ['airborne', 'leech']);
@@ -393,6 +530,11 @@ creature('ghoul',     'Ghoul',      'bone', '2K',  2, 2, ['deathtouch']);
 creature('crow',      'Plague Crow','bone', '2K',  1, 2, ['airborne', 'deathtouch']);
 creature('revenant',  'Revenant',   'bone', '2KK', 4, 4, ['leech']);
 creature('bonelord',  'Bone Lord',  'bone', '3KK', 4, 5, ['rally', 'bonespawn'], { flavor: 'All bones answer to the crown.' });
+creature('hellhound', 'Hellhound',  'bone', '1K',  2, 2, ['spite'], { flavor: 'Its last breath is still fire.' });
+creature('banshee',   'Banshee',    'bone', '2K',  2, 2, ['airborne', 'spite'], { flavor: 'Her scream outlives her.' });
+creature('robber',    'Grave Robber','bone','2K',  2, 3, ['scholar', 'bonespawn'], { flavor: 'Every grave has something worth taking.' });
+creature('nightgaunt','Nightgaunt', 'bone', '2KK', 3, 4, ['airborne', 'deathtouch', 'leech'], { rarity: 'rare', flavor: 'No face. No sound. No mercy.' });
+creature('dracolich', 'Dracolich',  'bone', '3KK', 5, 5, ['airborne', 'undying', 'spite', 'leech'], { rarity: 'mythical', flavor: 'Kill it again. See what happens.' });
 CARDS.skeleton = { id: 'skeleton', name: 'Skeleton', type: 'creature', color: 'bone', cost: parseCost('0'), atk: 1, hp: 1, sigils: [], sprite: 'skeleton', token: true };
 // Gem
 creature('shard',     'Mox Shard',  'gem', 'G',    0, 4, ['guardian'], { flavor: 'It hums when struck.' });
@@ -403,6 +545,12 @@ creature('sentinel',  'Gem Sentinel','gem','2G',   1, 5, ['guardian']);
 creature('shardblade','Shardblade', 'gem', '1GG',  3, 2, ['quick']);
 creature('drake',     'Prism Drake','gem', '2GG',  3, 4, ['airborne']);
 creature('colossus',  'Gem Colossus','gem','3GG',  5, 7, ['guardian', 'regen'], { flavor: 'A mountain that learned to walk.' });
+creature('bud',       'Crystal Bud','gem', '1G',   0, 3, ['grow'], { flavor: 'Give it a century. Or three turns.' });
+creature('crab',      'Quartz Crab','gem', '1G',   1, 3, ['thorns'], { flavor: 'Its shell grew teeth.' });
+creature('obsidian',  'Obsidian Eye','gem','2G',   1, 4, ['guardian', 'reach'], { flavor: 'It watches the sky so you don\'t have to.' });
+creature('warden',    'Gem Warden', 'gem', '2GG',  4, 6, ['guardian', 'regen', 'thorns'], { rarity: 'rare', flavor: 'Nothing has ever moved it. Plenty has tried.' });
+creature('diamondwyrm','Diamond Wyrm','gem','3GG', 5, 7, ['airborne', 'quick', 'regen', 'thorns'], { rarity: 'mythical', flavor: 'It hoards nothing. It is the hoard.' });
+CARDS.statue = { id: 'statue', name: 'Stone Statue', type: 'creature', color: 'gem', cost: parseCost('0'), atk: 0, hp: 3, sigils: [], sprite: 'statue', token: true, flavor: 'Whatever it was, it is a statue now.' };
 // Arcane
 creature('apprentice','Apprentice', 'hat', 'H',    1, 1, ['scholar']);
 creature('wisp',      'Wisp',       'hat', '1H',   2, 1, ['airborne']);
@@ -411,15 +559,20 @@ creature('owl',       'Owl Familiar','hat','2H',   2, 2, ['airborne', 'scholar']
 creature('battlemage','Battlemage', 'hat', '2H',   3, 2, ['quick']);
 creature('archmage',  'Archmage',   'hat', '3HH',  3, 4, ['snipe', 'scholar'], { snipe: 3, flavor: 'Old enough to remember the first card.' });
 creature('wyrm',      'Storm Wyrm', 'hat', '3HH',  5, 4, ['airborne'], { flavor: 'Thunder follows it like a dog.' });
+creature('crane',     'Paper Crane','hat', '1H',   1, 1, ['airborne', 'scholar'], { flavor: 'Folded from a spell that didn\'t work.' });
+creature('monk',      'Thunder Monk','hat','2H',   2, 3, ['shockwave'], { flavor: 'Every prayer ends in thunder.' });
+creature('djinn',     'Storm Djinn','hat', '3H',   4, 5, ['airborne', 'quick'], { rarity: 'rare', flavor: 'It grants three wishes. All of them are lightning.' });
+creature('phoenix',   'Phoenix',    'hat', '2HH',  4, 4, ['airborne', 'haste', 'undying'], { rarity: 'mythical', flavor: 'It has died a thousand times. It is not tired of it.' });
 
 for (const k of COLOR_KEYS) {
   CARDS['land_' + k] = { id: 'land_' + k, name: COLORS[k].land, type: 'land', color: k, cost: parseCost('0'), sigils: [], sprite: 'land_' + k };
 }
 
 /* ---------- spells (sorcery speed: cast on your own turn only, then to the grave) ----------
-   fx: what it does. n: how much. target: 'enemy' | 'ally' creature, or none. Art = its icon. */
-function spell(id, name, color, cost, fx, n, target, short, text) {
-  CARDS[id] = { id, name, type: 'spell', color, cost: parseCost(cost), fx, n, target, short, text, sigils: [], sprite: id };
+   fx: what it does. n: how much. target: 'enemy' | 'ally' creature, or none. Art = its icon.
+   extra: rarity, and `makes`, the token a spell puts on the board. */
+function spell(id, name, color, cost, fx, n, target, short, text, extra = {}) {
+  CARDS[id] = { id, name, type: 'spell', color, cost: parseCost(cost), fx, n, target, short, text, sigils: [], sprite: id, ...extra };
   SPRITES[id] = iconSprite(id);
 }
 spell('might',    'Feral Might', 'paw',  '1P',  'buff',    2, 'ally',  'Ally gets +2/+2',      'Your target creature gets +2 attack and +2 health for good.');
@@ -432,11 +585,19 @@ spell('shatter',  'Shatter',     'gem',  '2GG', 'shatter', 3, 'enemy', 'Kill foe
 spell('firebolt', 'Firebolt',    'hat',  '1H',  'bolt',    3, 'enemy', '3 damage to a foe',    'Deal 3 damage to target enemy creature.');
 spell('insight',  'Insight',     'hat',  '2H',  'draw',    2, null,    'Draw 2 cards',         'Draw 2 cards.');
 spell('meteor',   'Meteor',      'hat',  '3HH', 'quake',   2, null,    '2 damage to all foes', 'Deal 2 damage to every enemy creature.');
+spell('wolfden',  'Wolf Den',    'paw',  '1P',  'swarm',   2, null,    'Two 1/1 pups',         'Summon two 1/1 Wolf Pups into your empty slots.', { makes: 'pup' });
+spell('stampede', 'Stampede',    'paw',  '2PP', 'stampede', 2, null,   'Allies +2 atk, Piercing', 'Every creature you control gets +2 attack and Piercing for good.', { rarity: 'rare' });
+spell('coil',     'Death Coil',  'bone', '1K',  'coil',    2, 'enemy', 'Foe -2, you +2 life',  'Deal 2 damage to target enemy creature and gain 2 life.');
+spell('exhume',   'Exhume',      'bone', '2KK', 'exhume',  1, null,    'Grave creature to board', 'The priciest creature in your grave rises into an empty slot on your board.', { rarity: 'rare' });
+spell('petrify',  'Petrify',     'gem',  '1GG', 'petrify', 0, 'enemy', 'Foe becomes 0/3 stone', 'Target enemy creature turns into a 0/3 Stone Statue with no sigils.', { rarity: 'rare', makes: 'statue' });
+spell('spark',    'Spark',       'hat',  'H',   'spark',   1, 'enemy', '1 to a foe, draw 1',   'Deal 1 damage to target enemy creature, then draw a card.');
+spell('chainbolt','Chain Bolt',  'hat',  '1HH', 'chain',   3, 'enemy', '3 to a foe and enemy', 'Deal 3 damage to target enemy creature and 3 to the enemy.', { rarity: 'rare' });
+spell('mindtheft','Mind Theft',  'hat',  '3HH', 'theft',   0, 'enemy', 'Steal a foe',          'Take control of target enemy creature for good. It waits a turn to attack, unless it has Haste.', { rarity: 'mythical' });
 
 /* ---------- traps (paid for and set face-down on your turn; spring on the enemy's) ----------
    trigger: the enemy action that springs it. Only one trap springs per action. */
-function trap(id, name, color, cost, trigger, fx, n, short, text) {
-  CARDS[id] = { id, name, type: 'trap', color, cost: parseCost(cost), trigger, fx, n, short, text, sigils: [], sprite: id };
+function trap(id, name, color, cost, trigger, fx, n, short, text, extra = {}) {
+  CARDS[id] = { id, name, type: 'trap', color, cost: parseCost(cost), trigger, fx, n, short, text, sigils: [], sprite: id, ...extra };
   SPRITES[id] = iconSprite(id);
 }
 trap('beartrap',   'Bear Trap',   'paw',  '1P', 'attack', 'snare',   3, 'Attacker takes 3',      'When an enemy creature attacks, deal 3 damage to it. If it perishes, the attack is stopped.');
@@ -444,6 +605,9 @@ trap('opengrave',  'Open Grave',  'bone', '2K', 'summon', 'pit',     3, 'Kill su
 trap('mirrorward', 'Mirror Ward', 'gem',  '1G', 'attack', 'reflect', 0, 'Reflect direct hit',    'When an enemy creature attacks you directly, stop the attack and deal its attack to itself.');
 trap('counter',    'Counterspell','hat',  '1H', 'spell',  'counter', 0, 'Cancel a spell',        'When the enemy casts a spell, cancel it. Their energy is still spent.');
 trap('stasisrune', 'Stasis Rune', 'hat',  '2H', 'attack', 'stasis',  0, 'Stop all attacks',      'When an enemy creature attacks, stop it. None of their creatures may attack again this turn.');
+trap('cage',       'Crystal Cage','gem',  '1G', 'attack', 'cage',    0, 'Stop an attack',        'When an enemy creature attacks, stop the attack.');
+trap('prismward',  'Prism Ward',  'gem', '1GG', 'attack', 'prism',   0, 'Reflect any attack',    'When an enemy creature attacks, stop it and deal its attack to itself.', { rarity: 'rare' });
+trap('glyph',      'Fire Glyph',  'hat',  '1H', 'summon', 'glyph',   2, 'Summon takes 2',        'When the enemy summons a creature, deal 2 damage to it.');
 
 const DECKS = [
   {

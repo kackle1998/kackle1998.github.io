@@ -73,6 +73,14 @@ const AI = {
       case 'draw': return p.hand.length <= 3 ? { score: 4 } : null;
       case 'drain': return { score: o.life <= c.n ? 99 : 3 };
       case 'raise': return { score: 3 };
+      case 'coil': return pick((t) => (hpLeft(t) <= c.n ? this.value(g, t) + 2 : p.life <= 10 ? 1 : 0));
+      case 'spark': return pick((t) => (hpLeft(t) <= c.n ? this.value(g, t) + 2 : p.hand.length <= 3 ? 1 : 0));
+      case 'chain': return pick((t) => (o.life <= c.n ? 99 : hpLeft(t) <= c.n ? this.value(g, t) + 4 : 2));
+      case 'petrify': return pick((t) => this.value(g, t) - 4);
+      case 'theft': return pick((t) => this.value(g, t) * 2);
+      case 'swarm': return { score: 2 * Math.min(c.n, p.board.filter((x) => !x).length) };
+      case 'stampede': return g.livingBoard(p).length >= 2 ? { score: g.livingBoard(p).length * 4 } : null;
+      case 'exhume': return { score: Math.max(...g.graveCreatures(p).map((x) => this.value(g, x))) };
     }
     return null;
   },

@@ -84,11 +84,12 @@ Run.enter = function (id) {
 };
 
 /* ---------- the player's run choices ---------- */
-const SIGIL_RANK = ['airborne', 'deathtouch', 'trample', 'quick', 'leech', 'regen', 'haste', 'guardian', 'rally', 'bonespawn', 'scholar', 'snipe', 'mend'];
+const SIGIL_RANK = ['undying', 'airborne', 'deathtouch', 'trample', 'quick', 'leech', 'regen', 'grow', 'haste', 'thorns', 'bloodlust',
+  'guardian', 'reach', 'rally', 'warcry', 'shockwave', 'bonespawn', 'spite', 'scholar', 'snipe', 'mend'];
 const price = (c) => costTotal(c.cost);
 const best = (arr, score) => arr.reduce((b, x) => (b == null || score(x) > score(b) ? x : b), null);
-/* Offered a card: the priciest, creatures before spells before traps, a coin flip on a tie. */
-const cardPref = (c) => price(c) * 10 + (c.type === 'creature' ? 3 : c.type === 'spell' ? 2 : 0) + Math.random();
+/* Offered a card: the rarest, then the priciest, creatures before spells before traps, a coin flip on a tie. */
+const cardPref = (c) => RARITY_KEYS.indexOf(rarityOf(c)) * 100 + price(c) * 10 + (c.type === 'creature' ? 3 : c.type === 'spell' ? 2 : 0) + Math.random();
 const strongest = (mons) => best(mons, (c) => price(c) * 10 + c.atk);
 
 function choosePath(reach) {
@@ -145,10 +146,10 @@ function altar() {
   Run.remove(pick.g.rid);
 }
 
-/* Run.trader(): the same three offers, the tonic (+5 life for 3 teeth) when 5+ down, then the priciest cards it can afford. */
+/* Run.trader(): the same three offers, the tonic (+5 life for 3 teeth) when 5+ down, then the cards it likes best that it can afford. */
 function trader(n) {
   const s = Run.s;
-  const offers = runPickN(Run.rand(400 + n.id), runPool(s.colors), 3).map((c) => ({ c, cost: runPrice(c) }));
+  const offers = Run.traderOffers(n).map((c) => ({ c, cost: runPrice(c) }));
   if (s.maxLife - s.life >= 5 && s.teeth >= 3) { s.teeth -= 3; Run.heal(5); }
   offers.sort((a, b) => cardPref(b.c) - cardPref(a.c));
   for (const o of offers) if (s.teeth >= o.cost) { s.teeth -= o.cost; Run.add(o.c.id); }
@@ -161,9 +162,9 @@ function choice(ev, label) {
   return ch;
 }
 const EVENTS = {
-  cracked(ev) { // implant in the creature with the most sigils to spare
-    const ch = choice(ev, 'IMPLANT'), mons = Run.creatures().filter(ch.pick);
-    if (mons.length) ch.act(Run, best(mons, (d) => d.sigils.length * 100 + price(d)));
+  cracked(ev) { // press gently (+1 attack, no sigil lost) on the hardest hitter
+    const ch = choice(ev, 'PRESS GENTLY'), mons = Run.creatures().filter(ch.pick);
+    if (mons.length) ch.act(Run, best(mons, (d) => d.atk * 10 + price(d)));
   },
   spring(ev) { choice(ev, Run.s.maxLife - Run.s.life >= 4 ? 'DRINK' : 'BOTTLE').act(Run); },
   pool() {}, // a 50% chance to lose the card: walk past
@@ -194,6 +195,15 @@ const EVENTS = {
     if (!segs.length) return;
     const k = segs[Math.floor(Math.random() * segs.length)];
     Run.rc(best(Run.wheelTakers(k), (d) => d.atk * 10 + price(d)).rid).sigils.push(k);
+  },
+  pack(ev) { // Run.eventCards(): always tear it open and keep the card it likes best
+    const ch = choice(ev, 'TEAR');
+    ch.take(Run, best(ch.cards(Run).map((id) => CARDS[id]), cardPref));
+  },
+  reliquary(ev) { // pay 6 life for a mythical card, only while above 12 life
+    const ch = choice(ev, 'PAY');
+    if (Run.s.life <= 12 || !Run.canChoose(ch)) return;
+    ch.take(Run, best(ch.cards(Run).map((id) => CARDS[id]), cardPref));
   },
 };
 
