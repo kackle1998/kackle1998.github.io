@@ -111,6 +111,53 @@ const RunMap = (() => {
     g.putImageData(im, 0, 0);
   }
 
+  /* ---------- landmarks: dice towers and armillary spheres ---------- */
+  /* Very rare, animated standees: three per map, two of one kind and one of the other. A dice
+     tower is five dice stacked askew whose top die re-rolls now and then; an armillary sphere is
+     a globe in turning rings on a pedestal. Each is one small pixel canvas redrawn every frame,
+     like the casino's lights. Sizes in canvas px; 1 px = 2 map units. */
+  const PIPS = { 1: [[1, 1]], 2: [[0, 0], [2, 2]], 3: [[0, 0], [1, 1], [2, 2]], 4: [[0, 0], [2, 0], [0, 2], [2, 2]],
+    5: [[0, 0], [2, 0], [1, 1], [0, 2], [2, 2]], 6: [[0, 0], [2, 0], [0, 1], [2, 1], [0, 2], [2, 2]] };
+  const MARK = { dice: { w: 26, h: 86 }, armillary: { w: 40, h: 82 } };
+  function landmarks(pl, C, marks) {
+    const live = marks.map(({ x, y, k, seed }) => {
+      const { w, h } = MARK[k], cv = document.createElement('canvas');
+      cv.width = w; cv.height = h;
+      const el = document.createElement('div');
+      el.className = 'rm-st rm-mark';
+      el.style.cssText = `left:${x - w}px;top:${y - h * 2}px;width:${w * 2}px;height:${h * 2}px`;
+      el.appendChild(cv);
+      pl.appendChild(el);
+      const g = cv.getContext('2d');
+      return { k, seed, w, h, R: (u, v, rw, rh, c) => { g.fillStyle = C[c]; g.fillRect(Math.round(u), Math.round(v), rw, rh); }, g };
+    });
+    const die = (R, u, v, n, s = 12) => {
+      R(u - 1, v - 1, s + 5, s + 5, 1); R(u, v + 3, s, s, 6); R(u + s, v + 3, 3, s, 4); R(u + 1, v, s + 1, 3, 7); R(u + s, v, 2, 3, 6);
+      const q = s / 4;
+      for (const [a, b] of PIPS[n]) R(u + q + a * q - 1, v + 3 + q + b * q - 1, 2, 2, 1);
+    };
+    const dice = ({ R, w, h, seed }, t) => {
+      // Every 5 s (each tower on its own beat) the top die tumbles for half a second, then settles.
+      const beat = t / 5 + seed * 0.37, n = Math.floor(beat), tumbling = beat - n < 0.1;
+      const top = tumbling ? 1 + Math.floor(t * 12) % 6 : 1 + (n * 7 + seed * 13 >>> 0) % 6, cx = w >> 1;
+      R(cx - 12, h - 4, 24, 4, 1);
+      [[0, 3], [-2, 5], [2, 1], [-1, 6], [1, top]].forEach(([o, f], i) => die(R, cx - 7 + o, h - 16 - i * 15 - (tumbling && i === 4 ? 2 : 0), f));
+    };
+    const armillary = ({ R, w, h }, t) => {
+      const cx = w >> 1, cy = h - 50;
+      R(cx - 8, h - 4, 16, 4, 1); R(cx - 6, h - 5, 12, 2, 3); R(cx - 1, h - 30, 3, 26, 2); R(cx - 1, h - 30, 1, 26, 4);
+      const ring = (rx, ry, c) => { for (let a = 0; a < 6.283; a += 0.08) R(cx + Math.cos(a) * rx, cy + Math.sin(a) * ry, 1, 1, c); };
+      ring(18, 18, 4);
+      const ph = Math.floor(t * 4) / 12; // stepped turning
+      ring(Math.abs(Math.cos(ph * 2.5)) * 18 + 1, 18, 6);
+      ring(18, Math.abs(Math.sin(ph * 1.6)) * 7 + 1, 8);
+      R(cx - 4, cy - 4, 8, 8, 1); R(cx - 3, cy - 3, 6, 6, 5); R(cx - 3, cy - 3, 3, 3, 7); R(cx - 1, cy - 26, 2, 6, 8);
+    };
+    return (t) => {
+      for (const m of live) { m.g.clearRect(0, 0, m.w, m.h); (m.k === 'dice' ? dice : armillary)(m, t); }
+    };
+  }
+
   /* ---------- standing props: spires, basalt columns, crystals, rune obelisks ---------- */
   function placeProps(pl, R, C, block, runes, obel) {
     const near = (x, y) => { let m = 1e9; for (const b of block) { const d = Math.hypot(x - b[0], y - b[1]) - b[2]; if (d < m) m = d; } return m; };
@@ -293,61 +340,73 @@ const RunMap = (() => {
      dithered in the two darkest tones that drifts between them: each orbit has swept a clear lane
      through the clouds. Drawn at a third of screen resolution into one pixel buffer; the canvas
      follows the screen's size, so its pixels stay square. */
-  const SKY = 3; // screen px per sky pixel
+  /* Parallax: as the camera travels the board, the sky follows it more slowly, in two depths:
+     the nebula and orrery far off (SKY_FAR), the stars a little nearer (SKY_NEAR). Factors are
+     sky px per map unit of camera travel; the sky eases to where the camera has gone, each
+     layer stepped to whole sky pixels. The cloud mask is worked out over a margin (SKY_PAD) round
+     the screen so the far layer has room to move; the stars wrap round. */
+  const SKY = 3, SKY_FAR = 0.04, SKY_NEAR = 0.07, SKY_PAD = 96; // screen px per sky pixel; see above
   function skyDrawer(cv, C) {
     const g = cv.getContext('2d');
     const u32 = (h) => { const [r, gg, b] = rgb(h); return ((255 << 24) | (b << 16) | (gg << 8) | r) >>> 0; };
-    const U = C.map(u32);
-    let w = 0, h = 0, img, buf, lane, stars, rings, cx, cy;
+    const U = C.map(u32), P = SKY_PAD;
+    let w = 0, h = 0, LW = 0, img, buf, lane, stars, rings, cx, cy, cam0 = null, ex = 0, ey = 0;
     const fit = () => {
       const nw = Math.max(1, Math.round(cv.clientWidth / SKY)), nh = Math.max(1, Math.round(cv.clientHeight / SKY));
       if (nw === w && nh === h) return;
-      w = cv.width = nw; h = cv.height = nh;
+      w = cv.width = nw; h = cv.height = nh; LW = w + P * 2;
       img = g.createImageData(w, h); buf = new Uint32Array(img.data.buffer);
       const s = w / 320;
       cx = w / 2; cy = h * 0.17;
       rings = Array.from({ length: 8 }, (_, i) => (50 + i * 36) * s);
       // How much cloud each pixel may hold: none on an orbit, rising to full a little way off it
       // (0..1); 2 marks pixels well between orbits, where the clouds also bank up thicker.
-      lane = new Float32Array(w * h);
-      for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      lane = new Float32Array(LW * (h + P * 2));
+      for (let y = -P; y < h + P; y++) for (let x = -P; x < w + P; x++) {
         const r = Math.hypot(x - cx, (y - cy) / 0.32);
         let m = 1e9;
         for (const R of rings) m = Math.min(m, Math.abs(r - R));
         m /= s;
-        lane[y * w + x] = m > 14 ? 2 : Math.min(1, m / 9);
+        lane[(y + P) * LW + x + P] = m > 14 ? 2 : Math.min(1, m / 9);
       }
       const R = mulberry32(99);
       stars = Array.from({ length: Math.round(w * h / 510) }, () => ({ x: R() * w | 0, y: R() * h | 0, k: 1 + (R() * 3 | 0) }));
     };
     const set = (x, y, k) => { x = Math.round(x); y = Math.round(y); if (x >= 0 && x < w && y >= 0 && y < h) buf[y * w + x] = U[k]; };
     const box = (x, y, bw, bh, k) => { for (let j = 0; j < bh; j++) for (let i = 0; i < bw; i++) set(x + i, y + j, k); };
-    return (t) => {
+    // t in seconds; camX, camY: the camera's slide across and along the board (map units).
+    return (t, camX = 0, camY = 0) => {
       fit();
+      if (!cam0) cam0 = [camX, camY];
+      ex += (camX - cam0[0] - ex) * 0.3; ey += (camY - cam0[1] - ey) * 0.3;
+      const fx = Math.max(-P, Math.min(P, Math.round(ex * SKY_FAR))), fy = Math.max(-P, Math.min(P, Math.round(ey * SKY_FAR)));
+      const nx = Math.round(ex * SKY_NEAR), ny = Math.round(ey * SKY_NEAR);
       const d = t * 2;
       for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
-        const xs = x * 320 / w, ys = y * 320 / w;
+        const X = x - fx, Y = y - fy, xs = X * 320 / w, ys = Y * 320 / w;
         let n = Math.sin(xs * 0.02 + d * 0.05) + Math.sin(ys * 0.035 - xs * 0.01 + d * 0.03) + Math.sin((xs + ys) * 0.013 + 1.7) * 1.2 - 0.4;
-        const l = lane[y * w + x], c = Math.floor(Math.max(0, n * Math.min(1, l) + (l > 1 ? 0.35 : 0)) * 1.4 + BAY[(x & 3) + (y & 3) * 4] / 16);
+        const l = lane[(Y + P) * LW + X + P], c = Math.floor(Math.max(0, n * Math.min(1, l) + (l > 1 ? 0.35 : 0)) * 1.4 + BAY[(x & 3) + (y & 3) * 4] / 16);
         buf[y * w + x] = U[c >= 2 ? 2 : c >= 1 ? 1 : 0];
       }
-      // Stars: the dim ones, plus a few twinkling into crosses.
+      // Stars (the near layer, wrapping round): the dim ones, plus a few twinkling into crosses.
       stars.forEach((st, i) => {
         const tw = (i * 7 + Math.floor(t * 3)) % 29 === 0;
         if (st.k > 1 && !tw) return;
-        set(st.x, st.y, tw ? 5 : st.k);
-        if (tw) { set(st.x - 1, st.y, 3); set(st.x + 1, st.y, 3); set(st.x, st.y - 1, 3); set(st.x, st.y + 1, 3); }
+        const sx = ((st.x + nx) % w + w) % w, sy = ((st.y + ny) % h + h) % h;
+        set(sx, sy, tw ? 5 : st.k);
+        if (tw) { set(sx - 1, sy, 3); set(sx + 1, sy, 3); set(sx, sy - 1, 3); set(sx, sy + 1, 3); }
       });
-      // The orbits, each with its planet (one in the accent, one with a moon), and the sun.
+      // The orbits (far layer), each with its planet (one in the accent, one with a moon), and the sun.
+      const ox = cx + fx, oy = cy + fy;
       rings.forEach((rx, i) => {
         const ry = rx * 0.32;
-        for (let a = 0, j = 0; a < 6.283; a += 1.5 / rx, j++) if (j % 2 === 0) set(cx + Math.cos(a) * rx, cy + Math.sin(a) * ry, i % 2 ? 2 : 3);
-        const a = i * 1.7 + t * (0.6 / (1 + i * 0.6)), px = Math.round(cx + Math.cos(a) * rx), py = Math.round(cy + Math.sin(a) * ry), sz = 2 + (i * 5 % 3);
+        for (let a = 0, j = 0; a < 6.283; a += 1.5 / rx, j++) if (j % 2 === 0) set(ox + Math.cos(a) * rx, oy + Math.sin(a) * ry, i % 2 ? 2 : 3);
+        const a = i * 1.7 + t * (0.6 / (1 + i * 0.6)), px = Math.round(ox + Math.cos(a) * rx), py = Math.round(oy + Math.sin(a) * ry), sz = 2 + (i * 5 % 3);
         box(px - (sz >> 1) - 1, py - (sz >> 1) - 1, sz + 2, sz + 2, 1);
         box(px - (sz >> 1), py - (sz >> 1), sz, sz, i === 3 ? 8 : 3 + (i % 2));
         if (i === 5) set(px + Math.cos(t * 2) * 6, py + Math.sin(t * 2) * 2, 4);
       });
-      box(cx - 7, cy - 7, 14, 14, 1); box(cx - 6, cy - 6, 12, 12, 4); box(cx - 4, cy - 4, 8, 8, 5);
+      box(ox - 7, oy - 7, 14, 14, 1); box(ox - 6, oy - 6, 12, 12, 4); box(ox - 4, oy - 4, 8, 8, 5);
       g.putImageData(img, 0, 0);
     };
   }
@@ -634,8 +693,9 @@ const RunMap = (() => {
       ...nodes.map((n) => (n.t === 'boss' ? [n.x, 58, 100] : [n.x, n.y, 46])), // the casino is wide
       // Where a slingshot can stand, and its draw: the base, and in front of every stop.
       ...nodes.filter((n) => n.t !== 'boss').map((n) => (n.t === 'start' ? [n.x, n.y + 50, 70] : [n.x, n.y + 44, 38])),
-      // ...and the spot beside it where you wait while one is built (see buildRig).
-      ...nodes.filter((n) => n.t !== 'boss' && n.t !== 'start').map((n) => [n.x + (n.x <= W / 2 ? 1 : -1) * (SL.w + FIG / 2 + 8), n.y + 24, 30]),
+      // ...and the spot beside it where you wait while one is built (see buildRig; the base's
+      // is built as a run begins).
+      ...nodes.filter((n) => n.t !== 'boss').map((n) => [n.x + (n.x <= W / 2 ? 1 : -1) * (SL.w + FIG / 2 + 8), n.y + (n.t === 'start' ? 40 : 24), 30]),
     ];
     const clear = (x, y, r) => block.every((b) => Math.hypot(x - b[0], y - b[1]) - b[2] > r);
     // Rune circles and obelisks: the classic spots, repeated down a longer board.
@@ -644,6 +704,17 @@ const RunMap = (() => {
     runes.forEach(([x, y]) => block.push([x, y, 34]));
     const obel = tile([[92, 400], [668, 180], [92, 150], [300, 34], [460, 34], [672, 520], [110, 770], [652, 800]]).filter(([x, y]) => clear(x, y, 14));
     obel.forEach(([x, y]) => block.push([x, y, 18]));
+    // Landmarks: two dice towers and an armillary, or the reverse, each on clear ground, off the
+    // lava and well apart. Their own random stream, so the rest of the board is laid out as before.
+    const LR = mulberry32((run.seed ^ 0xd1ce) >>> 0), marks = [];
+    const kinds = LR() < 0.5 ? ['dice', 'dice', 'armillary'] : ['armillary', 'armillary', 'dice'];
+    const offLava = (x, y) => { const l = lavaL(y), r = lavaR(y); return x > l.c + l.w + 24 && x < r.c - r.w - 24; };
+    for (let t = 0; t < 400 && marks.length < kinds.length; t++) {
+      const x = 60 + LR() * (W - 120), y = 180 + LR() * (H - 300);
+      if (!offLava(x, y) || !clear(x, y, 34) || marks.some((m) => Math.hypot(m.x - x, m.y - y) < 220)) continue;
+      marks.push({ x, y, k: kinds[marks.length], seed: marks.length });
+      block.push([x, y, 30]);
+    }
 
     showScreen(`
       <div class="rmap" id="rmap">
@@ -669,6 +740,7 @@ const RunMap = (() => {
 
     drawGround($('#rmGnd'), R, C);
     placeProps(pl, R, C, block, runes, obel);
+    const markTick = landmarks(pl, C, marks);
     frame(pl, C);
 
     // Stop beacons, and the casino for the boss (whose lights the animation loop runs).
@@ -791,22 +863,58 @@ const RunMap = (() => {
     // (CAM was tuned on the classic board, whose base sits at y 960: the same framing on any
     // board is cam = CAM.min + 1000 - y, starting lower the further down the base is.)
     const camLo = CAM.min + 1000 - (nodes[0].y + 40);
-    let look = 0, lastFollow = [W / 2, nodes[0].y];
-    const follow = (x, y) => {
-      lastFollow = [x, y];
-      const cy = Math.max(camLo, Math.min(CAM.max, CAM.min + 1000 - y + look)), cx = (W / 2 - x) * CAM.side;
+    let look = 0, lastFollow = [W / 2, nodes[0].y], cam = [0, 0]; // cam: [across, along], for the sky's parallax
+    const setCam = (cx, cy) => {
       pl.style.setProperty('--cam', Math.round(cy / 2) * 2 + 'px');
       pl.style.setProperty('--camX', Math.round(cx / 2) * 2 + 'px');
+      cam = [cx, cy];
+    };
+    const follow = (x, y) => {
+      lastFollow = [x, y];
+      setCam((W / 2 - x) * CAM.side, Math.max(camLo, Math.min(CAM.max, CAM.min + 1000 - y + look)));
     };
     follow(sl.BX, sl.BY);
     // Scroll the wheel to look up the board toward the casino (or back down); a jump recentres.
+    // During the opening pan, the wheel (or a click) skips it instead.
+    let skipIntro = null;
     $('#rmap').addEventListener('wheel', (e) => {
       e.preventDefault();
+      if (skipIntro) return skipIntro();
       look = Math.max(-2000, Math.min(2000, look - Math.sign(e.deltaY) * 80));
       follow(...lastFollow);
     }, { passive: false });
+    $('#rmap').addEventListener('pointerdown', () => { if (skipIntro) skipIntro(); });
 
-    if (slingAt === prevAt) { sl.rig.append(fig); sl.load(0); } else buildRig(makeRig(prevAt));
+    // (Only a run that hasn't left the base yet: one saved mid-way before openings existed has no flag.)
+    if (!run.intro && run.cur === nodes[0].id && !run.done.length) intro();
+    else if (slingAt === prevAt) { sl.rig.append(fig); sl.load(0); } else buildRig(makeRig(prevAt));
+
+    // A run's opening: the camera starts on the casino, holds a moment, and pans down the board
+    // to the base, where you stand beside an empty plot while your first slingshot is built.
+    // Played once per run (run.intro); the wheel or a click skips the pan.
+    function intro() {
+      walking = true;
+      run.intro = true;
+      Run.save();
+      pl.append(fig);
+      place(sl.BX + (sl.BX <= W / 2 ? 1 : -1) * (SL.w + FIG / 2 + 8), sl.BY, 0);
+      sl.fork.style.clipPath = 'inset(100% 0 0 0)';
+      sl.bands.forEach((b) => { b.hidden = true; });
+      sl.pouch.hidden = true;
+      const top = CAM.max, end = cam[1], endX = cam[0];
+      setCam(0, top);
+      let done = false;
+      const finish = () => { if (done) return; done = true; skipIntro = null; follow(sl.BX, sl.BY); buildRig(null); };
+      skipIntro = finish;
+      setTimeout(() => {
+        if (done) return;
+        frames(2400, (k) => {
+          if (done) return;
+          const s = k * k * (3 - 2 * k); // ease in and out
+          setCam(endX * s, top + (end - top) * s);
+        }, finish);
+      }, 700);
+    }
 
     // Pointing at a beacon aims and takes up a little slack, in 5-degree steps like the pixel art.
     const aimAt = (n, k = 0.2) => {
@@ -830,10 +938,10 @@ const RunMap = (() => {
       }
     }
 
-    // The build, under two seconds: the old slingshot crumbles to dust, the new fork goes up from
-    // its foot in six hammered courses throwing sparks, its bands are strung and the pouch hung,
-    // then you hop into the pouch. Meanwhile you stand beside the fork, level with its foot and
-    // on the board's inner side, clear of the going-up and of the lava.
+    // The build, under two seconds: the old slingshot (if any; none at a run's start) crumbles to
+    // dust, the new fork goes up from its foot in six hammered courses throwing sparks, its bands
+    // are strung and the pouch hung, then you hop into the pouch. Meanwhile you stand beside the
+    // fork, level with its foot and on the board's inner side, clear of the going-up and of the lava.
     function buildRig(old) {
       walking = true;
       run.sling = slingAt.id;
@@ -845,9 +953,11 @@ const RunMap = (() => {
       sl.bands.forEach((b) => { b.hidden = true; });
       sl.pouch.hidden = true;
       const at = (ms, f) => setTimeout(() => { if (fig.isConnected) f(); }, ms);
-      at(80, () => { sfx('poof'); burst(old.fork, 0.6, 22, 'dust'); burst(old.fork, 0.2, 16, 'dust'); });
-      [0.66, 0.33].forEach((s, i) => at(80 + i * 90, () => { old.rig.style.transform = `scale3d(${s}, ${s}, ${s})`; }));
-      at(260, () => old.rig.remove());
+      if (old) {
+        at(80, () => { sfx('poof'); burst(old.fork, 0.6, 22, 'dust'); burst(old.fork, 0.2, 16, 'dust'); });
+        [0.66, 0.33].forEach((s, i) => at(80 + i * 90, () => { old.rig.style.transform = `scale3d(${s}, ${s}, ${s})`; }));
+        at(260, () => old.rig.remove());
+      }
       for (let i = 1; i <= 6; i++) {
         at(240 + i * 140, () => {
           sl.fork.style.clipPath = i < 6 ? `inset(${(1 - i / 6) * 100}% 0 0 0)` : '';
@@ -926,7 +1036,7 @@ const RunMap = (() => {
     $('#rmMenu').onclick = () => { sfx('select'); showTitle(); };
     $('#rmQuit').onclick = () => Run.confirmAbandon(() => show());
 
-    // Animate the sky, lava, runes, sigils, casino lights and rising embers at a stepped ~12fps.
+    // Animate the sky, lava, runes, sigils, casino lights, landmarks and rising embers at a stepped ~12fps.
     // Every stop but the casino sits in a sigil ring; the start's is where the lines meet, behind the slingshot.
     const rings = nodes.filter((n) => n.t !== 'boss').map((n) => [n.x, n.y, reach.includes(n.id)]);
     const draw = fxDrawer($('#rmFx').getContext('2d'), $('#rmGnd').getContext('2d'), C, edges, runes, live, attuned, rings);
@@ -938,9 +1048,10 @@ const RunMap = (() => {
       requestAnimationFrame(loop);
       if (now - last < 80) return;
       last = now;
-      sky(now / 1000);
+      sky(now / 1000, ...cam);
       draw(now / 1000);
       casinoTick(now / 1000);
+      markTick(now / 1000);
       ex.clearRect(0, 0, em.width, em.height);
       if (embers.length < 50) embers.push({ x: Math.random() * em.width, y: em.height + 2, v: 0.3 + Math.random() * 0.8, a: Math.random() * 6, l: 1 });
       for (let i = embers.length - 1; i >= 0; i--) {

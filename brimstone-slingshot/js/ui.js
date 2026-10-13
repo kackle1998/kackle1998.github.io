@@ -1037,7 +1037,7 @@ function getRecord() { return { wins: 0, losses: 0, ...Store.read(RECORD_KEY, {}
 
 function titleMenu() {
   return [
-    { label: 'OFFLINE PLAY', desc: "Sit at the Dealer's table: a quick match, or a run along the circuit.", go: showOfflineMenu },
+    { label: 'OFFLINE PLAY', desc: "A quick match, or a run along the Dealer's circuit.", go: showOfflineMenu },
     Cloud.enabled && { label: 'ONLINE ARENA', desc: 'Duel another player in real time.', go: () => Net.showOnline() },
     { label: 'DECK BUILDER', desc: 'Bind 30 cards into a spellbook of your own.', go: () => showDeckBuilder() },
     { label: 'CARD MAKER', desc: 'Draw and enchant a card of your own.', go: () => CardMaker.show() },
@@ -1361,8 +1361,9 @@ async function startGame(deckDef, opts = {}) {
   else { busy = false; render(); }
 }
 
-/* True once a match was conceded or replaced, so in-flight async steps stop touching it. */
-function abandoned(g) { return game !== g || g.over; }
+/* True once a match was conceded, ended or replaced, so in-flight async steps stop touching it.
+   Not just g.over: a move that ends the game still has to settle and reach endGame(). */
+function abandoned(g) { return game !== g || ended; }
 
 function showConcede() {
   if (!game || ended || !$('#screen').classList.contains('hidden')) return;
