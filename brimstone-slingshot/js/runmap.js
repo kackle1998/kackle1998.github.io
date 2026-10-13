@@ -288,6 +288,27 @@ const RunMap = (() => {
      Nobody walks the arcs (the slingshot flings you), so one you've flown stays drawn in solid
      rather than worn. Rings are the stops: [x, y, reachable]. */
   const ORB = { rx: 26, ry: 10 }; // a reachable stop's orbit ring, canvas px: just wider than its beacon
+  /* One lava pixel: d is how far across the river it lies (0 mid, 1 the bank; crust past that),
+     u along the flow and v across it, in canvas px. Also the VS screen's river (vsBackdrop). */
+  const lavaPx = (d, u, v, t, crust, hot, glow) => (d > 1 ? crust
+    : d > 0.4 ? (Math.sin(u * 0.21 - t * 2.2 + v) > 0.8 ? hot : glow)
+    : (Math.sin(u * 0.35 - t * 3 + v * 0.6) > 0.5 ? hot : glow));
+  /* Rising embers on a 640x360 overlay canvas: call once per ~80ms tick; it clears the canvas. */
+  function emberDrawer(em, C) {
+    const ex = em.getContext('2d'), embers = [];
+    return () => {
+      ex.clearRect(0, 0, em.width, em.height);
+      if (embers.length < 50) embers.push({ x: Math.random() * em.width, y: em.height + 2, v: 0.3 + Math.random() * 0.8, a: Math.random() * 6, l: 1 });
+      for (let i = embers.length - 1; i >= 0; i--) {
+        const p = embers[i];
+        p.y -= p.v * 3; p.a += 0.3; p.x += Math.sin(p.a) * 0.6; p.l -= 0.012;
+        if (p.l <= 0) { embers.splice(i, 1); continue; }
+        ex.fillStyle = p.l > 0.5 ? C[7] : C[8];
+        ex.fillRect(Math.round(p.x), Math.round(p.y), 1, 1);
+      }
+      return ex;
+    };
+  }
   function fxDrawer(fx, ground, C, edges, runes, live, attuned, rings) {
     const lineOn = (ctx) => (p0, p1, w, c) => {
       ctx.fillStyle = c;
@@ -329,10 +350,7 @@ const RunMap = (() => {
       for (let y = 0; y < CH; y++) {
         const [cc, ww, a, b] = rows[y];
         for (let x = a; x <= b; x++) {
-          const d = Math.abs(x - cc) / ww;
-          buf[y * CW + x] = d > 1 ? crust
-            : d > 0.4 ? (Math.sin(y * 0.21 - t * 2.2 + x) > 0.8 ? hot : glow)
-            : (Math.sin(y * 0.35 - t * 3 + x * 0.6) > 0.5 ? hot : glow);
+          buf[y * CW + x] = lavaPx(Math.abs(x - cc) / ww, y, x, t, crust, hot, glow);
         }
       }
     };
@@ -471,6 +489,56 @@ const RunMap = (() => {
       box(ox - 7, oy - 7, 14, 14, 1); box(ox - 6, oy - 6, 12, 12, 4); box(ox - 4, oy - 4, 8, 8, 5);
       g.putImageData(img, 0, 0);
     };
+  }
+
+  /* The VS screen's backdrop (ui.js vsSplash): the sky behind the table, above a slow lava river
+     with a rock bank at each side (the slingshots stand on them), a floating rock for each
+     fighter, embers rising, and the table's obsidian rim along the bottom. The river and rocks
+     are one 640x360 pixel buffer (the run map's lava scale); `rock(i, t)` is where rock i's
+     top-center is right now, as fractions of the screen, since the rocks bob and the fighters
+     and dice ride them. */
+  const VSB = { w: 640, h: 360, bank: 236, river: 256, rockTop: 262, rockW: 120, rockH: 22, rim: 10, slow: 0.3 };
+  const VS_ROCKS = [{ x: 0.34, ph: 0 }, { x: 0.66, ph: 2.1 }];
+  function vsBackdrop(skyCv, lavaCv, emCv, C) {
+    const sky = skyDrawer(skyCv, C), embers = emberDrawer(emCv, C);
+    const { w, h } = VSB, g = lavaCv.getContext('2d'), img = g.createImageData(w, h), buf = new Uint32Array(img.data.buffer);
+    const U = C.map((hx) => { const [r, gg, b] = rgb(hx); return ((255 << 24) | (b << 16) | (gg << 8) | r) >>> 0; });
+    const set = (x, y, k) => { if (x >= 0 && x < w && y >= 0 && y < h) buf[y * w + x] = U[k]; };
+    const top = (x) => Math.round(VSB.river + Math.sin(x * 0.035) * 3 + Math.sin(x * 0.095 + 1) * 2);
+    const bankEdge = (y) => Math.round(92 + (y - VSB.bank) * 0.4 + Math.sin(y * 0.3) * 3);
+    const bob = (i, t) => Math.round(Math.sin(t * 1.2 + VS_ROCKS[i].ph) * 2);
+    const rock = (i, t) => ({ x: VS_ROCKS[i].x, y: (VSB.rockTop + bob(i, t)) / h });
+    const draw = (t) => {
+      sky(t);
+      buf.fill(0);
+      const lt = t * VSB.slow, bottom = h - VSB.rim;
+      // The river: the run map's lava churn, flowing sideways (a crust line along its top).
+      for (let x = 0; x < w; x++) {
+        const y0 = top(x), mid = (y0 + bottom) / 2, half = (bottom - y0) / 2 - 1;
+        for (let y = y0; y < bottom; y++) buf[y * w + x] = lavaPx(Math.abs(y - mid) / half, x, y, lt, U[1], U[7], U[8]);
+      }
+      // The banks, mirrored: a lit lip, then rock down to the rim.
+      for (let y = VSB.bank; y < bottom; y++) {
+        const e = bankEdge(y);
+        for (let x = 0; x < e; x++) { const k = y === VSB.bank ? 2 : x === e - 1 ? 2 : 1; set(x, y, k); set(w - 1 - x, y, k); }
+      }
+      // The fighters' rocks: flat tops, lit, tapering under, bobbing out of step.
+      VS_ROCKS.forEach((r, i) => {
+        const y0 = VSB.rockTop + bob(i, t), x0 = Math.round(r.x * w - VSB.rockW / 2);
+        for (let j = 0; j < VSB.rockH; j++) {
+          const inset = Math.max(0, j - 10) * 3;
+          for (let k = inset; k < VSB.rockW - inset; k++) set(x0 + k, y0 + j, j < 2 ? 3 : j < 6 ? 2 : k < inset + 2 || k > VSB.rockW - inset - 3 ? 0 : 1);
+        }
+        for (let k = 6; k < VSB.rockW - 6; k += 14) { set(x0 + k, y0 + 2, 4); set(x0 + k + 1, y0 + 2, 4); }
+      });
+      // The table's rim, a hint of it: obsidian with a lit edge and gold corner fittings.
+      for (let x = 0; x < w; x++) { set(x, bottom, 2); set(x, bottom + 1, 2); set(x, bottom + 2, 0); for (let y = bottom + 3; y < h; y++) set(x, y, 1); }
+      for (const x0 of [0, w - 14]) for (let j = 0; j < VSB.rim + 2; j++) for (let k = 0; k < 14; k++) set(x0 + k, bottom - 2 + j, j > 2 && j < 5 && k > 3 && k < 10 ? 6 : 8);
+      for (let x = 48; x < w - 40; x += 64) for (let j = 0; j < 2; j++) { set(x, bottom + 5 + j, 8); set(x + 1, bottom + 5 + j, 8); }
+      g.putImageData(img, 0, 0);
+      embers();
+    };
+    return { draw, rock };
   }
 
   /* The boss stop: the Dealer's casino, a palace-and-tower resort standing up on the 3D board.
@@ -743,7 +811,7 @@ const RunMap = (() => {
      light stays put). Every hand canvas is the same size with the anchor at the same pixel.
      Both poses lie on their side: fingers pointing in toward the middle, thumb on top, the cuff
      on the outside. */
-  const HAND = { w: 78, h: 58, ax: 39, ay: 37 }, GRIP = -8; // GRIP: where a fist grips your figurine, map units above its feet (just under them: it closes round your legs)
+  const HAND = { w: 78, h: 58, ax: 39, ay: 37 }, HAND_S = 2.25, GRIP = -12; // HAND_S: map units a hand pixel. GRIP: where a fist grips your figurine, map units above its feet (just under them: it closes round your legs)
   const HAND_POSES = {
     // An open hand, drawn fingers-up and then turned on its side (x and y swapped).
     open: [[-8, 15, 8, 15, 4.5], [0, -4, 0, 5, 11.5], [-11, 3, -19, -10, 4], [-8, -11, -11, -29, 3], [-2, -13, -2, -34, 3], [4, -12, 6, -32, 3], [9, -8, 14, -24, 2.6]]
@@ -752,6 +820,9 @@ const RunMap = (() => {
     // the top, the back of the hand and the cuff off to the side.
     fist: [[21, -8, 21, 10, 4], [11, -4, 13, 6, 9], [-9, -9, 7, -9, 3], [-9, -3, 7, -3, 3], [-9, 3, 7, 3, 3], [-9, 9, 7, 9, 3], [-10, -14, 6, -13, 3.2]],
   };
+  // How far below its anchor a pose reaches, in hand pixels (its lowest capsule edge plus the outline).
+  const handLow = (pose) => Math.max(...HAND_POSES[pose].map(([, y0, , y1, r]) => Math.max(y0, y1) + r + 1));
+
   function handArt(cv, C, pose, left) {
     const { w, h, ax, ay } = HAND, caps = HAND_POSES[pose].map(([x0, y0, x1, y1, r]) => left ? [-x0, y0, -x1, y1, r] : [x0, y0, x1, y1, r]);
     const B = new Int8Array(w * h).fill(-1);
@@ -765,7 +836,7 @@ const RunMap = (() => {
         const [ox, oy] = near(u - ax, v - ay, cap), d = Math.hypot(ox, oy);
         if (d > r) continue;
         const l = (ox * 0.8 + oy * 0.6) / cap[4];
-        B[v * w + u] = pass ? (l < -0.5 ? 7 : l > 0.5 ? 4 : 6) : 1;
+        B[v * w + u] = pass ? (l < -0.5 ? 3 : l > 0.5 ? 1 : 2) : 0;
       }
     }
     const x = cv.getContext('2d');
@@ -773,56 +844,45 @@ const RunMap = (() => {
     for (let i = 0; i < B.length; i++) if (B[i] >= 0) { x.fillStyle = C[B[i]]; x.fillRect(i % w, i / w | 0, 1, 1); }
     // A gold cufflink, and a crease or two.
     const s = left ? -1 : 1, dot = (u, v, k) => { x.fillStyle = C[k]; x.fillRect(ax + u * s, ay + v, 1, 1); };
-    if (pose === 'open') { dot(15, 0, 8); dot(15, 1, 8); for (let i = -4; i <= 3; i++) dot(2 + Math.round(i * i / 8), i, 4); }
-    else { dot(21, 0, 8); dot(21, 1, 8); for (const v of [-6, 0, 6]) dot(8, v, 4); }
+    if (pose === 'open') { dot(15, 0, 8); dot(15, 1, 8); for (let i = -4; i <= 3; i++) dot(2 + Math.round(i * i / 8), i, 1); }
+    else { dot(21, 0, 8); dot(21, 1, 8); for (const v of [-6, 0, 6]) dot(8, v, 1); }
   }
 
-  /* The Pit Boss's eyes: a mean, narrow squint. Small beady gold irises half under heavy lids, a
-     dull white, thick bushy brows driven down toward the nose, a crease over each lid, bags
-     underneath, crow's feet, and furrows between the brows. Each eye is drawn in its own frame,
-     u from the inner corner (-) to the outer (+), v down, and mirrored for the eye on the left.
-     `open` 0..1 is how far the lids are apart (under 0.15: shut); lx, ly (-1..1) is where they look. */
+  /* The Pit Boss's eyes: a floating pair of gold irises glinting out of the dark. Each sits in a
+     patch of the darkest tone that thins out, in Bayer order, into the sky around it, so there's
+     no hard edge, just eyes. The whites are dark too, so the gold is what you see. Each eye is drawn in
+     its own frame, u from the inner corner (-) to the outer (+), v down, and mirrored for the eye
+     on the left. `open` 0..1 is how far the lids are apart (under 0.15: shut); lx, ly (-1..1) is
+     where they look. */
   const EYES = { w: 132, h: 40 };
   function eyesArt(cv, C, open, lx = 0, ly = 0) {
-    const x = cv.getContext('2d');
+    const x = cv.getContext('2d'), RX = 25, RY = 13, FADE = 1.25; // FADE: how far out the dark thins away, in socket radii
+    const bay = (u, v) => BAY[((u + 40) & 3) + ((v + 40) & 3) * 4];
+    // The opening's edges at u, wide open: pressed down toward the nose, pinched at the corners.
+    const top0 = (u) => (-2.5 - 0.08 * u + 2.5 * (u / 16) ** 4) * 1.6, bot0 = (u) => (2.5 - 3 * (u / 16) ** 2) * 1.6;
     x.clearRect(0, 0, EYES.w, EYES.h);
-    // The opening's edges at u, wide open: the top pressed down toward the nose, the corners pinched.
-    const top0 = (u) => -4.5 - 0.1 * u + 3 * (u / 18) ** 4, bot0 = (u) => 3 - 3.5 * (u / 18) ** 2 - 0.04 * u;
     for (const [ex, s] of [[33, -1], [99, 1]]) {
-      const P = (u, v, k) => { x.fillStyle = C[k]; x.fillRect(ex + s * Math.round(u), 28 + Math.round(v), 1, 1); };
+      const P = (u, v, k) => { x.fillStyle = C[k]; x.fillRect(ex + s * Math.round(u), 22 + Math.round(v), 1, 1); };
       const mid = (u) => (top0(u) + bot0(u)) / 2, shut = open < 0.15;
       const top = (u) => Math.round(mid(u) + (top0(u) - mid(u)) * open), bot = (u) => Math.round(mid(u) + (bot0(u) - mid(u)) * open);
-      const lid = (u) => (shut ? Math.round(mid(u)) : top(u)) - 1;
-      // Furrows between the brows.
-      for (let v = -9; v <= -4; v++) { P(-25, v, 2); if (v > -8) P(-27, v + 1, 2); }
-      // The brow: a thick, ragged bar driven down at the inner end, almost onto the lid.
-      for (let u = -23; u <= 21; u++) {
-        const vb = -6 - 0.34 * (u + 23) + (u < -19 ? 1 : 0), th = u > 17 ? 3 : u < -19 ? 4 : 5;
-        const rag = (u * 7 + 3) % 3 === 0 ? 1 : 0;
-        for (let k = 0; k < th + rag; k++) P(u, vb - k, k === 0 ? 0 : k === th + rag - 1 ? (u % 3 === 0 ? 4 : 3) : 1);
+      // The dark round the eye: solid in the middle, fewer and fewer pixels out to FADE.
+      const fu = Math.floor(RX * FADE), fv = Math.floor(RY * FADE);
+      for (let u = -fu; u <= fu; u++) for (let v = -fv; v <= fv; v++) {
+        const d = Math.hypot(u / RX, v / RY);
+        if (d < 0.6 || (d < FADE && bay(u, v) < 16 * (FADE - d) / (FADE - 0.6))) P(u, v, 0);
       }
-      // The eye: dull white with a shadow under the lid, a small iris (ink rim, gold, a dark pupil
-      // and a single glint), clipped by the lids so it glares out from under them.
-      const iu = s * lx * 6, iv = mid(iu) + 0.5 + ly * 1.5;
-      if (!shut) for (let u = -18; u <= 18; u++) for (let v = top(u); v <= bot(u); v++) {
+      if (shut) { for (let u = -18; u <= 18; u++) { P(u, Math.round(mid(u)), 0); P(u, Math.round(mid(u)) - 1, 0); } continue; }
+      // The eye: a gold iris (ink rim, black pupil) in dark whites, shadowed under the lid.
+      const iu = s * lx * 6, iv = ly * 2;
+      for (let u = -16; u <= 16; u++) for (let v = top(u); v <= bot(u); v++) {
         const d = Math.hypot(u - iu, v - iv);
-        P(u, v, d < 1.8 ? 0 : d < 3.4 ? 8 : d < 4.4 ? 1 : v <= top(u) ? 5 : 6);
+        P(u, v, d < 1.8 ? 0 : d < 3.2 ? 8 : d < 4 ? 1 : v <= top(u) ? 0 : v > mid(u) ? 2 : 1);
       }
-      if (!shut && open > 0.6) P(iu - 1, Math.max(top(iu), Math.round(iv) - 1), 7);
-      // The heavy upper lid, and a crease above it.
-      for (let u = -19; u <= 19; u++) {
-        const t0 = lid(u);
-        P(u, t0, 0); P(u, t0 - 1, 0); P(u, t0 - 2, 1);
-        if (u > -14 && u < 16) P(u, t0 - 4, 2);
-      }
-      // The lower lid, bags under it, and crow's feet off the outer corner.
-      const lo = (u) => (shut ? Math.round(mid(u)) + 1 : bot(u) + 1);
-      for (let u = -17; u <= 18; u++) P(u, lo(u), u > -13 && u < 15 ? 1 : 2);
-      for (let u = -11; u <= 12; u++) P(u, lo(u) + 2 + Math.round((u / 12) ** 2 * -1.5), 2);
-      for (const [a, b] of [[21, -3], [22, -4], [21, 0], [22, 0], [23, 0], [21, 2], [22, 3]]) P(a, Math.round(mid(18)) + b, 2);
+      if (open > 0.6) P(iu - 1, Math.max(top(Math.round(iu)), Math.round(iv) - 1), 7);
+      for (let u = -18; u <= 18; u++) { P(u, top(u) - 1, 0); P(u, top(u) - 2, 0); }
+      for (let u = -15; u <= 15; u++) P(u, bot(u) + 1, 0);
     }
   }
-
 
   /* What's left of the casino: a long heap of broken stone, white palace and gold trim. */
   /* Chunks are piled back to front, big ones low, each sitting somewhere inside the heap's
@@ -936,7 +996,7 @@ const RunMap = (() => {
           <div class="rh-row">${ico('spell')}<span>DECK</span><b id="rhDeck">${Run.deckSize()}</b></div>
           <button class="btn" id="rmDeck">VIEW DECK</button>
         </div>
-        <div class="rm-btns"><button class="btn" id="rmMenu">MENU</button><button class="btn" id="rmQuit">ABANDON</button></div>
+        <div class="rm-btns"><button class="mini-btn rm-gear" id="rmGear" title="Options: sound, music, screen, colors and how to play"><img src="${iconURL('gear')}" alt="Options"></button><button class="btn" id="rmMenu">MENU</button><button class="btn" id="rmQuit">ABANDON</button></div>
         <div class="rm-tick" id="rmTick"></div>
       </div>`);
     const pl = $('#rmPl'), tick = $('#rmTick');
@@ -1288,17 +1348,17 @@ const RunMap = (() => {
       // stepped bob while it hovers. `held` is anything it carries along (your figurine).
       const hands = [];
       const hand = (left) => {
-        const f = floater(HAND.w, HAND.h), src = document.createElement('canvas');
+        const f = floater(HAND.w, HAND.h, HAND_S), src = document.createElement('canvas');
         src.width = HAND.w; src.height = HAND.h;
         const o = {
           ...f, left, x: 0, y: 0, z: 0, bob: 0, held: null,
           set(pose, k = 1) { handArt(src, C, pose, left); reveal(f.cv, src, k); },
           at(x, y, z) {
             Object.assign(o, { x, y, z });
-            f.el.style.left = x - HAND.ax * 2 + 'px'; f.el.style.top = y - HAND.h * 2 + 'px';
-            const base = Math.round((z + o.bob - (HAND.h - HAND.ay) * 2) / 2) * 2;
+            f.el.style.left = x - HAND.ax * HAND_S + 'px'; f.el.style.top = y - HAND.h * HAND_S + 'px';
+            const base = Math.round((z + o.bob - (HAND.h - HAND.ay) * HAND_S) / 2) * 2;
             f.el.style.transform = `translateZ(${base}px) rotateX(-90deg)`;
-            sink(f.el, base, HAND.h * 2);
+            sink(f.el, base, HAND.h * HAND_S);
             if (o.held) place(x, y - 3, z + o.bob - GRIP); // gripped round the legs, so you show above the fist
           },
           to(x, y, z, dur) { const a = [o.x, o.y, o.z]; return tween(dur, (k) => { const s = ease(k); o.at(mix(a[0], x, s), mix(a[1], y, s), mix(a[2], z, s)); }); },
@@ -1347,12 +1407,13 @@ const RunMap = (() => {
         //    Anything still below the board's edge is cut off at it (see sink).
         tick.textContent = 'Something stirs under the table';
         await wait(400);
-        const H1 = hand(true), H2 = hand(false), HX = 300;
+        // ON_RIM: the open hand's anchor height with its lowest pixel resting on the rim's top.
+        const H1 = hand(true), H2 = hand(false), HX = 300, ON_RIM = RIM_H + handLow('open') * HAND_S;
         H1.set('open'); H2.set('open');
         H1.at(W / 2 - HX, -40, -140); H2.at(W / 2 + HX, -40, -140);
         for (const [h, d] of [[H1, 1], [H2, -1]]) {
-          await h.to(h.x, -40, 70, 380);
-          await h.to(h.x + d * 20, -14, RIM_H + 24, 160);
+          await h.to(h.x, -40, ON_RIM + 30, 380);
+          await h.to(h.x + d * 20, -14, ON_RIM + 6, 160);
           sfx('land');
           await wait(260);
         }
@@ -1361,7 +1422,7 @@ const RunMap = (() => {
         eyesArt(eyes.cv, C, 0);
         sfx('warp');
         await tween(900, (k) => eyes.put(W / 2, EY, mix(-EYES.h * 5, EZ, ease(k))));
-        for (const h of [H1, H2]) h.to(h.x, h.y, h.z - 10, 200); // bearing down on the rim as it hauls itself up
+        for (const h of [H1, H2]) h.to(h.x, h.y, h.z - 6, 200); // bearing down on the rim as it hauls itself up, palm flat on it
         await wait(400);
         for (const o of [0.35, 0.7, 1]) { eyesArt(eyes.cv, C, o, 0, 1); await wait(90); }
         await wait(300);
@@ -1403,7 +1464,7 @@ const RunMap = (() => {
 
         // 5. The right hand swoops down, closes round you, and carries you to the pouch.
         await H2.to(gx, gy + 3, 70, 500);
-        await H2.to(gx, gy + 3, 32, 160); // just off the board: closing round you lifts you a little
+        await H2.to(gx, gy + 3, 38, 160); // just off the board: closing round you lifts you a little
         H2.set('fist');
         H2.held = true;
         pl.append(fig);
@@ -1475,6 +1536,7 @@ const RunMap = (() => {
     }
 
     $('#rmDeck').onclick = () => { sfx('select'); Run.showDeck($('#rmap')); };
+    $('#rmGear').onclick = () => { sfx('select'); openOptions(false, () => show()); };
     $('#rmMenu').onclick = () => { sfx('select'); showTitle(); };
     $('#rmQuit').onclick = () => Run.confirmAbandon(() => show());
 
@@ -1483,7 +1545,7 @@ const RunMap = (() => {
     const rings = nodes.filter((n) => n.t !== 'boss').map((n) => [n.x, n.y, reach.includes(n.id)]);
     const draw = fxDrawer($('#rmFx').getContext('2d'), $('#rmGnd').getContext('2d'), C, edges, runes, live, attuned, rings);
     const sky = skyDrawer($('#rmSky'), C);
-    const em = $('#rmEm'), ex = em.getContext('2d'), embers = [];
+    const embers = emberDrawer($('#rmEm'), C), em = $('#rmEm');
     let last = 0;
     (function loop(now) {
       if (!em.isConnected) return;
@@ -1494,15 +1556,7 @@ const RunMap = (() => {
       draw(now / 1000);
       casinoTick(now / 1000);
       markTick(now / 1000);
-      ex.clearRect(0, 0, em.width, em.height);
-      if (embers.length < 50) embers.push({ x: Math.random() * em.width, y: em.height + 2, v: 0.3 + Math.random() * 0.8, a: Math.random() * 6, l: 1 });
-      for (let i = embers.length - 1; i >= 0; i--) {
-        const p = embers[i];
-        p.y -= p.v * 3; p.a += 0.3; p.x += Math.sin(p.a) * 0.6; p.l -= 0.012;
-        if (p.l <= 0) { embers.splice(i, 1); continue; }
-        ex.fillStyle = p.l > 0.5 ? C[7] : C[8];
-        ex.fillRect(Math.round(p.x), Math.round(p.y), 1, 1);
-      }
+      const ex = embers();
       // Build sparks and crumble dust: thrown up, falling back.
       for (let i = bits.length - 1; i >= 0; i--) {
         const p = bits[i];
@@ -1515,5 +1569,5 @@ const RunMap = (() => {
     if (opts.fromDark) curtain($('#rmap'), C, 1, 0, 700);
   }
 
-  return { show, forkArt, pouchArt, ramp, SL }; // the slingshot art is reused by the VS splash (ui.js)
+  return { show, forkArt, pouchArt, ramp, SL, VSB, vsBackdrop }; // the VS splash (ui.js) reuses the slingshot art and the sky
 })();

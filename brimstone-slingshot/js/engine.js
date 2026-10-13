@@ -540,7 +540,8 @@ class Game {
     if (n <= 0) return;
     p.life -= n;
     this.fx.push({ kind: 'dmg', player: p.idx, n });
-    if (this.boss && p.cpu && !this.phase2 && p.life > 0 && p.life <= BOSS_PHASE_AT) this.bossPhase(p);
+    // The boss's second phase is off for now; restore this line to bring it back:
+    // if (this.boss && p.cpu && !this.phase2 && p.life > 0 && p.life <= BOSS_PHASE_AT) this.bossPhase(p);
     this.checkOver();
   }
 

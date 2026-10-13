@@ -81,18 +81,20 @@ const Palette = {
 Palette.apply(Store.read(PALETTE_KEY, 'moss'));
 
 /* ---------- options screen ----------
-   Rows: sound, CRT, palette, how to play, back. Esc goes back.
-   Opened from the title, or over a match from the gear button, where
-   BACK becomes RESUME and returns to the table. */
-let optInMatch = false;
+   Rows: sound effects, music, CRT, palette, how to play, back. Esc goes back.
+   Opened from the title; over a match from the gear button, where BACK becomes
+   RESUME and returns to the table; or from the run map's gear, where `backTo`
+   redraws the map (in the new colors, if the palette changed). */
+let optInMatch = false, optBackTo = null;
 
-function openOptions(inMatch) {
+function openOptions(inMatch, backTo = null) {
   optInMatch = inMatch;
+  optBackTo = backTo;
   showOptions();
 }
 
 function showOptions() {
-  const soundOn = !Sfx.muted, crtOn = CRT.level !== 'off';
+  const soundOn = !Sfx.muted, musicOn = !Music.muted, crtOn = CRT.level !== 'off';
   const toggle = (id, on) => `
     <div class="opt-toggle" id="${id}">
       <button class="btn sm${on ? ' on' : ''}" data-v="on">ON</button><button class="btn sm${on ? '' : ' on'}" data-v="off">OFF</button>
@@ -100,32 +102,41 @@ function showOptions() {
   showScreen(`
     <div class="opt panel">
       <div class="opt-title">OPTIONS</div>
-      <div class="opt-row" data-row="0"><span class="opt-label">SOUND</span>${toggle('optSound', soundOn)}</div>
-      <div class="opt-row" data-row="1"><span class="opt-label">CRT EFFECT</span>${toggle('optCrt', crtOn)}</div>
-      <div class="opt-row" data-row="2"><span class="opt-label">PALETTE</span>
+      <div class="opt-row"><span class="opt-label">SOUND FX</span>${toggle('optSound', soundOn)}</div>
+      <div class="opt-row"><span class="opt-label">MUSIC</span>${toggle('optMusic', musicOn)}</div>
+      <div class="opt-row"><span class="opt-label">CRT EFFECT</span>${toggle('optCrt', crtOn)}</div>
+      <div class="opt-row"><span class="opt-label">PALETTE</span>
         <div class="opt-pal" id="optPal">
           <button class="db-step" data-d="-1" aria-label="Previous palette">&lt;</button>
           <span class="opt-pval">${Palette.cur.name}</span>
           <button class="db-step" data-d="1" aria-label="Next palette">&gt;</button>
         </div>
       </div>
-      <div class="opt-row opt-btn-row" data-row="3"><button class="btn" id="optRules">HOW TO PLAY</button></div>
-      <div class="opt-row opt-btn-row" data-row="4"><button class="btn" id="optBack">${optInMatch ? 'RESUME' : 'BACK'}</button></div>
+      <div class="opt-row opt-btn-row"><button class="btn" id="optRules">HOW TO PLAY</button></div>
+      <div class="opt-row opt-btn-row"><button class="btn" id="optBack">${optInMatch ? 'RESUME' : 'BACK'}</button></div>
     </div>`, true);
 
   $$('#optSound .btn').forEach((b) => (b.onclick = () => optSound(b.dataset.v === 'on')));
+  $$('#optMusic .btn').forEach((b) => (b.onclick = () => optMusic(b.dataset.v === 'on')));
   $$('#optCrt .btn').forEach((b) => (b.onclick = () => optCrt(b.dataset.v === 'on')));
   $$('#optPal .db-step').forEach((b) => (b.onclick = () => stepPalette(+b.dataset.d)));
   $('#optRules').onclick = () => { sfx('select'); showTitleRules(optInMatch); };
   $('#optBack').onclick = () => {
     sfx('select');
-    if (optInMatch) hideScreen();
+    if (optBackTo) optBackTo();
+    else if (optInMatch) hideScreen();
     else showTitle();
   };
 }
 
 function optSound(on) {
   setSound(on);
+  sfx('select');
+  showOptions();
+}
+
+function optMusic(on) {
+  setMusic(on);
   sfx('select');
   showOptions();
 }

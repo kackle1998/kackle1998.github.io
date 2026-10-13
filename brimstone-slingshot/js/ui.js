@@ -63,6 +63,7 @@ fit();
 
 /* ---------- sound (tiny WebAudio synth) ---------- */
 const SOUND_KEY = 'cardgrave.sound.v1';
+const MUSIC_KEY = 'cardgrave.music.v1';
 const Sfx = {
   ctx: null, muted: Store.read(SOUND_KEY, 'on') === 'off',
   ensure() {
@@ -144,6 +145,9 @@ const Music = {
   files: { menu: 'moonlit-circuit-loop', battle: 'battle-loop' },
   ext: new Audio().canPlayType('audio/ogg; codecs="vorbis"') ? 'ogg' : 'mp3',
   volume: 0.04,
+  // Its own setting since sound effects and music were split; until it's first set,
+  // it follows the old combined sound setting.
+  muted: Store.read(MUSIC_KEY, Store.read(SOUND_KEY, 'on')) === 'off',
   want: 'menu', // the track the current screen calls for
   cur: null,    // the playing (or loading) track: { name, src, gain, level }
   unlocked: false, bytes: {}, buffers: {},
@@ -183,7 +187,7 @@ const Music = {
     t.gain.gain.setValueAtTime(0, ctx.currentTime);
     t.src.connect(t.gain).connect(ctx.destination);
     t.src.start();
-    this.ramp(t, Sfx.muted ? 0 : this.volume, fade);
+    this.ramp(t, this.muted ? 0 : this.volume, fade);
   },
   // Ramp from wherever the gain is now. gain.value isn't reliable mid-ramp (or right after
   // the node is made, when it reports 1.0), so hold the curve where the browser can and
@@ -196,17 +200,21 @@ const Music = {
     g.linearRampToValueAtTime(to, now + fade);
   },
   setMuted(muted, fade = 0.4) {
+    this.muted = muted;
     if (this.cur && this.cur.gain) this.ramp(this.cur, muted ? 0 : this.volume, fade);
   },
 };
 Music.preload();
 function audioUnlock() { Sfx.ensure(); Music.start(); }
 
-/* Sound effects and music together, set from OPTIONS and saved. */
+/* Sound effects and music each have their own switch in OPTIONS, saved separately. */
 function setSound(on) {
   Sfx.muted = !on;
-  Music.setMuted(Sfx.muted);
   Store.write(SOUND_KEY, on ? 'on' : 'off');
+}
+function setMusic(on) {
+  Music.setMuted(!on);
+  Store.write(MUSIC_KEY, on ? 'on' : 'off');
 }
 window.addEventListener('pointerdown', audioUnlock);
 window.addEventListener('keydown', audioUnlock);
@@ -337,7 +345,6 @@ function flushFx() {
     const word = calloutFor(chain);
     if (word && !game.over) { callout(word); sfx('callout', chain); }
   }
-  let tagged = false;
   fx.forEach((f, i) => {
     let el, shakeEl;
     if (f.uid != null) { el = cardElByUid(f.uid); shakeEl = el; }
@@ -358,21 +365,6 @@ function flushFx() {
     if (f.kind === 'dmg') {
       shake(shakeEl); CRT.pulse(Math.min(1, 0.15 + f.n / 6), f.player != null);
       sparks(r);
-      // The first hit of a chained action also shows the link count.
-      if (chain >= 2 && !tagged) {
-        tagged = true;
-        const x = document.createElement('div');
-        x.className = 'float heal';
-        x.textContent = 'x' + chain;
-        x.style.left = r.x + r.w / 2 + 44 + 'px';
-        x.style.top = r.y + r.h / 2 + 'px';
-        $('#fx').appendChild(x);
-        x.animate([
-          { transform: 'translate(-50%, 0)', opacity: 1 },
-          { transform: 'translate(-50%, -30px)', opacity: 1, offset: 0.7 },
-          { transform: 'translate(-50%, -40px)', opacity: 0 },
-        ], { duration: 1100, delay: i * 70 + 120, easing: 'steps(12)', fill: 'forwards' }).finished.then(() => x.remove());
-      }
     } else sfx('heal');
   });
 }
@@ -1175,61 +1167,66 @@ document.addEventListener('keydown', (e) => {
   else if (e.key === 'Escape') $('#omBack').onclick();
 });
 
-/* Fighting-game VS splash before every fight. The halves slide in, each with a Brimstone
-   Slingshot (the run map's art) cradling its fighter's portrait. Both draw back and fling their
-   fighters at each other; they clash mid-air (VS!), ricochet back into their pouches, and the
-   names come up, each with a die under it. Click to skip ahead. Resolves once it has landed,
-   leaving the screen up for the roll for the first turn (rollForFirst, or netplay's rollOnline):
-   the dice are #dieYou / #dieCpu, the roll's message and buttons go in #rollMsg / #rollBtns,
-   vsWinner() marks the high roller and vsGo() ends it.
+/* Fighting-game VS splash before every fight, over the Dealer's Run sky and a lava river
+   (RunMap.vsBackdrop). Each fighter's portrait sits in a Brimstone Slingshot on its bank; both
+   draw back and fling their fighters at each other. They clash mid-air, knock each other
+   back, and land on their own floating rocks; the names come up and each
+   fighter's die drops from above and bounces to rest on their rock. Click to skip ahead.
+   Resolves once it has all landed, leaving the screen up for the roll for the first turn
+   (rollForFirst, or netplay's rollOnline): the dice are #dieYou / #dieCpu, the roll's message
+   and buttons go in #rollMsg / #rollBtns, vsWinner() marks the high roller and vsGo() ends it.
    you / foe: { name, deck, sprite } */
 function vsSplash(you, foe) {
-  const side = (p, cls, die) => `
-    <div class="vs-side ${cls}">
-      <div class="vs-slot"></div>
-      <div class="vs-who"><div class="vs-name">${escapeHTML(p.name.toUpperCase())}</div><div class="vs-deck">${escapeHTML(p.deck.toUpperCase())}</div><div class="die" id="${die}"></div></div>
-    </div>`;
   const rig = (p, cls) => `
     <div class="vs-rig ${cls}">
       <div class="vs-fork"></div><div class="vs-band"></div><div class="vs-band"></div>
       <img class="vs-face" src="${spriteURL(p.sprite)}" alt=""><div class="vs-pouch"></div>
     </div>`;
-  showScreen(`<div class="vs">${side(you, 'vs-l', 'dieYou')}${side(foe, 'vs-r', 'dieCpu')}${rig(you, 'vs-rl')}${rig(foe, 'vs-rr')}<div class="vs-t" id="vsT">VS</div><div class="vs-t low" id="vsR"></div>
+  const who = (p, id) => `<div class="vs-who" id="${id}"><div class="vs-name">${escapeHTML(p.name.toUpperCase())}</div><div class="vs-deck">${escapeHTML(p.deck.toUpperCase())}</div></div>`;
+  showScreen(`<div class="vs">
+    <canvas class="vs-cv vs-sky"></canvas><canvas class="vs-cv vs-lava" width="${RunMap.VSB.w}" height="${RunMap.VSB.h}"></canvas>
+    ${rig(you, 'vs-rl')}${rig(foe, 'vs-rr')}<div class="die" id="dieYou"></div><div class="die" id="dieCpu"></div>
+    <canvas class="vs-cv vs-em" width="640" height="360"></canvas>
+    ${who(you, 'vsWhoL')}${who(foe, 'vsWhoR')}<div class="vs-t low" id="vsR"></div>
     <div class="vs-roll panel"><div class="roll-msg" id="rollMsg"></div><div class="roll-btns" id="rollBtns"></div></div></div>`);
   setDie($('#dieYou'), 6);
   setDie($('#dieCpu'), 6);
+  const vs = $('.vs'), C = RunMap.ramp();
+  const back = RunMap.vsBackdrop($('.vs-sky'), $('.vs-lava'), $('.vs-em'), C);
   return new Promise((resolve) => {
-    if (FAST) return resolve();
+    const W = vs.offsetWidth, H = vs.offsetHeight, SL = RunMap.SL, VSB = RunMap.VSB, K = 3; // the fork's art at 3x
+    const FACE = 112, TIP = 26 * K, STEP = 1000 / 12; // the whole scene moves at 12 fps, like the pixel art it is
+    const T = { pull: 400, fly: 1000, hit: 1350, part: 1520, land: 1870, drop: 1720, bounce: 2070, settle: 2520 };
+    const CLASH_Y = H * 0.3;
+    let done = false, skipped = false, flew = false, hit = false, parted = false, landed = false, dropped = 0;
     const timers = [];
-    let done = false, raf = 0;
-    const vs = $('.vs');
-    // Done (or skipped): jump to the landed scene, quietly, and bring up the roll.
-    const finish = () => {
-      if (done) return;
-      done = true;
-      timers.forEach(clearTimeout);
-      cancelAnimationFrame(raf);
-      vs.getAnimations({ subtree: true }).forEach((a) => a.finish());
-      draw(T.land + 3 * STEP, true);
-      vs.classList.add('rolling');
-      resolve();
-    };
-    vs.addEventListener('click', finish);
 
-    // Lay out each rig over its half's slot (layout px of .vs; offsets ignore the slide-in transform).
-    const C = RunMap.ramp(), SL = RunMap.SL, K = 3; // the fork's art at 3x
-    const W = vs.offsetWidth, H = vs.offsetHeight, FACE = 112, TIP = 26 * K;
-    const rigs = [['.vs-l', '.vs-rl', 1], ['.vs-r', '.vs-rr', -1]].map(([half, sel, s]) => {
-      const h = $(half), slot = h.querySelector('.vs-slot'), el = $(sel);
-      const x = h.offsetLeft + slot.offsetLeft + slot.offsetWidth / 2, foot = h.offsetTop + slot.offsetTop + slot.offsetHeight;
+    // Each side: its slingshot on its bank, its portrait, its die, its name.
+    const sides = [['.vs-rl', '#dieYou', '#vsWhoL', 1, 0.09], ['.vs-rr', '#dieCpu', '#vsWhoR', -1, 0.91]].map(([sel, die, name, s, fx], i) => {
+      const el = $(sel), x = W * fx, foot = (VSB.bank + 2) * H / VSB.h;
       const fork = el.querySelector('.vs-fork');
       fork.appendChild(RunMap.forkArt(C));
       Object.assign(fork.style, { left: x - SL.w * K / 2 + 'px', top: foot - SL.h * K + 'px', width: SL.w * K + 'px', height: SL.h * K + 'px' });
       el.querySelector('.vs-pouch').appendChild(RunMap.pouchArt(C));
       el.querySelectorAll('.vs-band').forEach((b) => { b.style.background = C[1]; });
       const tipY = foot - SL.h * K + 4 * K;
-      return { s, el, x, tipY, rest: [x, tipY + 34], face: el.querySelector('.vs-face'), pouch: el.querySelector('.vs-pouch'), bands: el.querySelectorAll('.vs-band'), clash: [W / 2 - s * (FACE / 2 + 4), H * 0.42] };
+      return {
+        i, s, el, x, tipY, rest: [x, tipY + 34], face: el.querySelector('.vs-face'), pouch: el.querySelector('.vs-pouch'), bands: el.querySelectorAll('.vs-band'),
+        die: $(die), name: $(name), clash: [W / 2 - s * (FACE / 2 + 4), CLASH_Y],
+      };
     });
+    const DIE = sides[0].die.offsetWidth;
+    // Where a fighter and their die stand on their rock right now (the rocks bob): the fighter on
+    // the far side, away from the foe; the die on the inner side, between the two of them.
+    const onRock = (r, sec) => {
+      const p = back.rock(r.i, sec), x = p.x * W, y = p.y * H;
+      return { face: [x - r.s * 50, y - FACE / 2], die: [x + r.s * 56, y - DIE / 2], top: y };
+    };
+    for (const r of sides) {
+      const at = onRock(r, 0); // the name is centered over the rock (fighter and die together)
+      r.name.style.left = back.rock(r.i, 0).x * W - 160 + 'px';
+      r.name.style.top = at.top - FACE - 84 + 'px';
+    }
 
     // A band from the fork tip (x0, y0) to the pouch's tie loop (x1, y1).
     const band = (b, x0, y0, x1, y1) => {
@@ -1239,8 +1236,10 @@ function vsSplash(you, foe) {
     };
     const lerp = (a, b, k) => a + (b - a) * k;
     const arc = (p, q, k, up) => [lerp(p[0], q[0], k), lerp(p[1], q[1], k) - up * 4 * k * (1 - k)];
-    // The pouch after the release: overshoots toward the foe, then wobbles to rest.
+    // The pouch after the release: overshoots toward the foe, then wobbles to rest (and stays empty).
     const WOBBLE = [[1, -1.4], [-0.6, 0.7], [0.3, -0.3], [0, 0]];
+    // The dice's bounce after they hit the rock: [step it starts, steps long, height px].
+    const HOPS = [[0, 3, 20], [3, 2, 7]];
 
     // Debris knocked off in the clash: square palette chips that step outward and vanish.
     const bits = Array.from({ length: 14 }, (_, i) => {
@@ -1251,31 +1250,34 @@ function vsSplash(you, foe) {
       return { d, vx: Math.cos(a) * (180 + (i % 4) * 60), vy: Math.sin(a) * (140 + (i % 3) * 50) - 60 };
     });
 
-    const STEP = 1000 / 12; // the whole scene moves at 12 fps, like the pixel art it is
-    const T = { pull: 400, fly: 1000, hit: 1350, land: 1800 };
-    const t0 = performance.now();
-    let last = -1, flew = false, hit = false, landed = false;
-    const frame = (now) => {
+    // Done (or skipped): the scene jumps to its end, and the roll comes up.
+    const finish = () => {
       if (done) return;
-      raf = requestAnimationFrame(frame);
-      const t = Math.floor((now - t0) / STEP) * STEP;
-      if (t === last) return;
-      last = t;
-      draw(t, false);
+      done = true;
+      timers.forEach(clearTimeout);
+      vs.getAnimations({ subtree: true }).forEach((a) => a.finish());
+      vs.classList.add('rolling');
+      resolve();
     };
-    // The scene at time t (ms, on the 12 fps grid). `quiet`: no sounds or flashes (a skip).
-    function draw(t, quiet) {
-      if (t >= T.fly && !flew) { flew = true; if (!quiet) sfx('twang'); }
+    const skip = () => { if (!done) { skipped = true; finish(); } };
+    vs.addEventListener('click', skip);
+
+    // The scene at intro time t (ms, on the 12 fps grid; past the end once done) and clock sec
+    // (seconds, for the backdrop and the rocks' bob). `quiet`: no sounds or flashes (a skip).
+    function draw(t, sec, quiet) {
+      const say = (...a) => { if (!quiet) sfx(...a); };
+      if (t >= T.fly && !flew) { flew = true; say('twang'); }
       if (t >= T.hit && !hit) {
         hit = true;
-        if (!quiet) { sfx('hit'); sfx('vsGo', 1); CRT.glitch(); }
-        $('#vsT').classList.add('on');
-        bits.forEach((b) => vs.insertBefore(b.d, $('#vsT')));
+        say('hit'); say('vsGo', 1);
+        if (!quiet) CRT.glitch();
+        bits.forEach((b) => vs.insertBefore(b.d, $('#vsR')));
       }
-      if (t >= T.land && !landed) { landed = true; if (!quiet) sfx('diceLand'); vs.querySelectorAll('.vs-who').forEach((w) => w.classList.add('on')); }
-      for (const r of rigs) {
-        const { s, rest } = r;
-        // The pouch: at rest, drawn back (down and away from the foe), then released.
+      if (t >= T.part && !parted) { parted = true; say('twang'); }
+      if (t >= T.land && !landed) { landed = true; say('land'); sides.forEach((r) => r.name.classList.add('on')); }
+      for (const r of sides) {
+        const { s, rest } = r, at = onRock(r, sec);
+        // The pouch: at rest, drawn back (down and away from the foe), released, then left slack.
         let pouch = rest;
         if (t >= T.pull && t < T.fly) {
           const k = Math.min(1, (t - T.pull) / (T.fly - T.pull - STEP));
@@ -1283,49 +1285,90 @@ function vsSplash(you, foe) {
         } else if (t >= T.fly && t < T.fly + WOBBLE.length * STEP) {
           const [u, v] = WOBBLE[Math.floor((t - T.fly) / STEP)];
           pouch = [rest[0] + s * 30 * u, rest[1] + 30 * v];
-        } else if (t >= T.land && t < T.land + 2 * STEP) {
-          pouch = [rest[0], rest[1] + (t < T.land + STEP ? 14 : 5)]; // the catch
         }
-        // The portrait: in the pouch, then out along an arc to the clash and back.
-        const seat = (p) => [p[0], p[1] - FACE / 2 + 4];
-        let face = seat(pouch), spin = 0;
+        // The fighter: in the pouch, out to the clash (a beat squashed against the foe, a beat
+        // knocked back), then down onto its rock.
+        let face = [pouch[0], pouch[1] - FACE / 2 + 4], rot = 0, squash = 1;
         if (t >= T.fly && t < T.hit) {
           const k = (t - T.fly) / (T.hit - T.fly);
-          face = arc(seat(rest), r.clash, k, 150); spin = s * 360 * k;
-        } else if (t >= T.hit && t < T.land) {
-          const k = (t - T.hit) / (T.land - T.hit);
-          face = arc(r.clash, seat(rest), k, 190); spin = s * (360 - 360 * k);
+          face = arc([rest[0], rest[1] - FACE / 2 + 4], r.clash, k, 150); rot = Math.round(s * 8 * k) * 45;
+        } else if (t >= T.hit && t < T.part) {
+          const n = Math.round((t - T.hit) / STEP);
+          face = n === 0 ? [r.clash[0] + s * 6, r.clash[1]] : [r.clash[0] - s * 10, r.clash[1] - 4]; rot = n === 0 ? 0 : -s * 12;
+        } else if (t >= T.part && t < T.land) {
+          const k = (t - T.part) / (T.land - T.part);
+          face = arc(r.clash, at.face, k, 60); rot = Math.round(-s * 2 * (1 - k)) * 45;
+        } else if (t >= T.land) {
+          face = at.face;
+          if (t < T.land + 2 * STEP) squash = t < T.land + STEP ? 0.82 : 0.92;
         }
-        r.face.style.transform = `translate(${face[0] - FACE / 2}px, ${face[1] - FACE / 2}px) rotate(${Math.round(spin / 45) * 45}deg)`;
+        const sy = face[1] + FACE * (1 - squash) / 2;
+        r.face.style.transform = `translate(${face[0] - FACE / 2}px, ${sy - FACE / 2}px) rotate(${rot}deg) scale(${(2 - squash).toFixed(2)}, ${squash})`;
         r.pouch.style.transform = `translate(${pouch[0] - 57}px, ${pouch[1] - 9}px)`;
         band(r.bands[0], r.x - TIP, r.tipY, pouch[0] - 54, pouch[1]);
         band(r.bands[1], r.x + TIP, r.tipY, pouch[0] + 54, pouch[1]);
+        // The die: hidden, then dropping from above the screen, bouncing, and resting on the rock.
+        let die = null, spin = 0, tumbling = false;
+        if (t >= T.drop && t < T.bounce) {
+          const k = (t - T.drop) / (T.bounce - T.drop);
+          die = [at.die[0], lerp(-DIE, at.die[1], k * k)]; spin = Math.round(s * k * 6) * 45; tumbling = true;
+        } else if (t >= T.bounce) {
+          const n = Math.floor((t - T.bounce) / STEP), hop = HOPS.find(([a, len]) => n >= a && n < a + len);
+          die = [at.die[0], at.die[1] - (hop ? Math.round(Math.sin(((n - hop[0] + 0.5) / hop[1]) * Math.PI) * hop[2]) : 0)];
+          if (hop) { spin = s * 45; tumbling = true; }
+          const touches = HOPS.filter(([a]) => n >= a).length + (n >= HOPS[HOPS.length - 1][0] + HOPS[HOPS.length - 1][1] ? 1 : 0);
+          if (r.i === 0 && touches > dropped) { dropped = touches; say('diceLand'); }
+        }
+        r.die.style.visibility = die ? 'visible' : 'hidden';
+        if (die) { r.die.style.left = die[0] - DIE / 2 + 'px'; r.die.style.top = die[1] - DIE / 2 + 'px'; }
+        if (t < T.settle) {
+          r.die.style.transform = spin ? `rotate(${spin}deg)` : '';
+          if (tumbling) setDie(r.die, d6());
+          else if (die) setDie(r.die, 6);
+        } else if (!r.rested) { // once, so the roll's tumble() has the die from here on
+          r.rested = true;
+          r.die.style.transform = '';
+          setDie(r.die, 6);
+        }
       }
       if (hit) {
         const k = (t - T.hit) / 1000;
         for (const b of bits) {
           const gone = k > 0.45;
           b.d.style.display = gone ? 'none' : '';
-          if (!gone) b.d.style.transform = `translate(${W / 2 + b.vx * k - 4}px, ${H * 0.42 + b.vy * k + 500 * k * k - 4}px)`;
+          if (!gone) b.d.style.transform = `translate(${W / 2 + b.vx * k - 4}px, ${CLASH_Y + b.vy * k + 500 * k * k - 4}px)`;
         }
       }
     }
-    raf = requestAnimationFrame(frame);
 
-    for (const [half, rg, dx] of [['.vs-l', '.vs-rl', '-100%'], ['.vs-r', '.vs-rr', '100%']]) {
-      $(half).animate([{ transform: `translateX(${dx})` }, { transform: 'none' }], { duration: 400, easing: 'steps(8)' });
-      $(rg).animate([{ transform: `translateX(${dx === '-100%' ? -W / 2 : W / 2}px)` }, { transform: 'none' }], { duration: 400, easing: 'steps(8)' });
+    // One loop for the whole screen, at the run map's ~12fps: the backdrop keeps going (and the
+    // fighters and dice keep riding their rocks) until the screen is replaced.
+    const t0 = performance.now();
+    let last = -Infinity;
+    (function loop(now) {
+      if (!vs.isConnected) return;
+      requestAnimationFrame(loop);
+      if (now - last < STEP - 4) return;
+      last = now;
+      const t = done ? T.settle : Math.floor((now - t0) / STEP) * STEP;
+      if (!done && t >= T.settle) finish();
+      back.draw(now / 1000);
+      draw(t, now / 1000, skipped || done);
+    })(t0);
+
+    if (FAST) { skipped = true; finish(); return; }
+    for (const [sel, dx] of [['.vs-rl', -W / 2], ['.vs-rr', W / 2]]) {
+      $(sel).animate([{ transform: `translateX(${dx}px)` }, { transform: 'none' }], { duration: 400, easing: 'steps(8)' });
     }
     sfx('vs');
     timers.push(setTimeout(() => sfx('vsPull'), T.pull));
-    timers.push(setTimeout(finish, T.land + 4 * STEP));
+    timers.push(setTimeout(finish, T.settle + 300)); // in case frames stall (a background tab)
   });
 }
 
 /* The roll is settled: mark the high roller (0 = you, 1 = the foe), or clear it (null). */
 function vsWinner(who) {
-  $('.vs-l').classList.toggle('win', who === 0);
-  $('.vs-r').classList.toggle('win', who === 1);
+  [['#vsWhoL', '#dieYou'], ['#vsWhoR', '#dieCpu']].forEach((ids, i) => ids.forEach((id) => $(id).classList.toggle('win', who === i)));
 }
 /* GO!, a beat, and the VS screen is done. */
 async function vsGo() {
