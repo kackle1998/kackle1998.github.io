@@ -934,13 +934,6 @@ body[data-crt="off"] .rm-fig img, .rm-fig.hopping img { animation: none; }
 .vs.rolling .vs-roll { display: flex; }
 .vs-roll .roll-msg { white-space: nowrap; }
 .vs-roll .roll-btns { min-height: 0; }
-.vs-t {
-  position: absolute; left: 0; right: 0; top: 30%; transform: translateY(-50%); text-align: center; pointer-events: none; opacity: 0;
-  font-family: var(--pixel); font-size: 64px; color: var(--white); -webkit-text-stroke: 5px var(--ink); paint-order: stroke fill;
-}
-.vs-t.on { opacity: 1; animation: vsPop .3s steps(4); }
-@keyframes vsPop { from { transform: translateY(-50%) scale(2); } to { transform: translateY(-50%) scale(1); } }
-.vs-t.low { top: 84%; font-size: 52px; -webkit-text-stroke-width: 4px; }
 /* Land counts inside the run's VIEW DECK window. */
 .rn-lands { display: flex; justify-content: center; gap: 32px; padding: 2px 0 8px; border-bottom: 2px solid var(--light); }
 .rn-land { display: flex; align-items: center; gap: 8px; font-family: var(--pixel); font-size: 14px; }

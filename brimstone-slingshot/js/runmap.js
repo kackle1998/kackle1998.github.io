@@ -992,7 +992,7 @@ const RunMap = (() => {
         <div class="rhud panel">
           <div class="rh-who"><img src="${spriteURL('hero')}" alt=""><div><div class="rh-name">${escapeHTML(heroName().toUpperCase())}</div><div class="rh-deck">${escapeHTML(run.name)}${run.circuit > 1 ? ` &middot; CIRCUIT ${run.circuit}` : ''}</div></div></div>
           <div class="rh-row">${ico('hp')}<span>LIFE</span><b>${run.life}/${run.maxLife}</b></div>
-          <div class="rh-row">${ico('tooth')}<span>TEETH</span><b>${run.teeth}</b></div>
+          <div class="rh-row">${ico('arcana')}<span>ARCANA</span><b>${run.teeth}</b></div>
           <div class="rh-row">${ico('spell')}<span>DECK</span><b id="rhDeck">${Run.deckSize()}</b></div>
           <button class="btn" id="rmDeck">VIEW DECK</button>
         </div>

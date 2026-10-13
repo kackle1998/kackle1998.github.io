@@ -399,11 +399,11 @@ const ICONS = {
   spell:    ['...#...', '..#.#..', '.#...#.', '#..#..#', '.#...#.', '..#.#..', '...#...'],
   trap:      ['#.....#', '##...##', '#.#.#.#', '#..#..#', '#.#.#.#', '##...##', '#.....#'],
   gear:      ['..#.#..', '.#####.', '##...##', '.#...#.', '##...##', '.#####.', '..#.#..'],
-  /* Dealer's Run: stops, teeth and event art */
+  /* Dealer's Run: stops, arcana and event art */
   battle:    ['#.....#', '.#...#.', '..#.#..', '...#...', '..#.#..', '##...##', '#.....#'],
   fire:      ['...#...', '..##...', '..###.#', '.#####.', '.##.##.', '#.....#', '.#####.'],
   altar:     ['...#...', '..###..', '...#...', '..###..', '..###..', '#######', '#.#.#.#'],
-  tooth:     ['.#####.', '#######', '#######', '.#####.', '.##.##.', '.#...#.', '.#...#.'],
+  arcana:    ['..###..', '.##..#.', '##.....', '##.....', '##.....', '.##..#.', '..###..'],
   event:     ['.####..', '#....#.', '....#..', '...#...', '...#...', '.......', '...#...'],
   chip:      ['.#.#.#.', '#######', '#..#..#', '#.#.#.#', '#..#..#', '#######', '.#.#.#.'],
   spring:    ['..#.#..', '.#.#...', '..#.#..', '.......', '#.....#', '#######', '.#####.'],
@@ -437,7 +437,7 @@ function iconSprite(name) {
   return px.map((r) => r.join(''));
 }
 for (const k of COLOR_KEYS) SPRITES['land_' + k] = iconSprite(COLORS[k].icon);
-for (const k of ['battle', 'fire', 'altar', 'tooth', 'event', 'chip', 'spring', 'pool', 'slots', 'wheel', 'pack', 'relic']) SPRITES['ri_' + k] = iconSprite(k);
+for (const k of ['battle', 'fire', 'altar', 'arcana', 'event', 'chip', 'spring', 'pool', 'slots', 'wheel', 'pack', 'relic']) SPRITES['ri_' + k] = iconSprite(k);
 /* The slot machine's lever: a long cracked bone standing upright, lit from the left (16 wide, so not mirrored). */
 SPRITES.slot_bone = [
   '..####....####..', '.#wwww#..#www-#.', '#wwwwww##wwww-+#', '#wwwwwwwwwwww-+#', '#wwwwwwwwwww-++#',

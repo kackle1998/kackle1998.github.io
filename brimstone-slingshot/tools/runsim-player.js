@@ -1,5 +1,5 @@
 /* ============================================================
-   BRIMSTONE SLINGSHOT — the Dealer's Run simulator's player.
+   BRIMSTONE SLINGSHOT â€” the Dealer's Run simulator's player.
    Not a module: tools/runsim.js runs this inside the game's own context,
    so CARDS, DECKS, Game, AI, Run and the rest are globals here.
 
@@ -146,7 +146,7 @@ function altar() {
   Run.remove(pick.g.rid);
 }
 
-/* Run.trader(): the same three offers, the tonic (+5 life for 3 teeth) when 5+ down, then the cards it likes best that it can afford. */
+/* Run.trader(): the same three offers, the tonic (+5 life for 3 arcana) when 5+ down, then the cards it likes best that it can afford. */
 function trader(n) {
   const s = Run.s;
   const offers = Run.traderOffers(n).map((c) => ({ c, cost: runPrice(c) }));
@@ -168,7 +168,7 @@ const EVENTS = {
   },
   spring(ev) { choice(ev, Run.s.maxLife - Run.s.life >= 4 ? 'DRINK' : 'BOTTLE').act(Run); },
   pool() {}, // a 50% chance to lose the card: walk past
-  bones(ev) { choice(ev, 'PRY').act(Run); },
+  bones(ev) { choice(ev, 'SIFT').act(Run); },
   offer(ev) { const ch = choice(ev, 'ACCEPT'); if (Run.canChoose(ch)) ch.act(Run); },
   rune(ev) { // pay 3 life to copy a sigil, only while above 12 life
     const ch = choice(ev, 'PAY');

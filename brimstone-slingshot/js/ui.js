@@ -1187,8 +1187,7 @@ function vsSplash(you, foe) {
     <canvas class="vs-cv vs-sky"></canvas><canvas class="vs-cv vs-lava" width="${RunMap.VSB.w}" height="${RunMap.VSB.h}"></canvas>
     ${rig(you, 'vs-rl')}${rig(foe, 'vs-rr')}<div class="die" id="dieYou"></div><div class="die" id="dieCpu"></div>
     <canvas class="vs-cv vs-em" width="640" height="360"></canvas>
-    ${who(you, 'vsWhoL')}${who(foe, 'vsWhoR')}<div class="vs-t low" id="vsR"></div>
-    <div class="vs-roll panel"><div class="roll-msg" id="rollMsg"></div><div class="roll-btns" id="rollBtns"></div></div></div>`);
+    ${who(you, 'vsWhoL')}${who(foe, 'vsWhoR')}    <div class="vs-roll panel"><div class="roll-msg" id="rollMsg"></div><div class="roll-btns" id="rollBtns"></div></div></div>`);
   setDie($('#dieYou'), 6);
   setDie($('#dieCpu'), 6);
   const vs = $('.vs'), C = RunMap.ramp();
@@ -1271,7 +1270,7 @@ function vsSplash(you, foe) {
         hit = true;
         say('hit'); say('vsGo', 1);
         if (!quiet) CRT.glitch();
-        bits.forEach((b) => vs.insertBefore(b.d, $('#vsR')));
+        bits.forEach((b) => vs.insertBefore(b.d, $('.vs-roll')));
       }
       if (t >= T.part && !parted) { parted = true; say('twang'); }
       if (t >= T.land && !landed) { landed = true; say('land'); sides.forEach((r) => r.name.classList.add('on')); }
@@ -1370,15 +1369,12 @@ function vsSplash(you, foe) {
 function vsWinner(who) {
   [['#vsWhoL', '#dieYou'], ['#vsWhoR', '#dieCpu']].forEach((ids, i) => ids.forEach((id) => $(id).classList.toggle('win', who === i)));
 }
-/* GO!, a beat, and the VS screen is done. */
+/* "Go!" in the roll's panel, a beat, and the VS screen is done. */
 async function vsGo() {
   if (!$('.vs')) return;
-  $('.vs').classList.remove('rolling');
-  const r = $('#vsR');
-  r.textContent = 'GO!';
-  r.classList.add('on');
+  $('#rollBtns').innerHTML = '';
+  $('#rollMsg').textContent = 'Go!';
   sfx('vsGo', 3);
-  CRT.pulse(0.6);
   await sleep(700);
 }
 

@@ -23,6 +23,8 @@ const RUN_LAYOUT = 4;                                   // bumped when the map's
 const DEALER_LIFE = [0, 8, 8, 8, 10, 10, 10, 12, 12, 12, 14];
 const DEALER_COST_CAP = [0, 2, 2, 2, 2, 2, 2, 3, 3, 3, 4];
 const RUN_WIN_HEAL = 6;                                 // life back after each battle won
+const RUN_WIN_ARCANA = 2;                               // arcana for each battle won, plus 1 per point of overkill
+const RUN_SKIP_ARCANA = 2;                              // arcana for skipping the spoils card
 const BOSS_LIFE = 16;
 const BOSS_COST_CAP = 4;                                // the boss Dealer's priciest card
 /* Each circuit after the first (see Run.newCircuit) makes the Dealers a little tougher: +2 life
@@ -51,7 +53,7 @@ const STOPS = {
   battle: { name: 'BATTLE',      icon: 'ri_battle', desc: "Battle: duel one of the Dealer's hands." },
   fire:   { name: 'CAMPFIRE',    icon: 'ri_fire',   desc: 'Campfire: warm a creature. Push your luck.' },
   altar:  { name: 'SIGIL ALTAR', icon: 'ri_altar',  desc: 'Sigil altar: sacrifice a creature to move its sigil.' },
-  trade:  { name: 'TRADER',      icon: 'ri_tooth',  desc: 'Trader: spend teeth on cards and tonic.' },
+  trade:  { name: 'TRADER',      icon: 'ri_arcana',  desc: 'Trader: spend arcana on cards and tonic.' },
   event:  { name: '???',         icon: 'ri_event',  desc: 'Unknown: something hums under the board.' },
   boss:   { name: 'THE DEALER',  icon: 'ri_chip',   desc: 'The Dealer: the house always plays last.' },
 };
@@ -90,7 +92,7 @@ function runPool(colors, maxCost = 99) {
    further up the map. A rarity with nothing left to offer falls back to a commoner one. */
 const RUN_RARE_ODDS = [0.18, 0.3];                      // chance an offer is rare: on row 1, rising to row RUN_ROWS
 const RUN_MYTHICAL_ODDS = [0.02, 0.06];                 // ...or mythical
-const RARITY_MARKUP = { common: 0, rare: 2, mythical: 4 }; // the trader's extra teeth
+const RARITY_MARKUP = { common: 0, rare: 2, mythical: 4 }; // the trader's extra arcana
 function runRarity(R, row = 1) {
   const t = Math.max(0, Math.min(1, (row - 1) / (RUN_ROWS - 1)));
   const at = ([lo, hi]) => lo + (hi - lo) * t;
@@ -204,7 +206,7 @@ const RUN_EVENTS = [
     text: 'A spring bubbles up, yellow and warm. It smells terrible. It might be good for you.',
     choices: [
       { label: 'DRINK (+6 LIFE)', act: (run) => `You drink deep and recover ${run.heal(6)} life.` },
-      { label: 'BOTTLE IT (+2 TEETH)', act: (run) => { run.gainTeeth(2); return 'A trader will pay 2 teeth for this.'; } },
+      { label: 'BOTTLE IT (+2 ARCANA)', act: (run) => { run.gainTeeth(2); return 'A trader will pay 2 arcana for this.'; } },
     ],
   },
   {
@@ -225,7 +227,7 @@ const RUN_EVENTS = [
     text: 'A heap of bones. One of them is still twitching.',
     choices: [
       { label: 'TAKE A SKELETON', act: (run) => { run.add('skeleton'); return 'A Skeleton (0-cost 1/1) joins your deck.'; } },
-      { label: 'PRY OUT A TOOTH', act: (run) => { run.gainTeeth(1); return 'You pocket 1 tooth.'; } },
+      { label: 'SIFT THE BONES (+1 ARCANA)', act: (run) => { run.gainTeeth(1); return 'You sift out 1 arcana.'; } },
     ],
   },
   {
@@ -284,7 +286,7 @@ const RUN_EVENTS = [
     choices: [
       { label: 'TEAR IT OPEN', cards: (run) => runOffer(Math.random, run.s.colors, 3, { row: run.row(), least: 'rare' }).map((c) => c.id),
         take: (run, c) => { run.add(c.id); return `${c.name} joins your deck.`; } },
-      { label: 'SELL IT (+3 TEETH)', act: (run) => { run.gainTeeth(3); return 'A trader will pay 3 teeth for it, still sealed.'; } },
+      { label: 'SELL IT (+3 ARCANA)', act: (run) => { run.gainTeeth(3); return 'A trader will pay 3 arcana for it, still sealed.'; } },
     ],
   },
   {
@@ -324,9 +326,9 @@ const RUN_EVENTS = [
   },
   {
     id: 'forge', title: 'CRYSTAL FORGE', art: 'golem',
-    text: 'A forge burning with gem-light. For 2 teeth, the smith will temper one of your creatures.',
+    text: 'A forge burning with gem-light. For 2 arcana, the smith will temper one of your creatures.',
     choices: [
-      { label: 'PAY 2 TEETH', ok: (run) => run.s.teeth >= 2, pick: (d) => true, need: 'Needs 2 teeth and a creature.',
+      { label: 'PAY 2 ARCANA', ok: (run) => run.s.teeth >= 2, pick: (d) => true, need: 'Needs 2 arcana and a creature.',
         act: (run, d) => { run.s.teeth -= 2; const rc = run.rc(d.rid); rc.atk += 1; rc.hp += 1; return `${d.name} comes out tempered: +1 attack, +1 health.`; } },
       { label: 'LEAVE', act: () => 'The forge burns on without you.' },
     ],
@@ -347,23 +349,22 @@ const RUN_EVENTS = [
     ],
   },
   {
-    id: 'cache', title: 'EMBER CACHE', art: 'ri_tooth',
-    text: 'Teeth glint in a bed of live coals. You could reach in, if you don\'t mind the burns.',
+    id: 'cache', title: 'EMBER CACHE', art: 'ri_arcana',
+    text: 'Arcana glints in a bed of live coals. You could reach in, if you don\'t mind the burns.',
     choices: [
       { label: 'REACH IN (-3 LIFE)', ok: (run) => run.s.life > 3, need: 'Needs more than 3 life.',
-        act: (run) => { run.s.life -= 3; run.gainTeeth(3); return 'You pull out 3 teeth, and a few blisters.'; } },
+        act: (run) => { run.s.life -= 3; run.gainTeeth(3); return 'You pull out 3 arcana, and a few blisters.'; } },
       { label: 'LEAVE', act: () => 'The coals hiss as you walk away.' },
     ],
   },
 ];
 
-/* The slot machine: the first pull is free, each reroll costs teeth. Nothing is at risk,
+/* The slot machine: the first pull is free, each reroll costs arcana. Nothing is at risk,
    so its buff is smaller than the campfire's (+1 attack or +2 health, on a creature you pick). */
 const SLOT_REROLL = 1;
 const SLOT_HEAL = 4;
 const SLOT_ATK_ODDS = 1 / 3;                            // a buff is +1 attack this often, else +1 health
-const SLOT_SYMS = { card: 'card', buff: 'might', heal: 'hp' };
-const SLOT_FILL = ['card', 'might', 'hp', 'tooth', 'chip', 'bone'];
+const SLOT_FILL = ['card', 'might', 'hp', 'arcana', 'chip', 'bone'];  // icons the reels flick through while spinning
 
 /* The sigil wheel: one free spin, no rerolls, and the sigil it lands on goes to a creature you pick. */
 const WHEEL_N = 8;                                      // segments round the wheel
@@ -456,7 +457,7 @@ const Run = {
       <div class="result panel">
         <img class="r-art" src="${spriteURL('hero')}" alt="">
         <div class="r-title rn-big">RUN IN PROGRESS</div>
-        <div class="r-sub">${escapeHTML(s.name)} &middot; ${ico('hp')} ${s.life}/${s.maxLife} &middot; ${ico('tooth')} ${s.teeth} &middot; ${s.stats.stops} stop${s.stats.stops === 1 ? '' : 's'} cleared</div>
+        <div class="r-sub">${escapeHTML(s.name)} &middot; ${ico('hp')} ${s.life}/${s.maxLife} &middot; ${ico('arcana')} ${s.teeth} &middot; ${s.stats.stops} stop${s.stats.stops === 1 ? '' : 's'} cleared</div>
         <div class="concede-btns">
           <button class="btn" id="runGo">CONTINUE RUN</button>
           <button class="btn" id="runQuit">ABANDON RUN</button>
@@ -606,7 +607,7 @@ const Run = {
         <div class="rn-head">
           <img class="rn-icon" src="${spriteURL(icon)}" alt="">
           <div class="rn-headtext"><div class="rn-title">${title}</div><div class="rn-sub">${sub}</div></div>
-          <div class="rn-stat">${ico('hp')}<b>${s.life}/${s.maxLife}</b>${ico('tooth')}<b>${s.teeth}</b></div>
+          <div class="rn-stat">${ico('hp')}<b>${s.life}/${s.maxLife}</b>${ico('arcana')}<b>${s.teeth}</b></div>
         </div>
         <div class="rn-body" id="rnBody">${body}</div>
         <div class="rn-btns">${btns}</div>
@@ -707,7 +708,7 @@ const Run = {
     if (n.t === 'boss') return this.casinoFalls(youLife);
     s.dealerBonus = 0;
     s.life = Math.max(1, Math.min(s.maxLife, youLife + RUN_WIN_HEAL));
-    const teeth = Math.max(1, -oppLife);
+    const teeth = RUN_WIN_ARCANA + Math.max(0, -oppLife);
     this.gainTeeth(teeth);
     s.node = { id: n.id, phase: 'reward', teeth };
     this.save();
@@ -731,7 +732,7 @@ const Run = {
     RunMap.show({ encore: { onDark: () => this.newCircuit() } });
   },
 
-  /* A new map for the same deck, life and teeth, back at the base. Its Dealers are a little
+  /* A new map for the same deck, life and arcana, back at the base. Its Dealers are a little
      tougher (see runCircuitLife, runCircuitCap), and the boss plays a new house rule. */
   newCircuit() {
     const s = this.s;
@@ -750,16 +751,16 @@ const Run = {
     const want = 2 + Math.floor(n.row / 3); // later rows lean toward pricier cards, and rarer ones
     const offers = runOffer(R, s.colors, 3, { row: n.row, weight: (c) => (costTotal(c.cost) >= want ? 3 : 1) });
     this.screen('ri_battle', 'SPOILS',
-      `The Dealer pays ${node.teeth} ${node.teeth === 1 ? 'tooth' : 'teeth'} for the overkill, and you catch your breath (+${RUN_WIN_HEAL} life). Take one card for your deck.`,
-      '', '<button class="btn" id="rnSkip">SKIP (+1 TOOTH)</button>');
+      `The Dealer pays ${node.teeth} arcana for the win and the overkill, and you catch your breath (+${RUN_WIN_HEAL} life). Take one card for your deck.`,
+      '', `<button class="btn" id="rnSkip">SKIP (+${RUN_SKIP_ARCANA} ARCANA)</button>`);
     this.cardGrid($('#rnBody'), offers, (c) => {
       this.add(c.id);
       this.finishStop('ri_battle', 'SPOILS', `${c.name} joins your deck.`);
     });
     $('#rnSkip').onclick = () => {
       sfx('select');
-      this.gainTeeth(1);
-      this.finishStop('ri_battle', 'SPOILS', 'You pocket 1 more tooth instead.');
+      this.gainTeeth(RUN_SKIP_ARCANA);
+      this.finishStop('ri_battle', 'SPOILS', `You pocket ${RUN_SKIP_ARCANA} more arcana instead.`);
     };
   },
 
@@ -859,18 +860,18 @@ const Run = {
       this.save();
     }
     if (node.burn) return this.burn();
-    const teeth = (p) => `${p} ${ico('tooth')}`;
-    this.screen('ri_tooth', 'TRADER', `Teeth for cards. You have ${s.teeth}.`,
+    const price = (p) => `${p} ${ico('arcana', '', Palette.onDarkHi)}`;
+    this.screen('ri_arcana', 'TRADER', `Arcana for cards. You have ${s.teeth}.`,
       `<div class="rn-shop">
         ${node.offers.map((o, i) => `<div class="rn-offer" data-i="${i}"><div class="rn-slot"></div>
-          <button class="btn" data-buy="${i}" ${o.sold ? 'disabled' : ''}>${o.sold ? 'SOLD' : teeth(o.price)}</button></div>`).join('')}
+          <button class="btn" data-buy="${i}" ${o.sold ? 'disabled' : ''}>${o.sold ? 'SOLD' : price(o.price)}</button></div>`).join('')}
         <div class="rn-offer"><div class="rn-tonic panel"><img src="${spriteURL('ri_spring')}" alt=""><b>SULFUR TONIC</b><span>+5 life, up to ${s.maxLife}</span></div>
-          <button class="btn" id="rnTonic" ${node.tonic ? 'disabled' : ''}>${node.tonic ? 'SOLD' : teeth(3)}</button></div>
+          <button class="btn" id="rnTonic" ${node.tonic ? 'disabled' : ''}>${node.tonic ? 'SOLD' : price(3)}</button></div>
       </div>`,
-      `<button class="btn" id="rnBurn">BURN A CARD (3 ${ico('tooth')})</button><button class="btn" id="rnLeave">LEAVE</button>`);
+      `<button class="btn" id="rnBurn">BURN A CARD (3 ${ico('arcana', '', Palette.onDarkHi)})</button><button class="btn" id="rnLeave">LEAVE</button>`);
     node.offers.forEach((o, i) => this.cardGrid($(`.rn-offer[data-i="${i}"] .rn-slot`), [CARDS[o.id]], null));
     const pay = (p) => {
-      if (s.teeth < p) { toast(`You need ${p} teeth.`); sfx('err'); return false; }
+      if (s.teeth < p) { toast(`You need ${p} arcana.`); sfx('err'); return false; }
       s.teeth -= p;
       sfx('place');
       return true;
@@ -896,7 +897,7 @@ const Run = {
     };
     $('#rnBurn').onclick = () => {
       if (this.deckSize() <= RUN_MIN_DECK) { toast(`Your deck can't go below ${RUN_MIN_DECK} cards.`); sfx('err'); return; }
-      if (s.teeth < 3) { toast('You need 3 teeth.'); sfx('err'); return; }
+      if (s.teeth < 3) { toast('You need 3 arcana.'); sfx('err'); return; }
       sfx('select');
       node.burn = true;
       this.save();
@@ -907,7 +908,7 @@ const Run = {
 
   burn() {
     const s = this.s, node = s.node, cards = this.cards();
-    this.screen('ri_tooth', 'BURN A CARD', `Pick a card to burn for 3 teeth. Your deck has ${this.deckSize()} cards.`,
+    this.screen('ri_arcana', 'BURN A CARD', `Pick a card to burn for 3 arcana. Your deck has ${this.deckSize()} cards.`,
       '', '<button class="btn" id="rnBack">BACK</button>');
     this.cardGrid($('#rnBody'), cards, (d) => {
       s.teeth -= 3;
@@ -1022,16 +1023,24 @@ const Run = {
     };
   },
 
+  /* What the three reels land on, so they show the prize itself: a new card's art three times,
+     a buff's creature between two stat icons, or three hearts for life. */
+  slotFaces(t) {
+    if (t.k === 'card') return Array(3).fill(spriteURL(CARDS[t.id].sprite));
+    if (t.k === 'buff') { const stat = iconURL(t.stat); return [stat, spriteURL(this.card(t.rid).sprite), stat]; }
+    return Array(3).fill(iconURL('hp'));
+  },
+
   slots(n, ev, spinning = false) {
     const s = this.s, node = s.node;
     if (node.spin && node.spin.k === 'buff' && !this.rc(node.spin.rid)) node.spin = null;
-    const t = node.spin, sym = t && !spinning ? SLOT_SYMS[t.k] : null;
-    const reel = (i) => `<div class="slot-reel"><div class="slot-band"></div><div class="slot-face"><img class="slot-sym" src="${iconURL(sym || SLOT_FILL[i])}" alt=""></div><div class="slot-band"></div></div>`;
+    const t = node.spin, faces = t && !spinning ? this.slotFaces(t) : null;
+    const reel = (i) => `<div class="slot-reel"><div class="slot-band"></div><div class="slot-face"><img class="slot-sym" src="${faces ? faces[i] : iconURL(SLOT_FILL[i])}" alt=""></div><div class="slot-band"></div></div>`;
     const pillar = `<div class="slot-pillar">${Array.from({ length: 8 }, (_, i) => `<img src="${iconURL(i % 2 ? 'crossbones' : 'skull', PAL['+'])}" alt="">`).join('')}</div>`;
     const skull = `<img src="${iconURL('skull', Palette.cur.accent)}" alt="">`;
-    const tooth = `${SLOT_REROLL} ${ico('tooth')}`;
+    const price = `${SLOT_REROLL} ${ico('arcana', '', Palette.onDarkHi)}`;
     this.screen(ev.art, ev.title,
-      spinning ? 'The reels spin...' : t ? `It pays out. Take it, or pull again for ${SLOT_REROLL} ${SLOT_REROLL === 1 ? 'tooth' : 'teeth'}.`
+      spinning ? 'The reels spin...' : t ? `It pays out. Take it, or pull again for ${SLOT_REROLL} arcana.`
         : 'A one-armed machine rattles in the dark. Every pull pays out.',
       `<div class="slot-mach">
         <div class="slot-cab">${pillar}
@@ -1043,7 +1052,7 @@ const Run = {
         </div>
         <button class="slot-lever${spinning ? ' pulled' : ''}" id="slLever" title="${t ? 'Reroll' : 'Pull the lever'}"><img class="slot-bone" src="${spriteURL('slot_bone')}" alt=""></button>
       </div>`,
-      t ? `<button class="btn" id="slTake" ${spinning ? 'disabled' : ''}>TAKE IT</button><button class="btn" id="slPull" ${spinning ? 'disabled' : ''}>REROLL (${tooth})</button>`
+      t ? `<button class="btn" id="slTake" ${spinning ? 'disabled' : ''}>TAKE IT</button><button class="btn" id="slPull" ${spinning ? 'disabled' : ''}>REROLL (${price})</button>`
         : `<button class="btn" id="slPull" ${spinning ? 'disabled' : ''}>PULL THE LEVER</button><button class="btn" id="rnLeave" ${spinning ? 'disabled' : ''}>LEAVE</button>`);
     $('.rn').classList.add('rn-slots');
     this.slotReadout(t, spinning);
@@ -1051,13 +1060,13 @@ const Run = {
 
     const pull = () => {
       const cost = node.spin ? SLOT_REROLL : 0;
-      if (s.teeth < cost) { toast(`You need ${cost} ${cost === 1 ? 'tooth' : 'teeth'}.`); sfx('err'); return; }
+      if (s.teeth < cost) { toast(`You need ${cost} arcana.`); sfx('err'); return; }
       s.teeth -= cost;
       node.spin = this.slotRoll(node.spin);
       this.save();
       sfx('lever');
       this.slots(n, ev, true);
-      this.slotSpin(SLOT_SYMS[node.spin.k], () => { sfx('payout'); this.slots(n, ev); });
+      this.slotSpin(this.slotFaces(node.spin), () => { sfx('payout'); this.slots(n, ev); });
     };
     $('#slPull').onclick = pull;
     $('#slLever').onclick = pull;
@@ -1074,8 +1083,8 @@ const Run = {
     };
   },
 
-  /* Spin the reels on screen, stop them left to right on `sym`, then call done. */
-  slotSpin(sym, done) {
+  /* Spin the reels on screen, stop them left to right on `faces` (image URLs), then call done. */
+  slotSpin(faces, done) {
     const imgs = $$('.slot-reel .slot-sym'), stops = [800, 1150, 1500], step = 70;
     if (FAST) return done();
     let t = 0;
@@ -1086,7 +1095,7 @@ const Run = {
       imgs.forEach((img, i) => {
         if (t < stops[i]) img.src = iconURL(SLOT_FILL[Math.floor(Math.random() * SLOT_FILL.length)]);
         else if (img.parentElement.classList.contains('spinning')) {
-          img.src = iconURL(sym);
+          img.src = faces[i];
           img.parentElement.classList.remove('spinning');
           sfx('reelStop', i);
         }
@@ -1272,7 +1281,7 @@ const Run = {
           <div><span>CASINOS FELLED</span><b>${s.stats.circuits || 0}</b></div>
           <div><span>STOPS CLEARED</span><b>${s.stats.stops}</b></div>
           <div><span>BATTLES WON</span><b>${s.stats.battles}</b></div>
-          <div><span>TEETH EARNED</span><b>${s.stats.teeth}</b></div>
+          <div><span>ARCANA EARNED</span><b>${s.stats.teeth}</b></div>
           <div class="r-score"><span>FINAL DECK</span><b>${size}</b></div>
         </div>
         <div class="concede-btns">
