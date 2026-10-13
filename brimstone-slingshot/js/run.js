@@ -25,6 +25,12 @@ const DEALER_COST_CAP = [0, 2, 2, 2, 2, 2, 2, 3, 3, 3, 4];
 const RUN_WIN_HEAL = 6;                                 // life back after each battle won
 const BOSS_LIFE = 16;
 const BOSS_COST_CAP = 4;                                // the boss Dealer's priciest card
+/* Each circuit after the first (see Run.newCircuit) makes the Dealers a little tougher: +2 life
+   per circuit for every battle and the boss, and from the third circuit on, every other circuit
+   lets the Dealers deal cards one cost higher (up to the boss's cap). */
+const RUN_CIRCUIT_LIFE = 2;
+const runCircuitLife = (s) => RUN_CIRCUIT_LIFE * ((s.circuit || 1) - 1);
+const runCircuitCap = (s, cap) => Math.min(BOSS_COST_CAP, cap + Math.floor(((s.circuit || 1) - 1) / 2));
 /* Each starting deck's run: its starting (and max) life, and cards swapped into its starting 11
    (from: to). Tuned by simulation so the game's AI clears the run about 65% of the time with each. */
 const RUN_DECKS = {
@@ -424,7 +430,7 @@ const Run = {
     const s = this.s, n = s.lands[k] || 0;
     if (d < 0 && n <= 0) { sfx('err'); return false; }
     if (d < 0 && this.deckSize() <= RUN_MIN_DECK) { toast(`Your deck can't go below ${RUN_MIN_DECK} cards.`); sfx('err'); return false; }
-    if (d > 0 && n >= RUN_MAX_LANDS) { toast(`At most ${RUN_MAX_LANDS} of each land.`); sfx('err'); return false; }
+    if (d > 0 && n >= RUN_MAX_LANDS) { toast(`At most ${RUN_MAX_LANDS} of each tome.`); sfx('err'); return false; }
     s.lands[k] = n + d;
     this.save();
     sfx(d > 0 ? 'land' : 'select');
@@ -475,7 +481,7 @@ const Run = {
             <div class="t-desc">${d.desc}</div>
           </div>`).join('')}
         </div>
-        <div class="ds-foot">You start with 11 of its cards, cheap to pricey, and 9 lands. Each deck starts with its own life, and it carries over between battles.</div>
+        <div class="ds-foot">You start with 11 of its cards, cheap to pricey, and 9 tomes. Each deck starts with its own life, and it carries over between battles.</div>
         <button class="btn" id="rdBack">BACK</button>
       </div>`);
     $$('.tablet').forEach((t) => {
@@ -511,7 +517,8 @@ const Run = {
 
   resume() {
     this.register();
-    if (this.s.node) this.enter(this.s.node.id);
+    if (this.s.encore) this.newCircuit(); // left during the encore: the casino's already won
+    else if (this.s.node) this.enter(this.s.node.id);
     else RunMap.show();
   },
 
@@ -646,7 +653,7 @@ const Run = {
     const home = rival && DECKS[rival.deck];
     const colors = home ? home.colors.slice(0, 2) : runShuffle(R, COLOR_KEYS.slice()).slice(0, 2);
     // The Dealer deals itself commons only: the rarer cards are yours to find.
-    const pool = runPool(colors, boss ? BOSS_COST_CAP : DEALER_COST_CAP[n.row]).filter((c) => rarityOf(c) === 'common');
+    const pool = runPool(colors, runCircuitCap(this.s, boss ? BOSS_COST_CAP : DEALER_COST_CAP[n.row])).filter((c) => rarityOf(c) === 'common');
     const list = {}, lands = boss ? 5 : 4;
     colors.forEach((k) => (list['land_' + k] = lands));
     for (let k = 0, guard = 0; k < (boss ? 10 : 10) && guard < 200; guard++) {
@@ -680,14 +687,13 @@ const Run = {
     const s = this.s, node = s.node;
     if (node.phase === 'reward') return this.reward(n);
     const boss = n.t === 'boss';
-    const life = boss ? BOSS_LIFE : DEALER_LIFE[n.row] + (s.dealerBonus || 0);
+    const life = (boss ? BOSS_LIFE : DEALER_LIFE[n.row] + (s.dealerBonus || 0)) + runCircuitLife(s);
     const rival = this.rival(n);
     const cpuDeck = this.dealerDeck(n, rival);
     node.phase = 'battle';
     this.save();
-    const them = rival ? { name: rival.name, deck: cpuDeck.name, sprite: rival.sprite } : { name: 'DEALER', deck: cpuDeck.name, sprite: 'dealer' };
-    vsSplash({ name: heroName(), deck: s.name, sprite: 'hero' }, them)
-      .then(() => startGame(this.deckDef(), { cpuDeck, life: [s.life, life], boss: boss ? s.bossRule : null, run: true, foe: rival }));
+    // startGame opens with the VS screen (the rival's, or the Dealer's).
+    startGame(this.deckDef(), { cpuDeck, life: [s.life, life], boss: boss ? s.bossRule : null, run: true, foe: rival });
   },
 
   /* Called by js/ui.js when a run battle ends (or is conceded). */
@@ -698,7 +704,7 @@ const Run = {
     const n = s.map.nodes[s.cur];
     if (!won) { s.life = 0; return this.finish(false); }
     s.stats.battles++;
-    if (n.t === 'boss') return this.finish(true);
+    if (n.t === 'boss') return this.casinoFalls(youLife);
     s.dealerBonus = 0;
     s.life = Math.max(1, Math.min(s.maxLife, youLife + RUN_WIN_HEAL));
     const teeth = Math.max(1, -oppLife);
@@ -706,6 +712,37 @@ const Run = {
     s.node = { id: n.id, phase: 'reward', teeth };
     this.save();
     this.reward(n);
+  },
+
+  /* ---------- the encore: beating the casino deals you a new circuit ---------- */
+  /* The casino falls and the Pit Boss flings you back to the base (js/runmap.js), then a new
+     circuit is dealt. Each casino counts as a win on the record; the run goes on until you lose.
+     s.encore marks the encore as owed, so a reload partway through skips to the new circuit
+     rather than winning the casino twice. */
+  casinoFalls(youLife) {
+    const s = this.s;
+    s.life = Math.max(1, Math.min(s.maxLife, youLife + RUN_WIN_HEAL));
+    s.stats.circuits = (s.stats.circuits || 0) + 1;
+    s.node = null;
+    s.encore = true;
+    const rec = getRunRecord(); rec.wins++; Store.write(RUN_RECORD_KEY, rec);
+    this.save();
+    sfx('win');
+    RunMap.show({ encore: { onDark: () => this.newCircuit() } });
+  },
+
+  /* A new map for the same deck, life and teeth, back at the base. Its Dealers are a little
+     tougher (see runCircuitLife, runCircuitCap), and the boss plays a new house rule. */
+  newCircuit() {
+    const s = this.s;
+    s.circuit = (s.circuit || 1) + 1;
+    s.seed = (Math.random() * 2 ** 31) >>> 0;
+    s.map = genRunMap(this.rand(1));
+    s.bossRule = Object.keys(BOSS_RULES)[runRand(this.rand(2), 3)];
+    Object.assign(s, { cur: 0, done: [], visited: [0], node: null, dealerBonus: 0, intro: false, encore: false });
+    delete s.sling;
+    this.save();
+    RunMap.show({ fromDark: true });
   },
 
   reward(n) {
@@ -1199,7 +1236,7 @@ const Run = {
       <div class="rn panel rn-deck">
         <div class="rn-head"><img class="rn-icon" src="${spriteURL('hero')}" alt="">
           <div class="rn-headtext"><div class="rn-title">YOUR DECK</div>
-          <div class="rn-sub"><span id="rnDeckN">${this.deckSize()}</span> cards. Lands are free to add or take out.</div></div></div>
+          <div class="rn-sub"><span id="rnDeckN">${this.deckSize()}</span> cards. Tomes are free to add or take out.</div></div></div>
         <div class="rn-lands">${s.colors.map((k) => `
           <div class="rn-land" data-k="${k}">${ico(COLORS[k].icon)}<span>${COLORS[k].land.toUpperCase()}</span>
             <button class="mini-btn" data-d="-1" title="Remove a ${COLORS[k].land}">-</button><b>${s.lands[k] || 0}</b><button class="mini-btn" data-d="1" title="Add a ${COLORS[k].land}">+</button>
@@ -1232,6 +1269,7 @@ const Run = {
         <div class="r-title">${won ? 'RUN CLEARED' : 'RUN OVER'}</div>
         <div class="r-sub">${won ? 'You beat the Dealer at the end of the circuit.' : 'The circuit claims another spellslinger.'}</div>
         <div class="r-tally">
+          <div><span>CASINOS FELLED</span><b>${s.stats.circuits || 0}</b></div>
           <div><span>STOPS CLEARED</span><b>${s.stats.stops}</b></div>
           <div><span>BATTLES WON</span><b>${s.stats.battles}</b></div>
           <div><span>TEETH EARNED</span><b>${s.stats.teeth}</b></div>

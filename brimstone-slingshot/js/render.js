@@ -76,7 +76,7 @@ function cardInnerHTML(c, atk = c.atk, hpNow = c.hp - (c.dmg || 0)) {
   const name = escapeHTML(c.name);
   if (c.type === 'land') {
     return `
-      <div class="c-band">${ico(COLORS[c.color].icon, '', PAL.w)} LAND</div>
+      <div class="c-band">${ico(COLORS[c.color].icon, '', PAL.w)} TOME</div>
       <div class="c-name">${name}</div>
       <img class="c-art" src="${spriteURL(c.sprite)}" alt="">
       <div class="c-land">+1 ${ico(COLORS[c.color].icon, '', Palette.onDarkHi)} <span>${COLORS[c.color].name.toUpperCase()}</span></div>
@@ -171,9 +171,9 @@ function inspectHTML(c, atk = c.atk, hpNow = c.hp - (c.dmg || 0)) {
   if (c.type === 'land') {
     return `
       <div class="i-head"><span class="i-name">${name}</span></div>
-      <div class="i-type">${COLORS[c.color].name} land</div>
+      <div class="i-type">${COLORS[c.color].name} tome</div>
       <div class="i-body"><img class="i-art" src="${spriteURL(c.sprite)}" alt=""></div>
-      <div class="i-sigil">${ico(COLORS[c.color].icon)}<div>Play one land per turn. Each turn it gives 1 ${COLORS[c.color].name} energy, which also pays generic costs.</div></div>`;
+      <div class="i-sigil">${ico(COLORS[c.color].icon)}<div>Play one tome per turn. Each turn it gives 1 ${COLORS[c.color].name} energy, which also pays generic costs.</div></div>`;
   }
   if (c.type === 'spell' || c.type === 'trap') {
     const how = c.type === 'spell'

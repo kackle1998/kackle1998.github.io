@@ -735,6 +735,131 @@ const RunMap = (() => {
   });
   const shadowArt = (C) => paint(16, 6, C, (rect) => { rect(3, 0, 10, 6, 1); rect(0, 1, 16, 4, 1); });
 
+  /* ---------- the encore: the house comes down and the Pit Boss deals you back in ---------- */
+  /* The Pit Boss's hands: white gloves floating with no arms, like a stage magician's. Each pose
+     is a list of capsules [x0, y0, x1, y1, r] around the hand's anchor (the palm's middle, or the
+     middle of a fist's grip), outlined as one silhouette and then filled, so fingers that nearly
+     touch keep an ink line between them. Lit from the upper left; `left` mirrors the hand (the
+     light stays put). Every hand canvas is the same size with the anchor at the same pixel.
+     Both poses lie on their side: fingers pointing in toward the middle, thumb on top, the cuff
+     on the outside. */
+  const HAND = { w: 78, h: 58, ax: 39, ay: 37 }, GRIP = -8; // GRIP: where a fist grips your figurine, map units above its feet (just under them: it closes round your legs)
+  const HAND_POSES = {
+    // An open hand, drawn fingers-up and then turned on its side (x and y swapped).
+    open: [[-8, 15, 8, 15, 4.5], [0, -4, 0, 5, 11.5], [-11, 3, -19, -10, 4], [-8, -11, -11, -29, 3], [-2, -13, -2, -34, 3], [4, -12, 6, -32, 3], [9, -8, 14, -24, 2.6]]
+      .map(([x0, y0, x1, y1, r]) => [y0, x0, y1, x1, r]),
+    // Gripping something upright: the four fingers wrap round it as stacked bars, the thumb over
+    // the top, the back of the hand and the cuff off to the side.
+    fist: [[21, -8, 21, 10, 4], [11, -4, 13, 6, 9], [-9, -9, 7, -9, 3], [-9, -3, 7, -3, 3], [-9, 3, 7, 3, 3], [-9, 9, 7, 9, 3], [-10, -14, 6, -13, 3.2]],
+  };
+  function handArt(cv, C, pose, left) {
+    const { w, h, ax, ay } = HAND, caps = HAND_POSES[pose].map(([x0, y0, x1, y1, r]) => left ? [-x0, y0, -x1, y1, r] : [x0, y0, x1, y1, r]);
+    const B = new Int8Array(w * h).fill(-1);
+    const near = (u, v, [x0, y0, x1, y1]) => {
+      const dx = x1 - x0, dy = y1 - y0, t = Math.max(0, Math.min(1, ((u - x0) * dx + (v - y0) * dy) / (dx * dx + dy * dy || 1)));
+      return [u - (x0 + dx * t), v - (y0 + dy * t)];
+    };
+    for (let pass = 0; pass < 2; pass++) for (const cap of caps) {
+      const r = cap[4] + (pass ? 0 : 1);
+      for (let v = 0; v < h; v++) for (let u = 0; u < w; u++) {
+        const [ox, oy] = near(u - ax, v - ay, cap), d = Math.hypot(ox, oy);
+        if (d > r) continue;
+        const l = (ox * 0.8 + oy * 0.6) / cap[4];
+        B[v * w + u] = pass ? (l < -0.5 ? 7 : l > 0.5 ? 4 : 6) : 1;
+      }
+    }
+    const x = cv.getContext('2d');
+    x.clearRect(0, 0, w, h);
+    for (let i = 0; i < B.length; i++) if (B[i] >= 0) { x.fillStyle = C[B[i]]; x.fillRect(i % w, i / w | 0, 1, 1); }
+    // A gold cufflink, and a crease or two.
+    const s = left ? -1 : 1, dot = (u, v, k) => { x.fillStyle = C[k]; x.fillRect(ax + u * s, ay + v, 1, 1); };
+    if (pose === 'open') { dot(15, 0, 8); dot(15, 1, 8); for (let i = -4; i <= 3; i++) dot(2 + Math.round(i * i / 8), i, 4); }
+    else { dot(21, 0, 8); dot(21, 1, 8); for (const v of [-6, 0, 6]) dot(8, v, 4); }
+  }
+
+  /* The Pit Boss's eyes: a mean, narrow squint. Small beady gold irises half under heavy lids, a
+     dull white, thick bushy brows driven down toward the nose, a crease over each lid, bags
+     underneath, crow's feet, and furrows between the brows. Each eye is drawn in its own frame,
+     u from the inner corner (-) to the outer (+), v down, and mirrored for the eye on the left.
+     `open` 0..1 is how far the lids are apart (under 0.15: shut); lx, ly (-1..1) is where they look. */
+  const EYES = { w: 132, h: 40 };
+  function eyesArt(cv, C, open, lx = 0, ly = 0) {
+    const x = cv.getContext('2d');
+    x.clearRect(0, 0, EYES.w, EYES.h);
+    // The opening's edges at u, wide open: the top pressed down toward the nose, the corners pinched.
+    const top0 = (u) => -4.5 - 0.1 * u + 3 * (u / 18) ** 4, bot0 = (u) => 3 - 3.5 * (u / 18) ** 2 - 0.04 * u;
+    for (const [ex, s] of [[33, -1], [99, 1]]) {
+      const P = (u, v, k) => { x.fillStyle = C[k]; x.fillRect(ex + s * Math.round(u), 28 + Math.round(v), 1, 1); };
+      const mid = (u) => (top0(u) + bot0(u)) / 2, shut = open < 0.15;
+      const top = (u) => Math.round(mid(u) + (top0(u) - mid(u)) * open), bot = (u) => Math.round(mid(u) + (bot0(u) - mid(u)) * open);
+      const lid = (u) => (shut ? Math.round(mid(u)) : top(u)) - 1;
+      // Furrows between the brows.
+      for (let v = -9; v <= -4; v++) { P(-25, v, 2); if (v > -8) P(-27, v + 1, 2); }
+      // The brow: a thick, ragged bar driven down at the inner end, almost onto the lid.
+      for (let u = -23; u <= 21; u++) {
+        const vb = -6 - 0.34 * (u + 23) + (u < -19 ? 1 : 0), th = u > 17 ? 3 : u < -19 ? 4 : 5;
+        const rag = (u * 7 + 3) % 3 === 0 ? 1 : 0;
+        for (let k = 0; k < th + rag; k++) P(u, vb - k, k === 0 ? 0 : k === th + rag - 1 ? (u % 3 === 0 ? 4 : 3) : 1);
+      }
+      // The eye: dull white with a shadow under the lid, a small iris (ink rim, gold, a dark pupil
+      // and a single glint), clipped by the lids so it glares out from under them.
+      const iu = s * lx * 6, iv = mid(iu) + 0.5 + ly * 1.5;
+      if (!shut) for (let u = -18; u <= 18; u++) for (let v = top(u); v <= bot(u); v++) {
+        const d = Math.hypot(u - iu, v - iv);
+        P(u, v, d < 1.8 ? 0 : d < 3.4 ? 8 : d < 4.4 ? 1 : v <= top(u) ? 5 : 6);
+      }
+      if (!shut && open > 0.6) P(iu - 1, Math.max(top(iu), Math.round(iv) - 1), 7);
+      // The heavy upper lid, and a crease above it.
+      for (let u = -19; u <= 19; u++) {
+        const t0 = lid(u);
+        P(u, t0, 0); P(u, t0 - 1, 0); P(u, t0 - 2, 1);
+        if (u > -14 && u < 16) P(u, t0 - 4, 2);
+      }
+      // The lower lid, bags under it, and crow's feet off the outer corner.
+      const lo = (u) => (shut ? Math.round(mid(u)) + 1 : bot(u) + 1);
+      for (let u = -17; u <= 18; u++) P(u, lo(u), u > -13 && u < 15 ? 1 : 2);
+      for (let u = -11; u <= 12; u++) P(u, lo(u) + 2 + Math.round((u / 12) ** 2 * -1.5), 2);
+      for (const [a, b] of [[21, -3], [22, -4], [21, 0], [22, 0], [23, 0], [21, 2], [22, 3]]) P(a, Math.round(mid(18)) + b, 2);
+    }
+  }
+
+
+  /* What's left of the casino: a long heap of broken stone, white palace and gold trim. */
+  /* Chunks are piled back to front, big ones low, each sitting somewhere inside the heap's
+     outline (taller in the middle, with a lump either side), so the top edge stays ragged. */
+  const rubbleArt = (C, seed) => paint(CAS.W, 22, C, (rect) => {
+    const R = mulberry32(seed), H = 22;
+    const heap = (u) => 3 + 13 * Math.sin(Math.PI * u / CAS.W) ** 0.7 + 4 * Math.sin(u / 7) ** 2;
+    for (let i = 0; i < 70; i++) {
+      const u = 2 + R() * (CAS.W - 8) | 0, room = heap(u), s = Math.max(2, Math.min(room - 1, 2 + R() * 6)) | 0;
+      const v = H - s - Math.round(R() * (room - s)), k = [2, 3, 4, 4, 5, 5, 6, 8][R() * 8 | 0];
+      rect(u - 1, v - 1, s + 2, s + 2, 1); rect(u, v, s, s, k);
+      if (s > 2) { rect(u, v, s, 1, Math.min(7, k + 1)); rect(u + s - 1, v + 1, 1, s - 1, Math.max(1, k - 1)); }
+    }
+  });
+
+  /* Dither the screen to darkness (or back) in Bayer-ordered blocks of the darkest tone: no fade,
+     just more and more squares. from/to are 0 (clear) .. 1 (dark). */
+  function curtain(host, C, from, to, dur, done = () => {}) {
+    const cv = document.createElement('canvas');
+    cv.className = 'rm-curtain';
+    cv.width = 64; cv.height = 36;
+    host.append(cv);
+    const g = cv.getContext('2d'), steps = 8;
+    g.fillStyle = C[0];
+    const draw = (k) => {
+      g.clearRect(0, 0, cv.width, cv.height);
+      for (let y = 0; y < cv.height; y++) for (let x = 0; x < cv.width; x++) if (BAY[(x & 3) + (y & 3) * 4] < k * 16) g.fillRect(x, y, 1, 1);
+    };
+    draw(from);
+    for (let i = 1; i <= steps; i++) setTimeout(() => {
+      if (!cv.isConnected) return;
+      draw(from + (to - from) * i / steps);
+      if (i === steps) { if (to === 0) cv.remove(); done(); }
+    }, dur * i / steps);
+    return cv;
+  }
+
   /* A 3D strip from p to q ([x, y, z] in its parent's map units): yawed in the board plane,
      then pitched up off it. */
   function strip(el, p, q) {
@@ -746,7 +871,10 @@ const RunMap = (() => {
 
   let walking = false;
 
-  function show() {
+  /* opts.encore: play the encore over this map (the casino just beaten; see encore() below), then
+     call opts.encore.onDark once the screen has gone dark. opts.fromDark: the map comes up out of
+     that darkness. */
+  function show(opts = {}) {
     const run = Run.s;
     if (!run) return showTitle();
     walking = false;
@@ -802,7 +930,7 @@ const RunMap = (() => {
         </div></div>
         <canvas class="rm-em" id="rmEm" width="640" height="360"></canvas>
         <div class="rhud panel">
-          <div class="rh-who"><img src="${spriteURL('hero')}" alt=""><div><div class="rh-name">${escapeHTML(heroName().toUpperCase())}</div><div class="rh-deck">${escapeHTML(run.name)}</div></div></div>
+          <div class="rh-who"><img src="${spriteURL('hero')}" alt=""><div><div class="rh-name">${escapeHTML(heroName().toUpperCase())}</div><div class="rh-deck">${escapeHTML(run.name)}${run.circuit > 1 ? ` &middot; CIRCUIT ${run.circuit}` : ''}</div></div></div>
           <div class="rh-row">${ico('hp')}<span>LIFE</span><b>${run.life}/${run.maxLife}</b></div>
           <div class="rh-row">${ico('tooth')}<span>TEETH</span><b>${run.teeth}</b></div>
           <div class="rh-row">${ico('spell')}<span>DECK</span><b id="rhDeck">${Run.deckSize()}</b></div>
@@ -821,7 +949,7 @@ const RunMap = (() => {
     frame(pl, C);
 
     // Stop beacons, and the casino for the boss (whose lights the animation loop runs).
-    let casinoTick = () => {};
+    let casinoTick = () => {}, casino = null;
     for (const n of nodes) {
       if (n.t === 'start') continue; // the slingshot stands here instead
       const el = document.createElement('div');
@@ -831,12 +959,15 @@ const RunMap = (() => {
         const lit = state === 'reach', W2 = CAS.W * 2, D2 = CAS.D * 2;
         el.className = 'rm-casino';
         el.style.cssText = `left:${n.x - CAS.W}px;top:${BOSS_PIN_Y - 8 - D2}px;width:${W2}px;height:${D2}px`;
-        const flat = (cv, x, y, z) => { cv.className = 'rm-c-flat'; cv.style.cssText = `left:${x}px;top:${y}px;width:${cv.width * 2}px;height:${cv.height * 2}px;transform:translateZ(${z}px)`; return cv; };
+        // Every part with the heights it spans, for the encore's demolition.
+        casino = { el, n, parts: [] };
+        const flat = (cv, x, y, z) => { cv.className = 'rm-c-flat'; cv.style.cssText = `left:${x}px;top:${y}px;width:${cv.width * 2}px;height:${cv.height * 2}px;transform:translateZ(${z}px)`; casino.parts.push({ el: cv, z0: z, z1: z }); return cv; };
         const stand = (cv, cx, by, z) => {
           const s = document.createElement('div'), w = cv.width * 2, h = cv.height * 2;
           s.className = 'rm-st';
           s.style.cssText = `left:${cx - w / 2}px;top:${by - h}px;width:${w}px;height:${h}px;transform:translateZ(${z}px) rotateX(-90deg)`;
           s.appendChild(cv);
+          casino.parts.push({ el: s, z0: z, z1: z + h });
           return s;
         };
         const tx = CAS.towerX * 2, tw = CAS.towerW * 2, td = CAS.towerD * 2, th = CAS.towerH * 2;
@@ -967,7 +1098,8 @@ const RunMap = (() => {
     $('#rmap').addEventListener('pointerdown', () => { if (skipIntro) skipIntro(); });
 
     // (Only a run that hasn't left the base yet: one saved mid-way before openings existed has no flag.)
-    if (!run.intro && run.cur === nodes[0].id && !run.done.length) intro();
+    if (opts.encore) encore(opts.encore);
+    else if (!run.intro && run.cur === nodes[0].id && !run.done.length) intro();
     else if (slingAt === prevAt) { sl.rig.append(fig); sl.load(0); } else buildRig(makeRig(prevAt));
 
     // A run's opening: the camera starts on the casino, holds a moment, and pans down the board
@@ -1113,6 +1245,235 @@ const RunMap = (() => {
       }
     }
 
+    // A pixel standee floating free over (or behind) the board: w x h canvas px drawn at `scale`
+    // map units a pixel. put(x, y, z) stands its foot at board point (x, y), lifted z.
+    function floater(w, h, scale = 2) {
+      const cv = document.createElement('canvas'), el = document.createElement('div');
+      cv.width = w; cv.height = h;
+      el.className = 'rm-st rm-encore';
+      el.style.width = w * scale + 'px'; el.style.height = h * scale + 'px';
+      el.appendChild(cv);
+      pl.append(el);
+      return { el, cv, put(x, y, z) { el.style.left = x - w * scale / 2 + 'px'; el.style.top = y - h * scale + 'px'; el.style.transform = `translateZ(${Math.round(z / 2) * 2}px) rotateX(-90deg)`; sink(el, z, h * scale); } };
+    }
+    // Cut a standee off at the board's level: whatever is below it is under the table.
+    // base: the standee's foot (map units, may be negative); hpx: its height.
+    const sink = (el, base, hpx) => { el.style.clipPath = base < 0 ? `inset(0 0 ${Math.min(100, -base / hpx * 100)}% 0)` : ''; };
+    // Copy art from src onto cv, only the pixels whose Bayer threshold is under k (0..1): the way
+    // the encore's visitors dither into view.
+    function reveal(cv, src, k) {
+      const g = cv.getContext('2d'), im = src.getContext('2d').getImageData(0, 0, src.width, src.height), d = im.data;
+      for (let i = 0; i < d.length; i += 4) { const p = i / 4, x = p % src.width, y = p / src.width | 0; if (BAY[(x & 3) + (y & 3) * 4] >= k * 16) d[i + 3] = 0; }
+      g.clearRect(0, 0, cv.width, cv.height);
+      g.putImageData(im, 0, 0);
+    }
+
+    /* The encore, after the casino falls: the resort comes down in courses, the reverse of a
+       slingshot going up. The Pit Boss crawls out from under the table, two floating hands and a
+       pair of eyes. One hand holds a slingshot just like yours, built in its fist; the other
+       plucks your figurine off the rubble, drops you in the pouch, draws it back and lets go,
+       flinging you all the way back down the board to the base. Then the screen goes dark. */
+    function encore({ onDark = () => {} }) {
+      walking = true;
+      sl.rig.remove(); // the house deals you a slingshot of its own
+      const gx = casino.n.x, gy = BOSS_PIN_Y + 34, cx0 = (W / 2 - gx) * CAM.side;
+      pl.append(fig);
+      place(gx, gy, 0);
+      setCam(cx0, CAM.max);
+      const wait = (ms) => new Promise((ok) => setTimeout(() => { if (fig.isConnected) ok(); }, ms));
+      const tween = (dur, each) => new Promise((ok) => frames(dur, each, ok));
+      const ease = (k) => k * k * (3 - 2 * k), mix = (a, b, k) => a + (b - a) * k;
+
+      // A hand: its canvas redrawn on a change of pose, and placed by its anchor (see HAND), with a
+      // stepped bob while it hovers. `held` is anything it carries along (your figurine).
+      const hands = [];
+      const hand = (left) => {
+        const f = floater(HAND.w, HAND.h), src = document.createElement('canvas');
+        src.width = HAND.w; src.height = HAND.h;
+        const o = {
+          ...f, left, x: 0, y: 0, z: 0, bob: 0, held: null,
+          set(pose, k = 1) { handArt(src, C, pose, left); reveal(f.cv, src, k); },
+          at(x, y, z) {
+            Object.assign(o, { x, y, z });
+            f.el.style.left = x - HAND.ax * 2 + 'px'; f.el.style.top = y - HAND.h * 2 + 'px';
+            const base = Math.round((z + o.bob - (HAND.h - HAND.ay) * 2) / 2) * 2;
+            f.el.style.transform = `translateZ(${base}px) rotateX(-90deg)`;
+            sink(f.el, base, HAND.h * 2);
+            if (o.held) place(x, y - 3, z + o.bob - GRIP); // gripped round the legs, so you show above the fist
+          },
+          to(x, y, z, dur) { const a = [o.x, o.y, o.z]; return tween(dur, (k) => { const s = ease(k); o.at(mix(a[0], x, s), mix(a[1], y, s), mix(a[2], z, s)); }); },
+        };
+        hands.push(o);
+        return o;
+      };
+      const bob = setInterval(() => {
+        if (!fig.isConnected) return clearInterval(bob);
+        hands.forEach((h, i) => { h.bob = (Math.floor(performance.now() / 400) + i) % 2 ? 4 : 0; h.at(h.x, h.y, h.z); });
+      }, 100);
+
+      (async () => {
+        // 1. The house comes down: the lights go out, then it drops course by course from the top,
+        //    each throwing dust, the camera jolting on each, until there's only rubble.
+        tick.textContent = 'The house comes down';
+        await wait(700);
+        casinoTick = () => {};
+        sfx('lever');
+        await wait(300);
+        const parts = casino.parts, top = Math.max(...parts.map((p) => p.z1)), N = 7;
+        for (let i = N - 1; i >= 0; i--) {
+          const line = top * i / N;
+          sfx('build', i + 1);
+          for (const p of parts) {
+            if (p.gone) continue;
+            if (p.z1 === p.z0) { if (line < p.z0) { p.gone = true; p.el.style.display = 'none'; } continue; }
+            const f = Math.max(0, Math.min(1, (line - p.z0) / (p.z1 - p.z0)));
+            if (f >= 1) continue;
+            if (p.el.getBoundingClientRect().width > 4) burst(p.el, f, f > 0 ? 8 : 5, 'dust');
+            if (f <= 0) { p.gone = true; p.el.style.display = 'none'; } else p.el.style.clipPath = `inset(${(1 - f) * 100}% 0 0 0)`;
+          }
+          setCam(cx0 + (i % 2 ? 6 : -6), CAM.max);
+          await wait(150);
+        }
+        setCam(cx0, CAM.max);
+        const rubble = floater(CAS.W, 22);
+        rubble.cv.getContext('2d').drawImage(rubbleArt(C, run.seed), 0, 0);
+        rubble.put(gx, BOSS_PIN_Y - 14, 0);
+        sfx('poof');
+        burst(rubble.el, 0.4, 30, 'dust');
+        await wait(1000);
+
+        // 2. The Pit Boss crawls out from under the table: a hand comes up over the far rim and
+        //    slaps down on it, then the other, and the eyes rise up between them, shut, and open.
+        //    Anything still below the board's edge is cut off at it (see sink).
+        tick.textContent = 'Something stirs under the table';
+        await wait(400);
+        const H1 = hand(true), H2 = hand(false), HX = 300;
+        H1.set('open'); H2.set('open');
+        H1.at(W / 2 - HX, -40, -140); H2.at(W / 2 + HX, -40, -140);
+        for (const [h, d] of [[H1, 1], [H2, -1]]) {
+          await h.to(h.x, -40, 70, 380);
+          await h.to(h.x + d * 20, -14, RIM_H + 24, 160);
+          sfx('land');
+          await wait(260);
+        }
+        tick.textContent = 'The Pit Boss';
+        const eyes = floater(EYES.w, EYES.h, 5), EY = -70, EZ = 130;
+        eyesArt(eyes.cv, C, 0);
+        sfx('warp');
+        await tween(900, (k) => eyes.put(W / 2, EY, mix(-EYES.h * 5, EZ, ease(k))));
+        for (const h of [H1, H2]) h.to(h.x, h.y, h.z - 10, 200); // bearing down on the rim as it hauls itself up
+        await wait(400);
+        for (const o of [0.35, 0.7, 1]) { eyesArt(eyes.cv, C, o, 0, 1); await wait(90); }
+        await wait(300);
+        for (const lx of [-1, -1, 1, 1]) { eyesArt(eyes.cv, C, 1, lx, 0.4); await wait(260); }
+        eyesArt(eyes.cv, C, 1, 0, 1);
+        await wait(300);
+        eyesArt(eyes.cv, C, 0.1, 0, 1); await wait(110); eyesArt(eyes.cv, C, 1, 0, 1); // a blink
+
+        // 3. The hands let go of the rim and rise: the left one closes into a fist.
+        const HY = -90, HZ = 230;
+        await Promise.all([H1.to(W / 2 - 330, HY, HZ, 500), H2.to(W / 2 + 330, HY, HZ, 500)]);
+        H1.set('fist');
+        sfx('place');
+        await wait(300);
+
+        // 4. A slingshot just like yours goes up in the left hand's fist, the way yours are built,
+        //    and that hand brings it in over the rubble.
+        tick.textContent = 'The Pit Boss deals you back in';
+        const RX = W / 2 - 150, RY = 70, RZ = 150; // where the slingshot's foot hangs in the air
+        const R = makeRig({ x: H1.x, y: H1.y - 4 - 24, t: 'x' }); // makeRig stands it 24 in front of the point it's given
+        const lift = (z) => { R.rig.style.transform = `translateZ(${Math.round(z / 2) * 2}px)`; };
+        const follow1 = () => { R.rig.style.left = H1.x + 'px'; R.rig.style.top = H1.y - 4 + 'px'; R.BX = H1.x; R.BY = H1.y - 4; lift(H1.z + H1.bob - 36); };
+        R.fork.style.clipPath = 'inset(100% 0 0 0)';
+        R.bands.forEach((b) => { b.hidden = true; });
+        R.pouch.hidden = true;
+        follow1();
+        for (let i = 1; i <= 6; i++) {
+          R.fork.style.clipPath = i < 6 ? `inset(${(1 - i / 6) * 100}% 0 0 0)` : '';
+          sfx('build', i);
+          burst(R.fork, i / 6, 10, 'spark');
+          await wait(140);
+        }
+        R.bands.forEach((b) => { b.hidden = false; });
+        R.pouch.hidden = false;
+        sfx('twang');
+        burst(R.pouch, 0.5, 10, 'spark');
+        const hold = setInterval(() => { if (!fig.isConnected) return clearInterval(hold); follow1(); }, 33);
+        await Promise.all([H1.to(RX, RY + 4, RZ + 36, 900), H2.to(gx + 120, gy - 60, 200, 900)]);
+
+        // 5. The right hand swoops down, closes round you, and carries you to the pouch.
+        await H2.to(gx, gy + 3, 70, 500);
+        await H2.to(gx, gy + 3, 32, 160); // just off the board: closing round you lifts you a little
+        H2.set('fist');
+        H2.held = true;
+        pl.append(fig);
+        fig.classList.add('hopping');
+        sfx('place');
+        await wait(200);
+        const [, , pz] = R.load(0);
+        await H2.to(gx, gy + 3, 200, 450);
+        await H2.to(RX, RY + 6, RZ + pz + GRIP + 40, 800);
+        await H2.to(RX, RY + 6, RZ + pz + GRIP, 220);
+        H2.held = null;
+        H2.set('open');
+        R.rig.append(fig);
+        R.load(0);
+        sfx('place');
+        fig.classList.remove('hopping');
+        await H2.to(RX + 90, RY + 20, RZ + 170, 400);
+
+        // 6. It pinches the pouch and draws it back, away from the base, in six creaking notches...
+        R.aim = Math.PI;
+        const [px0, py0, pz0] = R.load(0);
+        await H2.to(RX + px0, RY + py0 + 8, RZ + pz0 + 10, 380);
+        H2.set('fist');
+        for (let i = 1; i <= 6; i++) {
+          const [x, y, z] = R.load(i / 6);
+          H2.at(RX + x, RY + y + 8, RZ + z + 10);
+          sfx('tick');
+          await wait(90);
+        }
+        await wait(260);
+
+        // 7. ...and lets go. You fly the whole board back to the base.
+        clearInterval(hold);
+        const [lx, ly, lz] = R.load(1), sx = RX + lx, sy = RY + ly, sz = RZ + lz;
+        H2.set('open');
+        sfx('lever');
+        sfx('twang');
+        pl.append(fig);
+        R.load(0);
+        H2.to(H2.x + 60, H2.y - 30, H2.z + 60, 300);
+        tick.textContent = 'Back to the start';
+        const home = nodes[0], tx = home.x + (home.x <= W / 2 ? 1 : -1) * (SL.w + FIG / 2 + 8), ty = home.y + 40;
+        const sh = document.createElement('div');
+        sh.className = 'rm-sl-shadow';
+        sh.appendChild(shadowArt(C));
+        pl.append(sh);
+        fig.classList.add('hopping');
+        const dist = Math.hypot(tx - sx, ty - sy), top2 = 40 + dist * 0.06; // a flat, fast shot: you start high already
+        await tween(900 + dist * 0.9, (k) => {
+          const x = mix(sx, tx, k), y = mix(sy, ty, k), z = sz * (1 - k) + 4 * top2 * k * (1 - k);
+          place(x, y, Math.round(z / 4) * 4);
+          follow(x, y);
+          sh.style.left = x - 16 + 'px'; sh.style.top = y - 6 + 'px';
+          img.style.transform = k < 1 ? `rotate(${Math.round(k * 10) % 4 * 90}deg)` : '';
+        });
+        sh.remove();
+        sfx('land');
+        img.style.transform = 'scale(1.15, .8)';
+        img.style.transformOrigin = '50% 100%';
+        await wait(120);
+        img.style.transform = '';
+        fig.classList.remove('hopping');
+        await wait(700);
+
+        // 8. The screen goes dark, and the caller deals a new board.
+        tick.textContent = '';
+        curtain($('#rmap'), C, 0, 1, 800, () => setTimeout(() => { if (fig.isConnected) onDark(); }, 500));
+      })();
+    }
+
     $('#rmDeck').onclick = () => { sfx('select'); Run.showDeck($('#rmap')); };
     $('#rmMenu').onclick = () => { sfx('select'); showTitle(); };
     $('#rmQuit').onclick = () => Run.confirmAbandon(() => show());
@@ -1151,6 +1512,7 @@ const RunMap = (() => {
         ex.fillRect(Math.round(p.x), Math.round(p.y), p.s, p.s);
       }
     })(0);
+    if (opts.fromDark) curtain($('#rmap'), C, 1, 0, 700);
   }
 
   return { show, forkArt, pouchArt, ramp, SL }; // the slingshot art is reused by the VS splash (ui.js)

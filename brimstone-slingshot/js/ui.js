@@ -426,7 +426,7 @@ function inspectDefault() {
   $('#inspector').innerHTML = `
     <div class="i-help">
       <b>HOW TO PLAY</b>
-      <p>Click a <b>land</b> in your hand to play it (one per turn).</p>
+      <p>Click a <b>tome</b> in your hand to play it (one per turn).</p>
       <p>Click a <b>creature</b> you can afford, then an empty slot.</p>
       <p>Click a ready creature (blinking white outline), then click an enemy creature, or the Dealer's panel when the way is clear.</p>
       <p>Spells: click, then a target (or click again). Traps: click twice to set face-down.</p>
@@ -478,7 +478,7 @@ function renderPanel(el, p) {
           const used = e[k].total - e[k].free;
           return `<tr title="${COLORS[k].land}"><td class="n">${e[k].total}X</td><td>${ico(COLORS[k].icon)}</td><td class="muted">${used ? `${used} USED` : ''}</td></tr>`;
         }).join('')}</table>`
-      : '<div class="pp-energy muted">no lands yet</div>'}
+      : '<div class="pp-energy muted">no tomes yet</div>'}
     ${!mine(p) ? `<div class="pp-hand">${'<span class="mini-back"></span>'.repeat(Math.min(p.hand.length, 12))}</div>` : ''}`;
 }
 
@@ -574,7 +574,7 @@ function renderTurn() {
   $('#turnInfo').innerHTML = `
     <div class="ti-turn">TURN ${game.turnNum}</div>
     <div class="ti-who">${game.over ? 'GAME OVER' : myTurn ? 'YOUR TURN' : `${escapeHTML(oppName().toUpperCase())}'S TURN`}</div>
-    <div class="ti-land">${myTurn ? (you.landPlayed ? 'Land played' : 'Land: ready') : 'Waiting...'}</div>
+    <div class="ti-land">${myTurn ? (you.landPlayed ? 'Tome played' : 'Tome: ready') : 'Waiting...'}</div>
     ${online() && !game.over ? '<div class="ti-timer" id="turnTimer"></div>' : ''}`;
   $('#bell').disabled = !myTurn || busy || game.over;
 }
@@ -595,7 +595,7 @@ function onHand(c) {
   const you = game.players[ME];
   sel.attacker = null;
   if (c.type === 'land') {
-    if (you.landPlayed) { toast('Only one land per turn.'); sfx('err'); return; }
+    if (you.landPlayed) { toast('Only one tome per turn.'); sfx('err'); return; }
     if (online()) return Net.local({ t: 'land', uid: c.uid });
     game.playLand(you, you.hand.indexOf(c));
     sel.hand = null;
@@ -1015,8 +1015,8 @@ const RULES_HTML = `
   <h3>HOW TO PLAY</h3>
   <ul>
     <li>You and the Dealer each start with <b>20 life</b> and a <b>30-card</b> deck. Reduce the Dealer to 0.</li>
-    <li>Each turn: draw a card, play up to <b>one land</b>, then summon creatures by spending energy from your lands.</li>
-    <li>Costs: a number can be paid by any land; a symbol (${ico('paw')} ${ico('bone')} ${ico('gem')} ${ico('hat')}) needs that land type.</li>
+    <li>Each turn: draw a card, play up to <b>one tome</b>, then summon creatures by spending energy from your tomes.</li>
+    <li>Costs: a number can be paid by any tome; a symbol (${ico('paw')} ${ico('bone')} ${ico('gem')} ${ico('hat')}) needs that tome type.</li>
     <li>New creatures must wait a turn before attacking. Each creature attacks once per turn.</li>
     <li>Attack by choosing an enemy creature: both strike each other at once. <b>Damage stays</b> on creatures.</li>
     <li><b>Spells</b> are cast on your own turn only: they take effect at once, then go to the grave.</li>
@@ -1175,29 +1175,45 @@ document.addEventListener('keydown', (e) => {
   else if (e.key === 'Escape') $('#omBack').onclick();
 });
 
-/* Fighting-game VS splash before a fight (Dealer's Run, Online). The halves slide in, each with
-   a Brimstone Slingshot (the run map's art) cradling its fighter's portrait. Both draw back and
-   fling their fighters at each other; they clash mid-air (VS!), ricochet back into their pouches,
-   and the names come up. Then READY..., GO!. Click to skip. Resolves when done.
+/* Fighting-game VS splash before every fight. The halves slide in, each with a Brimstone
+   Slingshot (the run map's art) cradling its fighter's portrait. Both draw back and fling their
+   fighters at each other; they clash mid-air (VS!), ricochet back into their pouches, and the
+   names come up, each with a die under it. Click to skip ahead. Resolves once it has landed,
+   leaving the screen up for the roll for the first turn (rollForFirst, or netplay's rollOnline):
+   the dice are #dieYou / #dieCpu, the roll's message and buttons go in #rollMsg / #rollBtns,
+   vsWinner() marks the high roller and vsGo() ends it.
    you / foe: { name, deck, sprite } */
 function vsSplash(you, foe) {
-  const side = (p, cls) => `
+  const side = (p, cls, die) => `
     <div class="vs-side ${cls}">
       <div class="vs-slot"></div>
-      <div class="vs-who"><div class="vs-name">${escapeHTML(p.name.toUpperCase())}</div><div class="vs-deck">${escapeHTML(p.deck.toUpperCase())}</div></div>
+      <div class="vs-who"><div class="vs-name">${escapeHTML(p.name.toUpperCase())}</div><div class="vs-deck">${escapeHTML(p.deck.toUpperCase())}</div><div class="die" id="${die}"></div></div>
     </div>`;
   const rig = (p, cls) => `
     <div class="vs-rig ${cls}">
       <div class="vs-fork"></div><div class="vs-band"></div><div class="vs-band"></div>
       <img class="vs-face" src="${spriteURL(p.sprite)}" alt=""><div class="vs-pouch"></div>
     </div>`;
-  showScreen(`<div class="vs">${side(you, 'vs-l')}${side(foe, 'vs-r')}${rig(you, 'vs-rl')}${rig(foe, 'vs-rr')}<div class="vs-t" id="vsT">VS</div><div class="vs-t low" id="vsR"></div></div>`);
+  showScreen(`<div class="vs">${side(you, 'vs-l', 'dieYou')}${side(foe, 'vs-r', 'dieCpu')}${rig(you, 'vs-rl')}${rig(foe, 'vs-rr')}<div class="vs-t" id="vsT">VS</div><div class="vs-t low" id="vsR"></div>
+    <div class="vs-roll panel"><div class="roll-msg" id="rollMsg"></div><div class="roll-btns" id="rollBtns"></div></div></div>`);
+  setDie($('#dieYou'), 6);
+  setDie($('#dieCpu'), 6);
   return new Promise((resolve) => {
     if (FAST) return resolve();
     const timers = [];
     let done = false, raf = 0;
-    const finish = () => { if (done) return; done = true; timers.forEach(clearTimeout); cancelAnimationFrame(raf); resolve(); };
     const vs = $('.vs');
+    // Done (or skipped): jump to the landed scene, quietly, and bring up the roll.
+    const finish = () => {
+      if (done) return;
+      done = true;
+      timers.forEach(clearTimeout);
+      cancelAnimationFrame(raf);
+      vs.getAnimations({ subtree: true }).forEach((a) => a.finish());
+      draw(T.land + 3 * STEP, true);
+      vs.classList.add('rolling');
+      resolve();
+    };
     vs.addEventListener('click', finish);
 
     // Lay out each rig over its half's slot (layout px of .vs; offsets ignore the slide-in transform).
@@ -1245,14 +1261,18 @@ function vsSplash(you, foe) {
       const t = Math.floor((now - t0) / STEP) * STEP;
       if (t === last) return;
       last = t;
-      if (t >= T.fly && !flew) { flew = true; sfx('twang'); }
+      draw(t, false);
+    };
+    // The scene at time t (ms, on the 12 fps grid). `quiet`: no sounds or flashes (a skip).
+    function draw(t, quiet) {
+      if (t >= T.fly && !flew) { flew = true; if (!quiet) sfx('twang'); }
       if (t >= T.hit && !hit) {
         hit = true;
-        sfx('hit'); sfx('vsGo', 1); CRT.glitch();
+        if (!quiet) { sfx('hit'); sfx('vsGo', 1); CRT.glitch(); }
         $('#vsT').classList.add('on');
         bits.forEach((b) => vs.insertBefore(b.d, $('#vsT')));
       }
-      if (t >= T.land && !landed) { landed = true; sfx('diceLand'); vs.querySelectorAll('.vs-who').forEach((w) => w.classList.add('on')); }
+      if (t >= T.land && !landed) { landed = true; if (!quiet) sfx('diceLand'); vs.querySelectorAll('.vs-who').forEach((w) => w.classList.add('on')); }
       for (const r of rigs) {
         const { s, rest } = r;
         // The pouch: at rest, drawn back (down and away from the foe), then released.
@@ -1289,7 +1309,7 @@ function vsSplash(you, foe) {
           if (!gone) b.d.style.transform = `translate(${W / 2 + b.vx * k - 4}px, ${H * 0.42 + b.vy * k + 500 * k * k - 4}px)`;
         }
       }
-    };
+    }
     raf = requestAnimationFrame(frame);
 
     for (const [half, rg, dx] of [['.vs-l', '.vs-rl', '-100%'], ['.vs-r', '.vs-rr', '100%']]) {
@@ -1298,11 +1318,25 @@ function vsSplash(you, foe) {
     }
     sfx('vs');
     timers.push(setTimeout(() => sfx('vsPull'), T.pull));
-    const r = $('#vsR');
-    timers.push(setTimeout(() => { r.textContent = 'READY...'; r.classList.add('on'); sfx('vsGo', 2); }, 2300));
-    timers.push(setTimeout(() => { r.textContent = 'GO!'; sfx('vsGo', 3); CRT.pulse(0.6); }, 3100));
-    timers.push(setTimeout(finish, 3700));
+    timers.push(setTimeout(finish, T.land + 4 * STEP));
   });
+}
+
+/* The roll is settled: mark the high roller (0 = you, 1 = the foe), or clear it (null). */
+function vsWinner(who) {
+  $('.vs-l').classList.toggle('win', who === 0);
+  $('.vs-r').classList.toggle('win', who === 1);
+}
+/* GO!, a beat, and the VS screen is done. */
+async function vsGo() {
+  if (!$('.vs')) return;
+  $('.vs').classList.remove('rolling');
+  const r = $('#vsR');
+  r.textContent = 'GO!';
+  r.classList.add('on');
+  sfx('vsGo', 3);
+  CRT.pulse(0.6);
+  await sleep(700);
 }
 
 /* `onPick(deckDef)` runs when a deck is chosen: a game against the Dealer, or the online lobby. */
@@ -1375,35 +1409,20 @@ async function tumble(el, final, frames) {
 }
 
 /* Shows the roll-off. Resolves to { first, you, cpu }: first is 0 if you go first, 1 if the Dealer does. */
-function rollForFirst() {
-  showScreen(`
-    <div class="roll panel">
-      <div class="roll-title">ROLL FOR THE FIRST TURN</div>
-      <div class="roll-duel">
-        <div class="roller" id="rollerYou">
-          <img class="r-art" src="${spriteURL('hero')}" alt="">
-          <div class="roll-name">${escapeHTML(heroName()).toUpperCase()}</div>
-          <div class="die" id="dieYou"></div>
-        </div>
-        <div class="roll-vs">VS</div>
-        <div class="roller" id="rollerCpu">
-          <img class="r-art" src="${spriteURL(oppSprite())}" alt="">
-          <div class="roll-name">${escapeHTML(foe ? foe.name : 'THE DEALER')}</div>
-          <div class="die" id="dieCpu"></div>
-        </div>
-      </div>
-      <div class="roll-msg" id="rollMsg">High roll chooses who goes first.</div>
-      <div class="roll-btns" id="rollBtns"><button class="btn big" id="rollBtn">ROLL</button></div>
-    </div>`, true);
+/* The roll for the first turn, on the VS screen: the slingshot intro plays, then a die under
+   each name. you / them: { name, deck, sprite } for vsSplash. */
+async function rollForFirst(you, them) {
+  await vsSplash(you, them);
   const dieYou = $('#dieYou'), dieCpu = $('#dieCpu'), msg = $('#rollMsg'), btns = $('#rollBtns');
-  setDie(dieYou, 6);
-  setDie(dieCpu, 6);
+  if (!dieYou) return new Promise(() => {}); // the screen was closed
+  msg.textContent = 'High roll chooses who goes first.';
+  btns.innerHTML = '<button class="btn big" id="rollBtn">ROLL</button>';
 
-  return new Promise((resolve) => {
+  const picked = await new Promise((resolve) => {
     const roll = async () => {
       btns.innerHTML = '';
       msg.textContent = 'Rolling...';
-      $$('.roller').forEach((r) => r.classList.remove('win', 'lose'));
+      vsWinner(null);
       const you = d6(), cpu = d6();
       // The Dealer's die settles a beat later for a little suspense.
       await Promise.all([tumble(dieYou, you, 14), tumble(dieCpu, cpu, 17)]);
@@ -1417,8 +1436,7 @@ function rollForFirst() {
         return;
       }
       const youWon = you > cpu;
-      $('#rollerYou').classList.add(youWon ? 'win' : 'lose');
-      $('#rollerCpu').classList.add(youWon ? 'lose' : 'win');
+      vsWinner(youWon ? 0 : 1);
       const done = (first) => resolve({ first, you, cpu });
       if (youWon) {
         sfx('heal');
@@ -1439,6 +1457,8 @@ function rollForFirst() {
     };
     $('#rollBtn').onclick = roll;
   });
+  await vsGo();
+  return picked;
 }
 
 /* opts (Dealer's Run): { cpuDeck, life: [you, dealer], boss: rule key, run: true, foe: a RIVALS entry } */
@@ -1448,7 +1468,9 @@ async function startGame(deckDef, opts = {}) {
   const r = opts.foe;
   foe = r ? { name: r.name, short: r.name.toLowerCase().replace(/(^|[\s.])\w/g, (m) => m.toUpperCase()), sprite: r.sprite } : null;
   Music.play('battle');
-  const { first, you, cpu } = await rollForFirst();
+  const { first, you, cpu } = await rollForFirst(
+    { name: heroName(), deck: deckDef.name, sprite: 'hero' },
+    { name: foe ? foe.name : 'DEALER', deck: cpuDeck.name, sprite: oppSprite() });
   setSeats(0);
   runBattle = !!opts.run;
   const g = game = new Game(deckDef, cpuDeck, first, { life: opts.life, boss: opts.boss, cpuName: foe ? foe.short : undefined });

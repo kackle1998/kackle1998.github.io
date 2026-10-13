@@ -280,9 +280,7 @@ const Net = (() => {
     let dice = null;
     if (fresh && !rows.length) {
       const myDeck = seat === 0 ? m.host_deck : m.guest_deck;
-      await vsSplash({ name: heroName(), deck: myDeck.name || '', sprite: 'hero' }, { name: st.oppName, deck: oppDeck.name || '', sprite: 'opp_hero' });
-      if (!st.on || st.match !== m) return;
-      dice = await rollOnline(m);
+      dice = await rollOnline(m, { name: heroName(), deck: myDeck.name || '', sprite: 'hero' }, { name: st.oppName, deck: oppDeck.name || '', sprite: 'opp_hero' });
     }
     if (!st.on || st.match !== m) return;
 
@@ -409,42 +407,25 @@ const Net = (() => {
   }
 
   /* ---------- opening dice (decided by the server, animated identically on both sides) ---------- */
-  async function rollOnline(m) {
+  /* On the VS screen (ui.js vsSplash); you / them are its fighters. */
+  async function rollOnline(m, you, them) {
     const r = mulberry32(m.seed ^ 0x2545f491);
     let a, b;
     do { a = 1 + Math.floor(r() * 6); b = 1 + Math.floor(r() * 6); } while (a === b);
     const hi = Math.max(a, b), lo = Math.min(a, b);
     const dice = m.first_seat === 0 ? [hi, lo] : [lo, hi]; // by seat: the high roller goes first
-    showScreen(`
-      <div class="roll panel">
-        <div class="roll-title">ROLL FOR THE FIRST TURN</div>
-        <div class="roll-duel">
-          <div class="roller" id="rollerYou">
-            <img class="r-art" src="${spriteURL('hero')}" alt="">
-            <div class="roll-name">${escapeHTML(heroName()).toUpperCase()}</div>
-            <div class="die" id="dieYou"></div>
-          </div>
-          <div class="roll-vs">VS</div>
-          <div class="roller" id="rollerCpu">
-            <img class="r-art" src="${spriteURL('opp_hero')}" alt="">
-            <div class="roll-name">${escapeHTML(st.oppName).toUpperCase()}</div>
-            <div class="die" id="dieCpu"></div>
-          </div>
-        </div>
-        <div class="roll-msg" id="rollMsg">High roll goes first.</div>
-        <div class="roll-btns"></div>
-      </div>`, true);
+    await vsSplash(you, them);
     const dieYou = $('#dieYou'), dieCpu = $('#dieCpu');
-    setDie(dieYou, 6);
-    setDie(dieCpu, 6);
+    if (!dieYou || !st.on || st.match !== m) return dice;
+    $('#rollMsg').textContent = 'High roll goes first.';
     await sleep(500);
     await Promise.all([tumble(dieYou, dice[ME], 14), tumble(dieCpu, dice[OPP], 17)]);
     const iWon = m.first_seat === ME;
-    $('#rollerYou').classList.add(iWon ? 'win' : 'lose');
-    $('#rollerCpu').classList.add(iWon ? 'lose' : 'win');
+    vsWinner(iWon ? 0 : 1);
     sfx(iWon ? 'heal' : 'err');
     $('#rollMsg').textContent = iWon ? 'You rolled high and go first!' : `${st.oppName} rolled high and goes first.`;
     await sleep(1400);
+    await vsGo();
     return dice;
   }
 

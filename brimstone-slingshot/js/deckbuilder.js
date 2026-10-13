@@ -330,8 +330,8 @@ function dbArtDraw(wrap) {
 function dbInfoDefault() {
   $('#dbInfo').innerHTML = `<div class="i-help">
     <b>BUILDING A DECK</b>
-    <p>Click a card to add it, right-click to remove it. Up to ${MAX_COPIES} copies of each creature, spell or trap; lands are unlimited.</p>
-    <p>A deck needs exactly ${DECK_SIZE} cards. Around 12 lands is a good start. AUTO-COMPLETE fills the rest for you.</p>
+    <p>Click a card to add it, right-click to remove it. Up to ${MAX_COPIES} copies of each creature, spell or trap; tomes are unlimited.</p>
+    <p>A deck needs exactly ${DECK_SIZE} cards. Around 12 tomes is a good start. AUTO-COMPLETE fills the rest for you.</p>
     <p>Cards from your Card Maker update live while you edit them.</p></div>`;
 }
 
@@ -398,7 +398,7 @@ function dbRender() {
   const nCreat = creatures.filter(([id]) => CARDS[id].type === 'creature').reduce((a, [, n]) => a + n, 0);
   const landN = total - creatures.reduce((a, [, n]) => a + n, 0);
   $('#dbCount').innerHTML = `<span class="${total === DECK_SIZE ? 'ok' : total > DECK_SIZE ? 'bad' : ''}">${total}/${DECK_SIZE}</span>
-    <span class="db-sub">${nCreat} creatures &middot; ${total - landN - nCreat} spells &amp; traps &middot; ${landN} lands${DB.dirty ? ' &middot; unsaved' : ''}</span>`;
+    <span class="db-sub">${nCreat} creatures &middot; ${total - landN - nCreat} spells &amp; traps &middot; ${landN} tomes${DB.dirty ? ' &middot; unsaved' : ''}</span>`;
   const curve = Array(7).fill(0);
   creatures.forEach(([id, n]) => (curve[Math.min(6, costTotal(CARDS[id].cost))] += n));
   const peak = Math.max(4, ...curve);
