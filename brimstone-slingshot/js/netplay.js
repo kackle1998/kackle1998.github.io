@@ -278,7 +278,12 @@ const Net = (() => {
     Music.play('battle');
 
     let dice = null;
-    if (fresh && !rows.length) dice = await rollOnline(m);
+    if (fresh && !rows.length) {
+      const myDeck = seat === 0 ? m.host_deck : m.guest_deck;
+      await vsSplash({ name: heroName(), deck: myDeck.name || '', sprite: 'hero' }, { name: st.oppName, deck: oppDeck.name || '', sprite: 'opp_hero' });
+      if (!st.on || st.match !== m) return;
+      dice = await rollOnline(m);
+    }
     if (!st.on || st.match !== m) return;
 
     seedRng(m.seed);

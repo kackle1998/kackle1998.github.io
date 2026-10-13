@@ -100,6 +100,7 @@ function sfx(name, n = 1) {
     // Combo hits climb a semitone per link; the callout chime climbs with them.
     case 'chain': S.tone(330 * 2 ** ((n - 1) / 12), 0.12, 'square', 0.045); break;
     case 'vs': S.tone(110, 0.3, 'sawtooth', 0.05); break;
+    case 'vsPull': S.tone(70, 0.55, 'sawtooth', 0.03, 190); S.tone(140, 0.5, 'square', 0.012, 330, 0.05); break; // the bands creaking back
     case 'vsGo': S.tone(n === 3 ? 1046 : n === 2 ? 523 : 440, n === 3 ? 0.25 : 0.1, 'square', 0.045); break;
     case 'callout': [0, 4, 7].forEach((st, i) => S.tone(523 * 2 ** ((n - 2 + st) / 12), 0.2, 'triangle', 0.05, null, i * 0.07)); break;
     case 'warp': S.tone(70, 2.4, 'sawtooth', 0.04, 1300); S.tone(105, 2.4, 'square', 0.025, 1900); S.noise(0.6, 0.05); break;
@@ -1170,30 +1171,133 @@ document.addEventListener('keydown', (e) => {
   else if (e.key === 'Escape') $('#omBack').onclick();
 });
 
-/* Fighting-game VS splash before a fight (Dealer's Run): you slide in from the left,
-   your foe from the right, then VS, READY..., GO!. Click to skip. Resolves when done.
+/* Fighting-game VS splash before a fight (Dealer's Run, Online). The halves slide in, each with
+   a Brimstone Slingshot (the run map's art) cradling its fighter's portrait. Both draw back and
+   fling their fighters at each other; they clash mid-air (VS!), ricochet back into their pouches,
+   and the names come up. Then READY..., GO!. Click to skip. Resolves when done.
    you / foe: { name, deck, sprite } */
 function vsSplash(you, foe) {
   const side = (p, cls) => `
     <div class="vs-side ${cls}">
-      <div class="vs-port"><img src="${spriteURL(p.sprite)}" alt=""></div>
+      <div class="vs-slot"></div>
       <div class="vs-who"><div class="vs-name">${escapeHTML(p.name.toUpperCase())}</div><div class="vs-deck">${escapeHTML(p.deck.toUpperCase())}</div></div>
     </div>`;
-  showScreen(`<div class="vs">${side(you, 'vs-l')}${side(foe, 'vs-r')}<div class="vs-t" id="vsT">VS</div><div class="vs-t low" id="vsR"></div></div>`);
+  const rig = (p, cls) => `
+    <div class="vs-rig ${cls}">
+      <div class="vs-fork"></div><div class="vs-band"></div><div class="vs-band"></div>
+      <img class="vs-face" src="${spriteURL(p.sprite)}" alt=""><div class="vs-pouch"></div>
+    </div>`;
+  showScreen(`<div class="vs">${side(you, 'vs-l')}${side(foe, 'vs-r')}${rig(you, 'vs-rl')}${rig(foe, 'vs-rr')}<div class="vs-t" id="vsT">VS</div><div class="vs-t low" id="vsR"></div></div>`);
   return new Promise((resolve) => {
     if (FAST) return resolve();
     const timers = [];
-    let done = false;
-    const finish = () => { if (done) return; done = true; timers.forEach(clearTimeout); resolve(); };
-    $('.vs').addEventListener('click', finish);
-    $('.vs-l').animate([{ transform: 'translateX(-100%)' }, { transform: 'none' }], { duration: 400, easing: 'steps(8)' });
-    $('.vs-r').animate([{ transform: 'translateX(100%)' }, { transform: 'none' }], { duration: 400, easing: 'steps(8)' });
+    let done = false, raf = 0;
+    const finish = () => { if (done) return; done = true; timers.forEach(clearTimeout); cancelAnimationFrame(raf); resolve(); };
+    const vs = $('.vs');
+    vs.addEventListener('click', finish);
+
+    // Lay out each rig over its half's slot (layout px of .vs; offsets ignore the slide-in transform).
+    const C = RunMap.ramp(), SL = RunMap.SL, K = 3; // the fork's art at 3x
+    const W = vs.offsetWidth, H = vs.offsetHeight, FACE = 112, TIP = 26 * K;
+    const rigs = [['.vs-l', '.vs-rl', 1], ['.vs-r', '.vs-rr', -1]].map(([half, sel, s]) => {
+      const h = $(half), slot = h.querySelector('.vs-slot'), el = $(sel);
+      const x = h.offsetLeft + slot.offsetLeft + slot.offsetWidth / 2, foot = h.offsetTop + slot.offsetTop + slot.offsetHeight;
+      const fork = el.querySelector('.vs-fork');
+      fork.appendChild(RunMap.forkArt(C));
+      Object.assign(fork.style, { left: x - SL.w * K / 2 + 'px', top: foot - SL.h * K + 'px', width: SL.w * K + 'px', height: SL.h * K + 'px' });
+      el.querySelector('.vs-pouch').appendChild(RunMap.pouchArt(C));
+      el.querySelectorAll('.vs-band').forEach((b) => { b.style.background = C[1]; });
+      const tipY = foot - SL.h * K + 4 * K;
+      return { s, el, x, tipY, rest: [x, tipY + 34], face: el.querySelector('.vs-face'), pouch: el.querySelector('.vs-pouch'), bands: el.querySelectorAll('.vs-band'), clash: [W / 2 - s * (FACE / 2 + 4), H * 0.42] };
+    });
+
+    // A band from the fork tip (x0, y0) to the pouch's tie loop (x1, y1).
+    const band = (b, x0, y0, x1, y1) => {
+      b.style.left = x0 + 'px'; b.style.top = y0 - 3 + 'px';
+      b.style.width = Math.hypot(x1 - x0, y1 - y0) + 'px';
+      b.style.transform = `rotate(${Math.atan2(y1 - y0, x1 - x0)}rad)`;
+    };
+    const lerp = (a, b, k) => a + (b - a) * k;
+    const arc = (p, q, k, up) => [lerp(p[0], q[0], k), lerp(p[1], q[1], k) - up * 4 * k * (1 - k)];
+    // The pouch after the release: overshoots toward the foe, then wobbles to rest.
+    const WOBBLE = [[1, -1.4], [-0.6, 0.7], [0.3, -0.3], [0, 0]];
+
+    // Debris knocked off in the clash: square palette chips that step outward and vanish.
+    const bits = Array.from({ length: 14 }, (_, i) => {
+      const d = document.createElement('div');
+      d.className = 'vs-bit';
+      d.style.background = C[[7, 8, 4][i % 3]];
+      const a = (i / 14) * Math.PI * 2 + (i % 2) * 0.3;
+      return { d, vx: Math.cos(a) * (180 + (i % 4) * 60), vy: Math.sin(a) * (140 + (i % 3) * 50) - 60 };
+    });
+
+    const STEP = 1000 / 12; // the whole scene moves at 12 fps, like the pixel art it is
+    const T = { pull: 400, fly: 1000, hit: 1350, land: 1800 };
+    const t0 = performance.now();
+    let last = -1, flew = false, hit = false, landed = false;
+    const frame = (now) => {
+      if (done) return;
+      raf = requestAnimationFrame(frame);
+      const t = Math.floor((now - t0) / STEP) * STEP;
+      if (t === last) return;
+      last = t;
+      if (t >= T.fly && !flew) { flew = true; sfx('twang'); }
+      if (t >= T.hit && !hit) {
+        hit = true;
+        sfx('hit'); sfx('vsGo', 1); CRT.glitch();
+        $('#vsT').classList.add('on');
+        bits.forEach((b) => vs.insertBefore(b.d, $('#vsT')));
+      }
+      if (t >= T.land && !landed) { landed = true; sfx('diceLand'); vs.querySelectorAll('.vs-who').forEach((w) => w.classList.add('on')); }
+      for (const r of rigs) {
+        const { s, rest } = r;
+        // The pouch: at rest, drawn back (down and away from the foe), then released.
+        let pouch = rest;
+        if (t >= T.pull && t < T.fly) {
+          const k = Math.min(1, (t - T.pull) / (T.fly - T.pull - STEP));
+          pouch = [rest[0] - s * 46 * k, rest[1] + 66 * k];
+        } else if (t >= T.fly && t < T.fly + WOBBLE.length * STEP) {
+          const [u, v] = WOBBLE[Math.floor((t - T.fly) / STEP)];
+          pouch = [rest[0] + s * 30 * u, rest[1] + 30 * v];
+        } else if (t >= T.land && t < T.land + 2 * STEP) {
+          pouch = [rest[0], rest[1] + (t < T.land + STEP ? 14 : 5)]; // the catch
+        }
+        // The portrait: in the pouch, then out along an arc to the clash and back.
+        const seat = (p) => [p[0], p[1] - FACE / 2 + 4];
+        let face = seat(pouch), spin = 0;
+        if (t >= T.fly && t < T.hit) {
+          const k = (t - T.fly) / (T.hit - T.fly);
+          face = arc(seat(rest), r.clash, k, 150); spin = s * 360 * k;
+        } else if (t >= T.hit && t < T.land) {
+          const k = (t - T.hit) / (T.land - T.hit);
+          face = arc(r.clash, seat(rest), k, 190); spin = s * (360 - 360 * k);
+        }
+        r.face.style.transform = `translate(${face[0] - FACE / 2}px, ${face[1] - FACE / 2}px) rotate(${Math.round(spin / 45) * 45}deg)`;
+        r.pouch.style.transform = `translate(${pouch[0] - 57}px, ${pouch[1] - 9}px)`;
+        band(r.bands[0], r.x - TIP, r.tipY, pouch[0] - 54, pouch[1]);
+        band(r.bands[1], r.x + TIP, r.tipY, pouch[0] + 54, pouch[1]);
+      }
+      if (hit) {
+        const k = (t - T.hit) / 1000;
+        for (const b of bits) {
+          const gone = k > 0.45;
+          b.d.style.display = gone ? 'none' : '';
+          if (!gone) b.d.style.transform = `translate(${W / 2 + b.vx * k - 4}px, ${H * 0.42 + b.vy * k + 500 * k * k - 4}px)`;
+        }
+      }
+    };
+    raf = requestAnimationFrame(frame);
+
+    for (const [half, rg, dx] of [['.vs-l', '.vs-rl', '-100%'], ['.vs-r', '.vs-rr', '100%']]) {
+      $(half).animate([{ transform: `translateX(${dx})` }, { transform: 'none' }], { duration: 400, easing: 'steps(8)' });
+      $(rg).animate([{ transform: `translateX(${dx === '-100%' ? -W / 2 : W / 2}px)` }, { transform: 'none' }], { duration: 400, easing: 'steps(8)' });
+    }
     sfx('vs');
-    const t = $('#vsT'), r = $('#vsR');
-    timers.push(setTimeout(() => { t.classList.add('on'); sfx('vsGo', 1); CRT.glitch(); }, 450));
-    timers.push(setTimeout(() => { r.textContent = 'READY...'; r.classList.add('on'); sfx('vsGo', 2); }, 1300));
-    timers.push(setTimeout(() => { r.textContent = 'GO!'; sfx('vsGo', 3); CRT.pulse(0.6); }, 2200));
-    timers.push(setTimeout(finish, 2900));
+    timers.push(setTimeout(() => sfx('vsPull'), T.pull));
+    const r = $('#vsR');
+    timers.push(setTimeout(() => { r.textContent = 'READY...'; r.classList.add('on'); sfx('vsGo', 2); }, 2300));
+    timers.push(setTimeout(() => { r.textContent = 'GO!'; sfx('vsGo', 3); CRT.pulse(0.6); }, 3100));
+    timers.push(setTimeout(finish, 3700));
   });
 }
 

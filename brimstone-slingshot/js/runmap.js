@@ -1072,5 +1072,5 @@ const RunMap = (() => {
     })(0);
   }
 
-  return { show };
+  return { show, forkArt, pouchArt, ramp, SL }; // the slingshot art is reused by the VS splash (ui.js)
 })();
