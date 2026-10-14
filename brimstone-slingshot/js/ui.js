@@ -462,7 +462,7 @@ function renderPanel(el, p) {
     <div class="pp-head">
       <img class="portrait" src="${spriteURL(mine(p) ? 'hero' : oppSprite())}" alt="">
       <div><div class="pp-name">${escapeHTML((mine(p) ? heroName() : oppName()).toUpperCase())}</div><div class="pp-deck">${escapeHTML(p.deckDef.name)}</div></div>
-      <div class="pp-life">${ico('hp')}<b>${Math.max(0, p.life)}</b></div>
+      <div class="pp-life">${ico('hp')}<b>${mine(p) ? Math.max(0, p.life) : p.life}</b></div>
     </div>
     <div class="pp-stats"><span>DECK ${p.library.length}</span><span>HAND ${p.hand.length}</span><span>GRAVE ${p.grave.length}</span></div>
     ${COLOR_KEYS.some((k) => e[k].total)
@@ -1592,7 +1592,7 @@ function endGame() {
         <img class="r-art" src="${spriteURL(won ? 'hero' : oppSprite())}" alt="">
         <div class="r-title">${net ? net.title : won ? 'VICTORY' : 'DEFEAT'}</div>
         <div class="r-sub">${net ? escapeHTML(net.sub) : won ? (foe ? `${escapeHTML(foe.short)}'s life hit zero. One more of the Dealer's hands down.` : "The Dealer's life hit zero. You beat the house.") : 'Your life hit zero. The house wins this one.'}</div>
-        <div class="r-stats">Turn ${g.turnNum} &middot; Your life ${Math.max(0, you.life)} &middot; ${escapeHTML(net ? Net.oppName : foe ? foe.short : 'Dealer')} ${Math.max(0, opp.life)}</div>
+        <div class="r-stats">Turn ${g.turnNum} &middot; Your life ${Math.max(0, you.life)} &middot; ${escapeHTML(net ? Net.oppName : foe ? foe.short : 'Dealer')} ${opp.life}</div>
         <div class="r-tally">
           <div><span>DAMAGE DEALT</span><b>${st.dmg}</b></div>
           <div><span>CREATURES SUMMONED</span><b>${st.summons}</b></div>

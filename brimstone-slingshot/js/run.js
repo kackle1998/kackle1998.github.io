@@ -426,6 +426,21 @@ const Run = {
   creatures() { return this.cards().filter((d) => d.type === 'creature'); },
   landCount() { return Object.values(this.s.lands).reduce((a, b) => a + b, 0); },
   deckSize() { return this.s.deck.length + this.landCount(); },
+  /* How many of each land the current cards want: more lands for a pricier curve, split by colored pip demand. */
+  recLands() {
+    const s = this.s, cards = this.cards();
+    if (!cards.length) return Object.fromEntries(s.colors.map((k) => [k, 0]));
+    const avg = cards.reduce((a, d) => a + costTotal(d.cost), 0) / cards.length;
+    const total = Math.max(6, Math.round(cards.length * Math.min(1, 0.45 + 0.1 * avg)));
+    const demand = s.colors.map((k) => 1 + cards.reduce((a, d) => a + (d.cost[k] || 0), 0));
+    const sum = demand.reduce((a, b) => a + b, 0);
+    // Largest remainder, so the split always adds up to the total.
+    const shares = demand.map((n) => ({ exact: (total * n) / sum }));
+    shares.forEach((x) => (x.n = Math.floor(x.exact)));
+    let left = total - shares.reduce((a, x) => a + x.n, 0);
+    [...shares].sort((a, b) => (b.exact - b.n) - (a.exact - a.n)).forEach((x) => { if (left > 0) { x.n++; left--; } });
+    return Object.fromEntries(s.colors.map((k, i) => [k, shares[i].n]));
+  },
   /* Add (d = 1) or take out (d = -1) a land of color k, from the map. Returns false if not allowed. */
   setLands(k, d) {
     const s = this.s, n = s.lands[k] || 0;
@@ -1239,7 +1254,7 @@ const Run = {
   /* ---------- the deck, as seen from the map ---------- */
   /* The deck from the map: every run card, plus the lands, which are free to add or take out here. */
   showDeck(host) {
-    const s = this.s, wrap = document.createElement('div');
+    const s = this.s, rec = this.recLands(), wrap = document.createElement('div');
     wrap.className = 'rn-deckwrap';
     wrap.innerHTML = `
       <div class="rn panel rn-deck">
@@ -1247,7 +1262,7 @@ const Run = {
           <div class="rn-headtext"><div class="rn-title">YOUR DECK</div>
           <div class="rn-sub"><span id="rnDeckN">${this.deckSize()}</span> cards. Tomes are free to add or take out.</div></div></div>
         <div class="rn-lands">${s.colors.map((k) => `
-          <div class="rn-land" data-k="${k}">${ico(COLORS[k].icon)}<span>${COLORS[k].land.toUpperCase()}</span>
+          <div class="rn-land" data-k="${k}">${ico(COLORS[k].icon)}<span>${COLORS[k].land.toUpperCase()}<i class="rn-rec">${rec[k]} REC.</i></span>
             <button class="mini-btn" data-d="-1" title="Remove a ${COLORS[k].land}">-</button><b>${s.lands[k] || 0}</b><button class="mini-btn" data-d="1" title="Add a ${COLORS[k].land}">+</button>
           </div>`).join('')}
         </div>

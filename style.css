@@ -577,6 +577,11 @@ footer {
     margin-top: 40px;
 }
 
+.footer-link {
+    color: inherit;
+    text-decoration: none;
+}
+
 /* Responsive */
 @media (max-width: 768px) {
     h1 {
