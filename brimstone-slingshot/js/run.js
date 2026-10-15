@@ -234,7 +234,7 @@ const RUN_EVENTS = [
     id: 'bones', title: 'BONE PILE', art: 'skeleton',
     text: 'A heap of bones. One of them is still twitching.',
     choices: [
-      { label: 'TAKE A SKELETON', act: (run) => { run.add('skeleton'); return 'A Skeleton (0-cost 1/1) joins your deck.'; } },
+      { label: 'TAKE A SKELETON', see: () => CARDS.skeleton, act: (run) => { const rc = run.add('skeleton'); return { text: 'A Skeleton (0-cost 1/1) joins your deck.', cards: [run.card(rc.rid)] }; } },
       { label: 'SIFT THE BONES (+1 ARCANA)', act: (run) => { run.gainTeeth(1); return 'You sift out 1 arcana.'; } },
     ],
   },
@@ -246,9 +246,9 @@ const RUN_EVENTS = [
         act: (run) => {
           // One gift in four is mythical.
           const c = runOffer(Math.random, run.s.colors, 1, { row: run.row(), least: Math.random() < 0.25 ? 'mythical' : 'rare' })[0];
-          run.add(c.id);
+          const rc = run.add(c.id);
           run.s.dealerBonus = 5;
-          return `You take ${c.name}. The Dealer's next hand starts with +5 life.`;
+          return { text: `You take ${c.name}. The Dealer's next hand starts with +5 life.`, cards: [run.card(rc.rid)] };
         } },
       { label: 'REFUSE', act: () => 'The Dealer shrugs and pockets the card.' },
     ],
@@ -277,16 +277,20 @@ const RUN_EVENTS = [
     text: 'A spellslinger who never left the table offers a trade: your weakest card for one of theirs.',
     choices: [
       { label: 'TRADE', ok: (run) => run.s.deck.length > 0, need: 'You have no card to trade.',
-        act: (run) => {
-          const out = run.cards().sort((a, b) => costTotal(a.cost) - costTotal(b.cost))[0];
+        see: (run) => run.cards().sort((a, b) => costTotal(a.cost) - costTotal(b.cost))[0],
+        act: (run, _, ch) => {
+          const out = ch.see(run);
           const c = runOffer(Math.random, run.s.colors, 1, { row: run.row(), skip: [out.base] })[0];
           run.remove(out.rid);
-          run.add(c.id);
-          return `You gave up ${out.name} and got ${c.name}.`;
+          const rc = run.add(c.id);
+          return { text: `You gave up ${out.name} and got ${c.name}.`, cards: [out, run.card(rc.rid)] };
         } },
       { label: 'WALK PAST', act: () => 'They go back to shuffling.' },
     ],
   },
+  /* A choice with `see` names the card it will take or give, and the event shows a SEE CARD button for it.
+     An act returns its result text, or { text, cards } to name the cards it changed for the outcome's
+     SEE CARD button (a picked creature is named for it already). */
   /* A choice with `cards` deals some cards to pick one of (Run.eventCards), and `take` keeps it. */
   {
     id: 'pack', title: 'SEALED PACK', art: 'ri_pack',
@@ -322,12 +326,13 @@ const RUN_EVENTS = [
     text: 'A shrine of stacked skulls asks for an offering. It promises to make you harder to kill.',
     choices: [
       { label: 'OFFER YOUR WEAKEST', ok: (run) => run.creatures().length > 0 && run.deckSize() > RUN_MIN_DECK, need: `Needs a creature to offer, and more than ${RUN_MIN_DECK} cards.`,
-        act: (run) => {
-          const d = run.creatures().sort((a, b) => costTotal(a.cost) - costTotal(b.cost) || a.atk + a.hp - (b.atk + b.hp))[0];
+        see: (run) => run.creatures().sort((a, b) => costTotal(a.cost) - costTotal(b.cost) || a.atk + a.hp - (b.atk + b.hp))[0],
+        act: (run, _, ch) => {
+          const d = ch.see(run);
           run.remove(d.rid);
           run.s.maxLife += 3;
           const h = run.heal(3);
-          return `The shrine takes your ${d.name}. Your max life rises by 3, and you recover ${h}.`;
+          return { text: `The shrine takes your ${d.name}. Your max life rises by 3, and you recover ${h}.`, cards: [d] };
         } },
       { label: 'LEAVE', act: () => 'The skulls watch you go.' },
     ],
@@ -570,7 +575,7 @@ const Run = {
 
   enter(id) {
     const n = this.s.map.nodes[id], node = this.s.node;
-    if (node.result) return this.outcome(node.icon, node.title, node.result);
+    if (node.result) return this.outcome(node.icon, node.title, node.result, node.see);
     switch (n.t) {
       case 'battle': case 'boss': return this.battle(n);
       case 'fire': return this.campfire(n);
@@ -588,14 +593,25 @@ const Run = {
   },
 
   /* Apply an outcome, remember it (so a reload can't apply it twice), and show it. */
-  finishStop(icon, title, text) {
-    Object.assign(this.s.node, { icon, title, result: text });
+  /* `cards` are the cards the outcome names, for its SEE CARD button: a card still in the deck is
+     shown as it is now, and one that is gone as it was. They are saved with the result. */
+  finishStop(icon, title, text, cards = []) {
     this.register();
+    const see = [];
+    for (const c of cards) {
+      const d = c && ((c.rid != null && this.card(c.rid)) || c);
+      if (d && !see.some((x) => x.id === d.id)) see.push({ ...d });
+    }
+    Object.assign(this.s.node, { icon, title, result: text, see });
     this.save();
-    this.outcome(icon, title, text);
+    this.outcome(icon, title, text, see);
   },
-  outcome(icon, title, text) {
-    this.screen(icon, title, '', `<p class="rn-outcome">${escapeHTML(text)}</p>`, '<button class="btn" id="rnOk">CONTINUE</button>');
+  /* An act's result as [text, cards]: a plain string, or { text, cards }, plus any cards named here. */
+  result(r, cards = []) { return typeof r === 'string' ? [r, cards] : [r.text, [...(r.cards || []), ...cards]]; },
+  outcome(icon, title, text, see = []) {
+    this.screen(icon, title, '', `<p class="rn-outcome">${escapeHTML(text)}</p>`,
+      (see.length ? `<button class="btn" id="rnSee">SEE CARD${see.length > 1 ? 'S' : ''}</button>` : '') + '<button class="btn" id="rnOk">CONTINUE</button>');
+    if (see.length) $('#rnSee').onclick = () => { sfx('select'); this.seeCard(see); };
     $('#rnOk').onclick = () => { sfx('select'); this.leave(); };
   },
 
@@ -786,7 +802,7 @@ const Run = {
       '', `<button class="btn" id="rnSkip">SKIP (+${RUN_SKIP_ARCANA} ARCANA)</button>`);
     this.cardGrid($('#rnBody'), offers, (c) => {
       this.add(c.id);
-      this.finishStop('ri_battle', 'SPOILS', `${c.name} joins your deck.`);
+      this.finishStop('ri_battle', 'SPOILS', `${c.name} joins your deck.`, [c]);
     });
     $('#rnSkip').onclick = () => {
       sfx('select');
@@ -815,7 +831,7 @@ const Run = {
           sfx('die');
           CRT.pulse(0.8, true);
           this.remove(d.rid);
-          return this.finishStop('ri_fire', 'CAMPFIRE', `The fire took your ${d.name}. It burns a little brighter.`);
+          return this.finishStop('ri_fire', 'CAMPFIRE', `The fire took your ${d.name}. It burns a little brighter.`, [d]);
         }
         this.rc(d.rid)[stat] += by;
         node.n = k + 1;
@@ -873,7 +889,7 @@ const Run = {
       if (o.consume) this.remove(from.rid);
       if (o.cost) this.s.life -= o.cost;
       sfx('spell');
-      this.finishStop(o.icon, o.title, `${d.name} gained ${sigilName(k, from)}.${o.consume ? ` ${from.name} is gone.` : ''}`);
+      this.finishStop(o.icon, o.title, `${d.name} gained ${sigilName(k, from)}.${o.consume ? ` ${from.name} is gone.` : ''}`, [d, o.consume && from]);
     }, takers.length > 7);
     $('#rnBack').onclick = () => { sfx('select'); node.sigil = null; this.save(); this.transfer(o); };
     wire();
@@ -977,7 +993,7 @@ const Run = {
       if (ch.cards) return this.eventCards(ev, ch);
       this.screen(ev.art, ev.title, 'Pick a creature.', '', '<button class="btn" id="rnBack">BACK</button>');
       const mons = this.creatures().filter(ch.pick);
-      this.cardGrid($('#rnBody'), mons, (d) => this.finishStop(ev.art, ev.title, ch.act(this, d)), mons.length > 7);
+      this.cardGrid($('#rnBody'), mons, (d) => this.finishStop(ev.art, ev.title, ...this.result(ch.act(this, d), [d])), mons.length > 7);
       $('#rnBack').onclick = () => { sfx('select'); node.choice = null; this.save(); this.event(n); };
       return;
     }
@@ -985,7 +1001,8 @@ const Run = {
       `<div class="rn-event"><img class="rn-art" src="${spriteURL(ev.art)}" alt=""><p>${escapeHTML(ev.text)}</p></div>`,
       ev.choices.map((ch, i) => {
         const ok = this.canChoose(ch);
-        return `<button class="btn" data-ch="${i}" ${ok ? '' : `disabled`}>${escapeHTML(ch.label)}</button>`;
+        return `<button class="btn" data-ch="${i}" ${ok ? '' : `disabled`}>${escapeHTML(ch.label)}</button>` +
+          (ch.see && ch.see(this) ? `<button class="btn" data-see="${i}">SEE CARD</button>` : '');
       }).join('') + (ev.choices.some((ch) => !this.canChoose(ch)) ? `<div class="rn-need">${escapeHTML(ev.choices.find((ch) => !this.canChoose(ch)).need || '')}</div>` : ''));
     $$('[data-ch]').forEach((b) => (b.onclick = () => {
       const ch = ev.choices[+b.dataset.ch];
@@ -993,8 +1010,20 @@ const Run = {
       sfx('select');
       if (ch.cards) node.cards = ch.cards(this);
       if (ch.pick || ch.transfer || ch.cards) { node.choice = +b.dataset.ch; this.save(); this.event(n); }
-      else this.finishStop(ev.art, ev.title, ch.act(this));
+      else this.finishStop(ev.art, ev.title, ...this.result(ch.act(this, null, ch)));
     }));
+    $$('[data-see]').forEach((b) => (b.onclick = () => { sfx('select'); this.seeCard(ev.choices[+b.dataset.see].see(this)); }));
+  },
+
+  /* A card (or a list of them) shown big in a panel over the screen, with a CLOSE button. */
+  seeCard(d) {
+    const wrap = document.createElement('div');
+    wrap.className = 'rn-deckwrap';
+    wrap.innerHTML = `<div class="rn panel slot-see"><div class="rn-body" id="seeBody"></div>
+      <div class="rn-btns"><button class="btn" id="seeClose">CLOSE</button></div></div>`;
+    $('#screen').appendChild(wrap);
+    this.cardGrid($('#seeBody'), [].concat(d), null);
+    $('#seeClose').onclick = () => { sfx('select'); wrap.remove(); };
   },
 
   /* A ? stop's cards to pick one of (a sealed pack, the reliquary). They are dealt once and kept on
@@ -1002,7 +1031,7 @@ const Run = {
   eventCards(ev, ch) {
     const defs = (this.s.node.cards || []).map((id) => CARDS[id]).filter(Boolean);
     this.screen(ev.art, ev.title, ch.prompt || 'Take one card for your deck.', '', '<button class="btn" id="rnLeave">LEAVE</button>');
-    this.cardGrid($('#rnBody'), defs, (c) => this.finishStop(ev.art, ev.title, ch.take(this, c)));
+    this.cardGrid($('#rnBody'), defs, (c) => this.finishStop(ev.art, ev.title, ...this.result(ch.take(this, c), [c])));
     $('#rnLeave').onclick = () => { sfx('select'); this.leave(); };
   },
 
@@ -1042,16 +1071,7 @@ const Run = {
       d[t.stat] += t.by;
       say(`+${t.by} ${t.stat === 'atk' ? 'ATTACK' : 'HEALTH'} &gt; ${escapeHTML(d.name.toUpperCase())} ${was} TO ${d.atk}/${d.hp}`, true);
     } else say(`NEW CARD &gt; ${escapeHTML(d.name.toUpperCase())}`, true);
-    $('#slSee').onclick = () => {
-      sfx('select');
-      const wrap = document.createElement('div');
-      wrap.className = 'rn-deckwrap';
-      wrap.innerHTML = `<div class="rn panel slot-see"><div class="rn-body" id="slSeeBody"></div>
-        <div class="rn-btns"><button class="btn" id="slSeeClose">CLOSE</button></div></div>`;
-      $('#screen').appendChild(wrap);
-      this.cardGrid($('#slSeeBody'), [d], null);
-      $('#slSeeClose').onclick = () => { sfx('select'); wrap.remove(); };
-    };
+    $('#slSee').onclick = () => { sfx('select'); this.seeCard(d); };
   },
 
   /* What the three reels land on, so they show the prize itself: a new card's art three times,
@@ -1103,14 +1123,15 @@ const Run = {
     $('#slLever').onclick = pull;
     if (!t) { $('#rnLeave').onclick = () => { sfx('select'); this.leave(); }; return; }
     $('#slTake').onclick = () => {
-      let text;
-      if (t.k === 'card') { this.add(t.id); text = `${CARDS[t.id].name} joins your deck.`; sfx('place'); }
+      let text, cards = [];
+      if (t.k === 'card') { cards = [this.add(t.id)]; text = `${CARDS[t.id].name} joins your deck.`; sfx('place'); }
       else if (t.k === 'buff') {
+        cards = [{ rid: t.rid }];
         this.rc(t.rid)[t.stat] += t.by;
         text = `${this.card(t.rid).name} gained +${t.by} ${t.stat === 'atk' ? 'attack' : 'health'}.`;
         sfx('spell');
       } else { text = `You recover ${this.heal(t.n)} life.`; sfx('heal'); }
-      this.finishStop(ev.art, ev.title, text);
+      this.finishStop(ev.art, ev.title, text, cards);
     };
   },
 
@@ -1201,7 +1222,7 @@ const Run = {
       this.cardGrid($('#rnBody'), takers, (d) => {
         this.rc(d.rid).sigils.push(k);
         sfx('spell');
-        this.finishStop(ev.art, ev.title, `${d.name} gained ${SIGILS[k].name}.`);
+        this.finishStop(ev.art, ev.title, `${d.name} gained ${SIGILS[k].name}.`, [d]);
       }, takers.length > 7);
       $('#rnBack').onclick = () => { sfx('select'); node.pick = false; this.save(); this.wheel(n, ev); };
       return wire();
