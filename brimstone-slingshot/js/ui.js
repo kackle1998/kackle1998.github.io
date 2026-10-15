@@ -15,8 +15,8 @@ let ME = 0, OPP = 1;
 const mine = (p) => p.idx === ME;
 const online = () => typeof Net !== 'undefined' && Net.on;
 /* A Dealer's Run battle may be against one of the Dealer's rivals (data.js RIVALS) instead. */
-let foe = null; // { name: 'MORT SPADE', short: 'Mort Spade', sprite } or null for the Dealer
-function oppName() { return online() ? Net.oppName : foe ? foe.name : 'DEALER'; }       // panel / banner text
+let foe = null; // { name: 'MORT SPADE', tag, short: 'Mort Spade', sprite, win } or null for the Dealer
+function oppName() { return online() ? Net.oppName : foe ? foe.tag : 'DEALER'; }        // panel / banner text (a boss's shorter tag)
 function oppTitle() { return online() ? Net.oppName : foe ? foe.short : 'the Dealer'; }  // in sentences
 function oppSprite() { return online() ? 'opp_hero' : foe ? foe.sprite : 'dealer'; }
 function OppTitle() { const t = oppTitle(); return t[0].toUpperCase() + t.slice(1); }    // starting a sentence
@@ -411,7 +411,7 @@ function cardEl(c) {
 /* ---------- inspector ---------- */
 function inspect(c) {
   inspectInto($('#inspector'), inspectHTML(c, game && c.type === 'creature' ? game.attackOf(c) : c.atk) +
-    (c.attacked && game && game.onBoard(c) ? '<div class="i-sigil muted">Tapped: it has attacked and untaps at the start of its owner\'s turn. It still fights back if attacked.</div>' : ''));
+    (c.attacked && game && game.onBoard(c) ? '<div class="i-sigil muted">Tapped: it has attacked and untaps at the start of its owner\'s turn. It can\'t guard its owner, but still fights back if attacked.</div>' : ''));
 }
 
 function inspectDefault() {
@@ -454,6 +454,10 @@ function isTarget(t) {
   return game.targets(a).some((x) => (t.uid != null ? x.uid === t.uid : x.player === t.player));
 }
 
+/* A name with a word over 9 letters (COSMOLOGIST) can't wrap short enough to leave room beside it
+   (the panel's life total, the turn box's buttons), so it is set smaller there. */
+const ppLong = (name) => Math.max(...name.split(/\s+/).map((w) => w.length)) > 9;
+
 function renderPanel(el, p) {
   const e = game.energy(p);
   el.classList.toggle('active', game.active === p.idx && !game.over);
@@ -461,14 +465,14 @@ function renderPanel(el, p) {
   el.innerHTML = `
     <div class="pp-head">
       <img class="portrait" src="${spriteURL(mine(p) ? 'hero' : oppSprite())}" alt="">
-      <div><div class="pp-name">${escapeHTML((mine(p) ? heroName() : oppName()).toUpperCase())}</div><div class="pp-deck">${escapeHTML(p.deckDef.name)}</div></div>
+      <div><div class="pp-name${ppLong(mine(p) ? heroName() : oppName()) ? ' long' : ''}">${escapeHTML((mine(p) ? heroName() : oppName()).toUpperCase())}</div><div class="pp-deck">${escapeHTML(p.deckDef.name)}</div></div>
       <div class="pp-life">${ico('hp')}<b>${mine(p) ? Math.max(0, p.life) : p.life}</b></div>
     </div>
     <div class="pp-stats"><span>DECK ${p.library.length}</span><span>HAND ${p.hand.length}</span><span>GRAVE ${p.grave.length}</span></div>
     ${COLOR_KEYS.some((k) => e[k].total)
       ? `<table class="pp-energy">${COLOR_KEYS.filter((k) => e[k].total).map((k) => {
           const used = e[k].total - e[k].free;
-          return `<tr title="${COLORS[k].land}"><td class="n">${e[k].total}X</td><td>${ico(COLORS[k].icon)}</td><td class="muted">${used ? `${used} USED` : ''}</td></tr>`;
+          return `<tr><td class="n">${e[k].total}X</td><td>${ico(COLORS[k].icon)}</td><td class="muted">${used ? `${used} USED` : ''}</td></tr>`;
         }).join('')}</table>`
       : '<div class="pp-energy muted">no tomes yet</div>'}
     ${!mine(p) ? `<div class="pp-hand">${'<span class="mini-back"></span>'.repeat(Math.min(p.hand.length, 12))}</div>` : ''}`;
@@ -565,7 +569,7 @@ function renderTurn() {
   const you = game.players[ME];
   $('#turnInfo').innerHTML = `
     <div class="ti-turn">TURN ${game.turnNum}</div>
-    <div class="ti-who">${game.over ? 'GAME OVER' : myTurn ? 'YOUR TURN' : `${escapeHTML(oppName().toUpperCase())}'S TURN`}</div>
+    <div class="ti-who${!game.over && !myTurn && ppLong(oppName()) ? ' long' : ''}">${game.over ? 'GAME OVER' : myTurn ? 'YOUR TURN' : `${escapeHTML(oppName().toUpperCase())}'S TURN`}</div>
     <div class="ti-land">${myTurn ? (you.landPlayed ? 'Tome played' : 'Tome: ready') : 'Waiting...'}</div>
     ${online() && !game.over ? '<div class="ti-timer" id="turnTimer"></div>' : ''}`;
   $('#bell').disabled = !myTurn || busy || game.over;
@@ -694,6 +698,7 @@ function onBoardCard(p, c) {
       render();
     } else if (c.sick) toast(`${c.name} is not ready to attack yet.`);
     else if (c.attacked) toast(`${c.name} has already attacked.`);
+    else if (c.held) toast(`${c.name} is held by a Stasis Rune this turn.`);
     else if (game.attackOf(c) <= 0) toast(`${c.name} has no attack.`);
     return;
   }
@@ -706,10 +711,10 @@ function onEnemyPanel() {
   if (!myTurnReady() || sel.attacker == null) return;
   if (isTarget({ player: OPP })) playerAttack({ player: OPP });
   else {
-    const a = selectedAttacker(), foes = game.livingBoard(game.players[OPP]);
+    const a = selectedAttacker(), foes = game.guardsOf(game.players[OPP]);
     const flyers = a && has(a, 'airborne') && !foes.some((e) => has(e, 'guardian')) && foes.some((e) => has(e, 'airborne') || has(e, 'reach'));
     const whose = `${oppTitle()}'s`, Whose = whose[0].toUpperCase() + whose.slice(1);
-    toast(flyers ? `${Whose} flyers and Reach creatures guard the sky! Take them out first.` : `Clear ${whose} creatures first (Airborne ignores this unless ${oppTitle()} has flyers or Reach).`);
+    toast(flyers ? `${Whose} flyers and Reach creatures guard the sky! Take them out first.` : `Clear ${whose} untapped creatures first (Airborne ignores this unless ${oppTitle()} has flyers or Reach).`);
     sfx('err');
   }
 }
@@ -1013,7 +1018,8 @@ const RULES_HTML = `
     <li>Attack by choosing an enemy creature: both strike each other at once. <b>Damage stays</b> on creatures.</li>
     <li><b>Spells</b> are cast on your own turn only: they take effect at once, then go to the grave.</li>
     <li><b>Traps</b> are paid for and set face-down on your turn (up to 3). They spring by themselves on the enemy's turn when they attack, summon or cast a spell.</li>
-    <li>You may only hit the Dealer <b>directly</b> when they have no creatures, unless your attacker is <b>Airborne</b> and the Dealer has no Airborne or <b>Reach</b> creatures of their own. <b>Guardians</b> must be attacked first.</li>
+    <li>A creature that attacks is <b>tapped</b> until its owner's next turn. Tapped creatures can still be attacked and fight back, but they don't protect their owner.</li>
+    <li>You may only hit the Dealer <b>directly</b> when they have no untapped creatures, unless your attacker is <b>Airborne</b> and the Dealer has no untapped Airborne or <b>Reach</b> creatures of their own. Untapped <b>Guardians</b> must be attacked first.</li>
     <li>Ring the <b>bell</b> to end your turn. Drawing from an empty deck hurts, more each time.</li>
     <li>A card's border shows its rarity: <b>common</b> (plain), <b>rare</b> (a thick frame) or <b>mythical</b> (a double frame with corner studs). Rarer cards are stronger, and turn up less often on the Dealer's circuit.</li>
   </ul>`;
@@ -1051,7 +1057,7 @@ function showTitle() {
       <div class="ttl-logo"><div class="logo">BRIMSTONE<span>SLINGSHOT</span></div>
         <div class="ttl-sub">a duel of beasts, bones, gems &amp; arcana</div></div>
       <canvas class="ttl-rune" width="128" height="40"></canvas>
-      <div class="ttl-hero tilt" id="ttlHero" title="Edit your character" style="--spr: url(${spriteURL('hero')})">
+      <div class="ttl-hero tilt" id="ttlHero" style="--spr: url(${spriteURL('hero')})">
         <img src="${spriteURL('hero')}" alt=""><div class="c-glare"></div></div>
       <div class="ttl-plate panel">
         <div><div class="ttl-name">${escapeHTML(heroName().toUpperCase())}</div>
@@ -1182,7 +1188,8 @@ function vsSplash(you, foe) {
       <div class="vs-fork"></div><div class="vs-band"></div><div class="vs-band"></div>
       <img class="vs-face" src="${spriteURL(p.sprite)}" alt=""><div class="vs-pouch"></div>
     </div>`;
-  const who = (p, id) => `<div class="vs-who" id="${id}"><div class="vs-name">${escapeHTML(p.name.toUpperCase())}</div><div class="vs-deck">${escapeHTML(p.deck.toUpperCase())}</div></div>`;
+  // A name over 12 letters (THE COSMOLOGIST) is set smaller so it stays on one line.
+  const who = (p, id) => `<div class="vs-who" id="${id}"><div class="vs-name${p.name.length > 12 ? ' long' : ''}">${escapeHTML(p.name.toUpperCase())}</div><div class="vs-deck">${escapeHTML(p.deck.toUpperCase())}</div></div>`;
   showScreen(`<div class="vs">
     <canvas class="vs-cv vs-sky"></canvas><canvas class="vs-cv vs-lava" width="${RunMap.VSB.w}" height="${RunMap.VSB.h}"></canvas>
     ${rig(you, 'vs-rl')}${rig(foe, 'vs-rr')}<div class="die" id="dieYou"></div><div class="die" id="dieCpu"></div>
@@ -1397,7 +1404,7 @@ function showDeckSelect(onPick = startGame, heading = 'CHOOSE YOUR DECK') {
         <div class="md-title">MY DECKS</div>
         <div class="md-list">${saved.map(({ d, def }) => {
           const n = deckCount(def.list);
-          return `<button class="md-deck" data-id="${escapeHTML(d.id)}" ${n === DECK_SIZE ? '' : 'disabled'} title="${n === DECK_SIZE ? 'Play this deck' : 'Needs exactly 30 cards - open the Deck Builder'}">
+          return `<button class="md-deck" data-id="${escapeHTML(d.id)}" ${n === DECK_SIZE ? '' : 'disabled'}>
             <img src="${spriteURL(def.feature)}" alt=""><span class="md-name">${escapeHTML(def.name)}</span>
             <span class="md-meta">${def.colors.map((c) => ico(COLORS[c].icon)).join('')} ${n}/${DECK_SIZE}</span></button>`;
         }).join('') || '<span class="muted">No saved decks yet. Build one in the Deck Builder.</span>'}</div>
@@ -1500,12 +1507,12 @@ async function rollForFirst(you, them) {
   return picked;
 }
 
-/* opts (Dealer's Run): { cpuDeck, life: [you, dealer], boss: rule key, run: true, foe: a RIVALS entry } */
+/* opts (Dealer's Run): { cpuDeck, life: [you, dealer], boss: rule key, run: true, foe: a RIVALS or RUN_BOSSES entry } */
 async function startGame(deckDef, opts = {}) {
   const others = DECKS.filter((d) => d !== deckDef);
   const cpuDeck = opts.cpuDeck || others[Math.floor(Math.random() * others.length)];
   const r = opts.foe;
-  foe = r ? { name: r.name, short: r.name.toLowerCase().replace(/(^|[\s.])\w/g, (m) => m.toUpperCase()), sprite: r.sprite } : null;
+  foe = r ? { name: r.name, tag: r.tag || r.name, short: r.name.toLowerCase().replace(/(^|[\s.])\w/g, (m) => m.toUpperCase()), sprite: r.sprite, win: r.win } : null;
   Music.play('battle');
   const { first, you, cpu } = await rollForFirst(
     { name: heroName(), deck: deckDef.name, sprite: 'hero' },
@@ -1591,7 +1598,7 @@ function endGame() {
       <div class="result panel">
         <img class="r-art" src="${spriteURL(won ? 'hero' : oppSprite())}" alt="">
         <div class="r-title">${net ? net.title : won ? 'VICTORY' : 'DEFEAT'}</div>
-        <div class="r-sub">${net ? escapeHTML(net.sub) : won ? (foe ? `${escapeHTML(foe.short)}'s life hit zero. One more of the Dealer's hands down.` : "The Dealer's life hit zero. You beat the house.") : 'Your life hit zero. The house wins this one.'}</div>
+        <div class="r-sub">${net ? escapeHTML(net.sub) : won ? (foe ? escapeHTML(foe.win || `${foe.short}'s life hit zero. One more of the Dealer's hands down.`) : "The Dealer's life hit zero. You beat the house.") : 'Your life hit zero. The house wins this one.'}</div>
         <div class="r-stats">Turn ${g.turnNum} &middot; Your life ${Math.max(0, you.life)} &middot; ${escapeHTML(net ? Net.oppName : foe ? foe.short : 'Dealer')} ${opp.life}</div>
         <div class="r-tally">
           <div><span>DAMAGE DEALT</span><b>${st.dmg}</b></div>

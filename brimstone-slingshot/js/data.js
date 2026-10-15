@@ -333,6 +333,23 @@ const SPRITES = {
     '..#++++##++++#..', '..#++++++++++#..', '..#++######++#..', '..#++++++++++#..',
     '..############..', '.#w##.#++#.##w#.', '.##++##++##++##.', '#+++++#++#+++++#',
   ],
+  /* ---------- run bosses after the Dealer (see RUN_BOSSES) ---------- */
+  // The Cosmologist, the second ante's boss: a peaked hood over a face of night sky, one star
+  // for an eye, a planet on its orbit, and stars on the robe.
+  cosmologist: [
+    '.......##.......', '......#++#......', '.....#++++#.....', '....#++++++#....',
+    '...#++####++#...', '..#+########+#..', '..#+###w####+#..', '-.#+##www###+#.w',
+    '..#+###w####+#..', '...#+######+#...', '..#+#+####+#+#..', '.#++#+w++w+#++#.',
+    '.#++#++++++#++#.', '#+++#+w+++-#+++#', '#+++#++++++#+++#', '################',
+  ],
+  /* ---------- spare character art, not used yet ---------- */
+  // A hooded stargazer: starry hood, spectacles, a white beard spilling onto the robe.
+  stargazer: [
+    '.......##.......', '......#w+#......', '.....#++++#.....', '.....#+++w#.....',
+    '....#++++++#....', '....#w+++++#....', '...#++++++++#...', '..#+########+#..',
+    '..#+#ww--ww#+#..', '..#+#-#--#-#+#..', '..#+#-wwww-#+#..', '..#+#wwwwww#+#..',
+    '.#++#wwwwww#++#.', '.#++##wwww##++#.', '#+++++#ww#+++++#', '#++++++##++++++#',
+  ],
 
   bell: [
     '........', '.......#', '......##', '....####', '...#wwww', '..#w----', '..#w----', '..#w----',
@@ -450,8 +467,8 @@ SPRITES.slot_bone = [
 ];
 
 const SIGILS = {
-  airborne:   { name: 'Airborne',   icon: 'airborne',   text: () => 'May attack the enemy directly, even while they control creatures, unless they control an Airborne or Reach creature.' },
-  guardian:   { name: 'Guardian',   icon: 'guardian',   text: () => 'While this is on the board, enemies must attack a Guardian.' },
+  airborne:   { name: 'Airborne',   icon: 'airborne',   text: () => 'May attack the enemy directly, even while they control creatures, unless they control an untapped Airborne or Reach creature.' },
+  guardian:   { name: 'Guardian',   icon: 'guardian',   text: () => 'While this is untapped, enemies must attack a Guardian.' },
   haste:      { name: 'Haste',      icon: 'haste',      text: () => 'Can attack the turn it is summoned.' },
   deathtouch: { name: 'Touch of Death', icon: 'deathtouch', text: () => 'Any creature damaged by this perishes.' },
   leech:      { name: 'Leech',      icon: 'leech',      text: () => 'Damage this deals in combat also heals its owner, once per turn.' },
@@ -465,7 +482,7 @@ const SIGILS = {
   rally:      { name: 'Rally',      icon: 'rally',      text: () => 'Your other creatures get +1 attack.' },
   thorns:     { name: 'Thorns',     icon: 'thorns',     text: () => 'When an enemy creature attacks this, the attacker takes 1 damage.' },
   bloodlust:  { name: 'Bloodlust',  icon: 'bloodlust',  text: () => 'When this kills a creature in combat, it gains +1 attack for good.' },
-  reach:      { name: 'Reach',      icon: 'reach',      text: () => 'Guards the sky: enemy Airborne creatures can\'t fly past it to strike you directly.' },
+  reach:      { name: 'Reach',      icon: 'reach',      text: () => 'While untapped, guards the sky: enemy Airborne creatures can\'t fly past it to strike you directly.' },
   spite:      { name: 'Spite',      icon: 'spite',      text: () => 'When this perishes, it deals 2 damage to the enemy.' },
   grow:       { name: 'Grow',       icon: 'grow',       text: () => `At the start of your turn, it gains +1/+1 for good, up to ${GROW_MAX} times.` },
   undying:    { name: 'Undying',    icon: 'undying',    text: () => 'When this perishes, it returns to your hand instead of the grave.' },
@@ -529,7 +546,7 @@ creature('draugr',    'Draugr',     'bone', '1K',  1, 3, ['bonespawn'], { flavor
 creature('ghoul',     'Ghoul',      'bone', '2K',  2, 2, ['deathtouch']);
 creature('crow',      'Plague Crow','bone', '2K',  1, 2, ['airborne', 'deathtouch']);
 creature('revenant',  'Revenant',   'bone', '2KK', 4, 4, ['leech']);
-creature('bonelord',  'Bone Lord',  'bone', '3KK', 4, 5, ['rally', 'bonespawn'], { flavor: 'All bones answer to the crown.' });
+creature('bonelord',  'Bone Lord',  'bone', '3KK', 4, 4, ['rally', 'bonespawn'], { flavor: 'All bones answer to the crown.' });
 creature('hellhound', 'Hellhound',  'bone', '1K',  2, 2, ['spite'], { flavor: 'Its last breath is still fire.' });
 creature('banshee',   'Banshee',    'bone', '2K',  2, 2, ['airborne', 'spite'], { flavor: 'Her scream outlives her.' });
 creature('robber',    'Grave Robber','bone','2K',  2, 3, ['scholar', 'bonespawn'], { flavor: 'Every grave has something worth taking.' });
@@ -538,7 +555,7 @@ creature('dracolich', 'Dracolich',  'bone', '3KK', 5, 5, ['airborne', 'undying',
 CARDS.skeleton = { id: 'skeleton', name: 'Skeleton', type: 'creature', color: 'bone', cost: parseCost('0'), atk: 1, hp: 1, sigils: [], sprite: 'skeleton', token: true };
 // Gem
 creature('shard',     'Mox Shard',  'gem', 'G',    0, 4, ['guardian'], { flavor: 'It hums when struck.' });
-creature('golem',     'Stone Golem','gem', '1G',   2, 3, ['regen']);
+creature('golem',     'Stone Golem','gem', '1G',   2, 4, ['regen']);
 creature('moth',      'Crystal Moth','gem','1G',   1, 2, ['airborne', 'regen']);
 creature('geode',     'Heal Geode', 'gem', '1G',   1, 3, ['mend'], { mend: 3 });
 creature('sentinel',  'Gem Sentinel','gem','2G',   1, 5, ['guardian']);
@@ -601,7 +618,7 @@ function trap(id, name, color, cost, trigger, fx, n, short, text, extra = {}) {
   SPRITES[id] = iconSprite(id);
 }
 trap('beartrap',   'Bear Trap',   'paw',  '1P', 'attack', 'snare',   3, 'Attacker takes 3',      'When an enemy creature attacks, deal 3 damage to it. If it perishes, the attack is stopped.');
-trap('opengrave',  'Open Grave',  'bone', '2K', 'summon', 'pit',     3, 'Kill summon, 3+ atk',   'When the enemy summons a creature with 3 or more attack, destroy it.');
+trap('opengrave',  'Open Grave',  'bone', '2K', 'summon', 'pit',     4, 'Kill summon, 4+ atk',   'When the enemy summons a creature with 4 or more attack, destroy it.');
 trap('mirrorward', 'Mirror Ward', 'gem',  '1G', 'attack', 'reflect', 0, 'Reflect direct hit',    'When an enemy creature attacks you directly, stop the attack and deal its attack to itself.');
 trap('counter',    'Counterspell','hat',  '1H', 'spell',  'counter', 0, 'Cancel a spell',        'When the enemy casts a spell, cancel it. Their energy is still spent.');
 trap('stasisrune', 'Stasis Rune', 'hat',  '2H', 'attack', 'stasis',  0, 'Stop all attacks',      'When an enemy creature attacks, stop it. None of their creatures may attack again this turn.');
@@ -651,4 +668,17 @@ const RIVALS = [
   { id: 'vesper',   name: 'COUNT VESPER', title: 'The Vampire',     deck: 1, sprite: 'rival_vesper',   quip: 'Your life total looks... delicious.' },
   { id: 'brutus',   name: 'BRUTUS BOLT',  title: 'The Stitched Man', deck: 2, sprite: 'rival_brutus', quip: 'BRUTUS... PLAY... CARD.' },
   { id: 'amunet',   name: 'QUEEN AMUNET', title: 'The Mummy',       deck: 3, sprite: 'rival_amunet',   quip: 'Three thousand years, and still undefeated.' },
+];
+
+/* The run's boss by ante (js/run.js runBoss): the Dealer on the first (null: no entry, so the
+   match falls back to the Dealer's name and sprite), then the Cosmologist from the second on.
+   A boss plays the Dealer's rules; `deck` and `colors` fix its hand, `tag` is the shorter name
+   for the narrow panels (as the Dealer's reads DEALER), `stop` is its map tooltip and `win` the
+   line when you beat it. The Cosmologist's is the first three-color deck: crystals, arcana, and
+   beasts for its zodiac. */
+const RUN_BOSSES = [
+  null,
+  { id: 'cosmologist', name: 'THE COSMOLOGIST', tag: 'COSMOLOGIST', title: 'The Stargazer', sprite: 'cosmologist',
+    quip: 'I charted this hand before you were born.', deck: 'Star Charts', colors: ['gem', 'hat', 'paw'],
+    stop: 'The Cosmologist: every star is already in place.', win: "The Cosmologist's life hit zero. The stars go quiet." },
 ];

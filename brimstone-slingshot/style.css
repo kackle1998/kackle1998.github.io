@@ -85,6 +85,7 @@ body[data-crt="off"] .crt-tube { background: radial-gradient(ellipse at center, 
 .pp-head { display: flex; align-items: center; gap: 8px; }
 .portrait { width: 48px; height: 48px; background: var(--artbg); border: 2px solid var(--ink); }
 .pp-name { font-family: var(--pixel); font-size: 14px; line-height: 14px; }
+.pp-name.long { font-size: 10px; line-height: 12px; }
 .pp-deck { font-size: 16px; color: var(--mid); }
 .pp-life { margin-left: auto; display: flex; align-items: center; gap: 4px; font-family: var(--pixel); font-size: 28px; }
 .pp-life .ico { width: 21px; height: 21px; }
@@ -109,9 +110,10 @@ body[data-crt="off"] .crt-tube { background: radial-gradient(ellipse at center, 
 #bell:disabled { cursor: default; opacity: .5; }
 #bell.ring img { animation: ring .5s; }
 @keyframes ring { 0%,100% { transform: rotate(0); } 20% { transform: rotate(-18deg); } 40% { transform: rotate(14deg); } 60% { transform: rotate(-9deg); } 80% { transform: rotate(5deg); } }
-#turnInfo { flex: 1; line-height: 1; }
+#turnInfo { flex: 1; min-width: 0; line-height: 1; } /* min-width: never squeeze the buttons out of the box */
 .ti-turn { font-size: 16px; color: var(--mid); }
 .ti-who { font-family: var(--pixel); font-size: 13px; margin: 3px 0; }
+.ti-who.long { font-size: 10px; line-height: 12px; }
 .ti-land { font-size: 16px; }
 .tb-btns { display: grid; grid-template-columns: 26px; gap: 4px; }
 .mini-btn { width: 26px; height: 26px; padding: 0; font-size: 20px; line-height: 18px; background: var(--light); border: 2px solid var(--ink); cursor: pointer; color: var(--ink); }
@@ -471,6 +473,9 @@ body[data-crt="off"] .ttl-hero { animation: none; }
 .opt-toggle .btn.on, .opt-toggle .btn.on:hover { background: var(--accent); color: var(--white); }
 .opt-pal { display: flex; align-items: center; gap: 8px; }
 .opt-pal .db-step { width: 28px; height: 28px; font-family: var(--pixel); font-size: 16px; line-height: 20px; }
+.opt-check { width: 28px; height: 28px; padding: 4px; cursor: pointer; background: var(--light); border: 2px solid var(--ink); }
+.opt-check:hover { background: var(--white); }
+.opt-check.on::after { content: ''; display: block; width: 100%; height: 100%; background: var(--accent); }
 .opt-pval { font-family: var(--pixel); font-size: 16px; letter-spacing: 2px; width: 156px; text-align: center; }
 .opt-btn-row { justify-content: center; }
 .opt-btn-row .btn { width: 260px; }
@@ -728,7 +733,8 @@ a.btn { text-decoration: none; display: inline-block; }
 @keyframes olDot { 50% { opacity: .2; } }
 
 /* ---------- dealer's run: the map (js/runmap.js) ---------- */
-.rmap { position: absolute; inset: 0; overflow: hidden; background: var(--bg); }
+.rmap { position: absolute; inset: 0; overflow: hidden; background: var(--bg); cursor: grab; touch-action: none; }
+.rmap.dragging, .rmap.dragging * { cursor: grabbing; } /* dragging the board (js/runmap.js) */
 .rm-view { position: absolute; inset: 0; perspective: 1100px; perspective-origin: 50% 40%; }
 .rm-pl {
   position: absolute; left: 50%; top: 50%; width: 836px; height: 1020px; margin: -510px 0 0 -418px; /* width: RUN_MAP_W (js/run.js) */
@@ -923,6 +929,7 @@ body[data-crt="off"] .rm-fig img, .rm-fig.hopping img { animation: none; }
 .vs-who.on { visibility: visible; animation: vsIn .25s steps(3); }
 @keyframes vsIn { from { transform: translateY(24px); } to { transform: none; } }
 .vs-name { font-family: var(--pixel); font-size: 34px; line-height: 38px; letter-spacing: 3px; color: var(--paper); -webkit-text-stroke: 4px var(--ink); paint-order: stroke fill; }
+.vs-name.long { font-size: 26px; letter-spacing: 2px; white-space: nowrap; }
 .vs-deck { font-family: var(--pixel); font-size: 18px; letter-spacing: 2px; margin-top: 6px; color: var(--light); -webkit-text-stroke: 3px var(--ink); paint-order: stroke fill; }
 .vs .die { position: absolute; left: 0; top: 0; margin: 0; width: 84px; height: 84px; padding: 10px; visibility: hidden; }
 .vs .die i { width: 14px; height: 14px; }
@@ -942,6 +949,7 @@ body[data-crt="off"] .rm-fig img, .rm-fig.hopping img { animation: none; }
 .rn-rec { font-style: normal; }
 .rn-land b { min-width: 28px; text-align: center; font-size: 16px; font-weight: normal; }
 .rm-band canvas { display: block; width: 100%; height: 100%; image-rendering: pixelated; }
+.rm-band canvas + canvas { position: absolute; left: 0; top: 0; } /* the heat crawl over hot spires */
 /* The table frame around the run map board. */
 .rm-frame { position: absolute; image-rendering: pixelated; }
 .rm-frame-side { transform-origin: 0 0; }

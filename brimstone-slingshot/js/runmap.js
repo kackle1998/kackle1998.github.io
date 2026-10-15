@@ -21,7 +21,7 @@ const RunMap = (() => {
     battle: ['...#####...', '..#######..', '.#########.', '.##..#..##.', '.##..#..##.', '.#########.', '..###.###..', '...#####...', '...#.#.#...', '...#####...'],
     fire: ['.....#.....', '....##.....', '....###.#..', '...####.#..', '..#######..', '..###.###..', '..##...##..', '...#...#...', '#.........#', '.###...###.', '....###....'],
     altar: ['.....#.....', '....###....', '.....#.....', '....###....', '....###....', '....###....', '..#######..', '..#.....#..', '..#.#.#.#..', '..#.....#..', '.#########.'],
-    trade: ['...........', '..#######..', '.#########.', '.#########.', '.#########.', '..#######..', '..###.###..', '..##...##..', '..##...##..', '..#.....#..', '...........'],
+    trade: ['.....####..', '...####..#.', '..###......', '..##.......', '.###.......', '.###.......', '.###.......', '..##.......', '..###......', '...####..#.', '.....####..'],
     event: ['...#####...', '..##...##..', '..##...##..', '.......##..', '......##...', '.....##....', '.....##....', '...........', '.....##....', '.....##....'],
   };
   const RUNE = ['.#...', '.##..', '.#.#.', '.##..', '.#.#.', '.#..#', '.#...'];
@@ -120,14 +120,28 @@ const RunMap = (() => {
     g.putImageData(im, 0, 0);
   }
 
-  /* ---------- landmarks: dice towers and armillary spheres ---------- */
-  /* Very rare, animated standees: three per map, two of one kind and one of the other. A dice
-     tower is five dice stacked askew whose top die re-rolls now and then; an armillary sphere is
-     a globe in turning rings on a pedestal. Each is one small pixel canvas redrawn every frame,
-     like the casino's lights. Sizes in canvas px; 1 px = 2 map units. */
+  /* ---------- landmarks: dice towers, tossed chips, talon orbs, arcana obelisks ---------- */
+  /* Rare, animated standees: two per map, one of each of the ante's pair (see show()). The first
+     ante has dice towers (five dice stacked askew, the top one re-rolling now and then) and tossed
+     poker chips (a big chip lying flat, flicked up every few seconds); later antes have talon orbs
+     (a crystal orb in gold claws on a column, mist spiraling inside) and arcana obelisks (a
+     rune-cut obelisk with the arcana symbol spinning over its capstone). The armillary sphere (a
+     globe in turning rings) is drawn here too but unused: see MARK_PAIRS. Each is one small pixel
+     canvas, repainted only when its look changes. Sizes in canvas px; 1 px = 2 map units. */
   const PIPS = { 1: [[1, 1]], 2: [[0, 0], [2, 2]], 3: [[0, 0], [1, 1], [2, 2]], 4: [[0, 0], [2, 0], [0, 2], [2, 2]],
     5: [[0, 0], [2, 0], [1, 1], [0, 2], [2, 2]], 6: [[0, 0], [2, 0], [0, 1], [2, 1], [0, 2], [2, 2]] };
-  const MARK = { dice: { w: 26, h: 86 }, armillary: { w: 40, h: 82 } };
+  const MARK = { dice: { w: 26, h: 86 }, chips: { w: 30, h: 58 }, armillary: { w: 40, h: 82 }, orb: { w: 40, h: 64 }, arcana: { w: 40, h: 110 } };
+  // By ante: the first, then every later one.
+  // NOTE: the armillary is unused for now. It was the first ante's second landmark until the poker
+  // chip replaced it; its art (armillary() in landmarks) is kept for a later ante or set piece.
+  const MARK_PAIRS = [['dice', 'chips'], ['orb', 'arcana']];
+  const CHIP_TOSS_EVERY = 3; // seconds between a tossed chip's tosses (see chips() in landmarks)
+  const MARK_ROWS_APART = 1.5; // ideally, how many rows apart (up or down the board) landmarks stand
+  const MARK_COLS_APART = 0.75; // ...and how many beacon gaps apart across it (see show())
+  // Runes cut down an arcana obelisk (3 x 5).
+  const RUNES = [['#..', '##.', '#.#', '##.', '#..'], ['.#.', '###', '.#.', '#.#', '.#.'], ['#.#', '.#.', '#.#', '.#.', '#.#'],
+    ['###', '#..', '.#.', '..#', '###'], ['.#.', '#.#', '.#.', '#.#', '.#.'], ['#.#', '###', '#.#', '..#', '..#']];
+  const noise = (a, b) => { let n = (a * 374761393 + b * 668265263) | 0; n = (n ^ (n >>> 13)) * 1274126177 | 0; return ((n ^ (n >>> 16)) >>> 0) / 4294967296; };
   function landmarks(pl, C, marks) {
     const live = marks.map(({ x, y, k, seed }) => {
       const { w, h } = MARK[k], cv = document.createElement('canvas');
@@ -152,6 +166,66 @@ const RunMap = (() => {
       R(cx - 12, h - 4, 24, 4, 1);
       [[0, 3], [-2, 5], [2, 1], [-1, 6], [1, top]].forEach(([o, f], i) => die(R, cx - 7 + o, h - 16 - i * 15 - (tumbling && i === 4 ? 2 : 0), f));
     };
+    // A tossed chip: one big poker chip (1.5x a die across) lying flat on the ground, face up. Every
+    // CHIP_TOSS_EVERY seconds (each chip on its own beat) it is flicked up like a coin off a thumb:
+    // a second in the air on a low arc, a quarter turn end over end each frame, landing flat in
+    // the same spot, its shadow shrinking while it is up.
+    const CHIP_R = 11, CHIP_FLAT = 0.32, CHIP_H = 24; // radius; how squashed it looks lying flat; toss height (px)
+    const CHIP_TURN = [0.7, 1, 0.7, CHIP_FLAT, 0];      // the face's squash, a quarter turn a frame
+    const CHIP_FRAMES = 6;                               // frames in the air, at 6 a second
+    // The toss frame now (0..CHIP_FRAMES-1), or -1 while the chip lies still.
+    const chipToss = (t, seed) => { const beat = t / CHIP_TOSS_EVERY + seed * 0.37; return Math.floor((beat - Math.floor(beat)) * CHIP_TOSS_EVERY * 6); };
+    const chipFrame = (t, seed) => { const i = chipToss(t, seed); return i < CHIP_FRAMES ? i : -1; };
+    // The chip's face, an ellipse squashed vertically by sy (1 = facing you, CHIP_FLAT = lying
+    // flat, 0 = edge-on, drawn as a bar): ink rim, accent body with eight light edge inserts, a
+    // dotted inner ring, a paper center with an accent diamond, Bayer shade to the lower right and
+    // a light upper-left rim. Lying flat, its 3 px edge shows below the face.
+    const chipFace = (R, cx, cy, sy, flat) => {
+      const r = CHIP_R, ry = Math.round(r * sy), dither = (x, y) => BAY[(x & 3) + (y & 3) * 4] < 8;
+      if (ry < 2) {
+        R(cx - r - 1, cy - 2, r * 2 + 3, 5, 1);
+        for (let x = -r; x <= r; x++) R(cx + x, cy - 1, 1, 3, (x + r) % 8 < 3 ? 7 : 8);
+        R(cx - r, cy - 1, 1, 1, 7);
+        return;
+      }
+      if (flat) {
+        for (let x = -r; x <= r; x++) {
+          const yb = cy + Math.round(ry * Math.sqrt(Math.max(0, 1 - (x / (r + 0.5)) ** 2)));
+          for (let j = 1; j <= 3; j++) R(cx + x, yb + j, 1, 1, (x + r) % 8 < 3 ? 7 : x > r * 0.4 && dither(cx + x, yb + j) ? 3 : 8);
+          R(cx + x, yb + 4, 1, 1, 1);
+        }
+        R(cx - r - 1, cy, 1, 4, 1); R(cx + r + 1, cy, 1, 4, 1);
+      }
+      for (let y = -ry - 1; y <= ry + 1; y++) for (let x = -r - 1; x <= r + 1; x++) {
+        const d = Math.hypot(x / (r + 0.5), y / (ry + 0.5));
+        if (d > 1.06) continue;
+        if (d > 0.94) { R(cx + x, cy + y, 1, 1, 1); continue; }
+        const a = Math.atan2(y * r / ry, x);
+        let c = 8;
+        if (d > 0.72 && Math.abs((((a / (Math.PI / 4)) % 1) + 1) % 1 - 0.5) < 0.2) c = 7;
+        if (d > 0.58 && d < 0.68 && Math.round(a * 12) % 2) c = 7;
+        if (d < 0.58) c = 6;
+        if (x / r + y / ry > 0.6 && dither(cx + x, cy + y)) c = c === 8 ? 3 : c === 6 ? 5 : 6;
+        if (x / r + y / ry < -1 && d > 0.72 && c === 8) c = 7;
+        R(cx + x, cy + y, 1, 1, c);
+      }
+      const dr = Math.round(r * 0.23), s = Math.max(1, Math.round(dr * sy)); // the center diamond: dr across each way, squashed by sy
+      for (let i = 0; i <= s; i++) { const hw = Math.round(dr * i / s); R(cx - hw, cy - s + i, hw * 2 + 1, 1, 8); }
+      for (let i = 1; i <= s; i++) { const hw = Math.round(dr * (s - i) / s); R(cx - hw, cy + i, hw * 2 + 1, 1, 8); }
+      R(cx - 1, cy - s + 1, 1, 1, 7);
+    };
+    const chips = ({ R, w, h, seed }, t) => {
+      const cx = w >> 1, b = h - 2, i = chipFrame(t, seed);
+      const q = (i + 0.5) / CHIP_FRAMES, lift = i < 0 ? 0 : Math.round(4 * CHIP_H * q * (1 - q)), up = lift / CHIP_H;
+      // The shadow: a dithered oval on the ground, smaller and fainter the higher the chip.
+      const rx = Math.round(CHIP_R * (1 - 0.27 * up)), ry = Math.round(CHIP_R * CHIP_FLAT * (1 - 0.4 * up)), dense = (0.55 - 0.25 * up) * 16;
+      for (let y = -ry; y <= ry; y++) for (let x = -rx; x <= rx + 3; x++) {
+        if (((x - 1) / (rx + 1)) ** 2 + (y / (ry + 0.6)) ** 2 < 1 && BAY[((cx + x) & 3) + ((b - 3 + y) & 3) * 4] < dense) R(cx + x, b - 3 + y, 1, 1, 3);
+      }
+      if (i < 0) { chipFace(R, cx, b - 4 - Math.round(CHIP_R * CHIP_FLAT), CHIP_FLAT, true); return; }
+      const sy = i === CHIP_FRAMES - 1 ? CHIP_FLAT + 0.2 : CHIP_TURN[i % CHIP_TURN.length];
+      chipFace(R, cx, b - 6 - Math.round(CHIP_R * Math.max(sy, 0.06)) - lift, sy, false);
+    };
     const armillary = ({ R, w, h }, t) => {
       const cx = w >> 1, cy = h - 50;
       R(cx - 8, h - 4, 16, 4, 1); R(cx - 6, h - 5, 12, 2, 3); R(cx - 1, h - 30, 3, 26, 2); R(cx - 1, h - 30, 1, 26, 4);
@@ -162,11 +236,85 @@ const RunMap = (() => {
       ring(18, Math.abs(Math.sin(ph * 1.6)) * 7 + 1, 8);
       R(cx - 4, cy - 4, 8, 8, 1); R(cx - 3, cy - 3, 6, 6, 5); R(cx - 3, cy - 3, 3, 3, 7); R(cx - 1, cy - 26, 2, 6, 8);
     };
-    // A landmark's look only changes now and then (an armillary 4 times a second, a dice tower
-    // when its top die tumbles or lands), so it is repainted only then: a canvas on the 3D board
-    // goes back to the GPU each time it is drawn.
+    // Stone, lit from the left like the spires: a row of a tapering shaft or a plinth's course,
+    // outlined in ink, with a bright edge, a lit face, a shadowed face and a little grit.
+    const stone = (R, x0, y, w, top) => {
+      R(x0, y, 1, 1, 1); R(x0 + w - 1, y, 1, 1, 1);
+      for (let i = 1; i < w - 1; i++) {
+        const f = i / w;
+        let k = i === 1 ? 5 : f > 0.8 ? 2 : f < 0.5 ? (top ? 5 : 4) : 3;
+        if (noise(x0 + i, y) < 0.07) k = Math.max(2, k - 1);
+        R(x0 + i, y, 1, 1, k);
+      }
+    };
+    const tiers = (R, cx, b, ws) => { let y = b; for (const [w, h] of ws) { for (let j = 0; j < h; j++) stone(R, cx - (w >> 1), y - j - 1, w, j === h - 1); y -= h; } return y; };
+    const glyph = (R, g, x, y, c) => g.forEach((r, j) => [...r].forEach((ch, i) => { if (ch === '#') R(x + i, y + j, 1, 1, c); }));
+    // A crystal orb: ink rim, dithered dark glass lit from the upper left, mist spiraling (step),
+    // a highlight crescent and glint, and a few specks twinkling inside like stars.
+    const crystal = (R, cx, cy, r, step) => {
+      for (let y = -r; y <= r; y++) for (let x = -r; x <= r; x++) {
+        const d = Math.hypot(x, y) / r;
+        if (d > 1) continue;
+        let k = 1;
+        if (d <= 0.9) {
+          const lit = 1 - Math.hypot(x + r * 0.35, y + r * 0.4) / (r * 1.7), a = Math.atan2(y, x), m = Math.sin(a * 2 - d * 7 + step * 0.55);
+          k = lit + BAY[(x & 3) + (y & 3) * 4] / 32 > 0.55 ? 3 : 2;
+          if (d < 0.82 && m > 0.72) k = d < 0.45 ? 6 : 5; else if (d < 0.82 && m > 0.5) k = 4;
+          if (d > 0.55 && d < 0.78 && a > -2.7 && a < -1.7) k = 7;
+          if (d > 0.72 && d < 0.88 && a > 0.3 && a < 1.3) k = 4;
+        }
+        R(cx + x, cy + y, 1, 1, k);
+      }
+      R(cx - Math.round(r * 0.45), cy - Math.round(r * 0.55), 2, 2, 7);
+      for (let i = 0; i < 5; i++) { const a = noise(i, 7) * 6.28, d = noise(i, 9) * r * 0.6; if ((i + step) % 7 < 2) R(cx + Math.cos(a) * d, cy + Math.sin(a) * d, 1, 1, 7); }
+    };
+    // Talon orb: a stepped plinth, a column with two gold bands, a gold cup, the orb, and gold
+    // claws curling up round it from either side, with a short one in front.
+    const orb = ({ R, w, h }, t) => {
+      const cx = w >> 1, top = tiers(R, cx, h, [[38, 3], [30, 3], [14, 2]]), step = Math.floor(t * 6);
+      for (let y = top - 1; y > top - 22; y--) stone(R, cx - 5, y, 10, false);
+      for (const y of [top - 6, top - 15]) { R(cx - 6, y, 12, 2, 1); R(cx - 5, y, 10, 1, 8); R(cx - 5, y, 1, 1, 7); }
+      const cup = top - 22, r = 14, cy = cup - r + 2;
+      R(cx - 9, cup - 1, 18, 3, 1); R(cx - 8, cup, 16, 1, 8); R(cx - 8, cup - 1, 6, 1, 7);
+      crystal(R, cx, cy, r, step);
+      for (const s of [-1, 1]) {
+        const pts = [];
+        for (let i = 0; i <= 16; i++) { const a = Math.PI / 2 - s * (i / 16) * 2.2; pts.push([cx + Math.cos(a) * (r + 1), cy + Math.sin(a) * (r + 1)]); }
+        pts.forEach(([x, y], i) => R(x - 1, y - 1, i < 14 ? 3 : 2, i < 14 ? 3 : 2, 1));
+        pts.forEach(([x, y], i) => { R(x, y, i < 14 ? 2 : 1, 1, 8); if (s < 0) R(x, y - 1, 1, 1, 7); });
+        const [tx, ty] = pts[16];
+        R(tx + s, ty - 1, 1, 1, 1); R(tx, ty - 1, 1, 1, 7);
+      }
+      R(cx - 2, cy + r - 4, 5, 6, 1); R(cx - 1, cy + r - 3, 3, 4, 8); R(cx - 1, cy + r - 3, 1, 1, 7);
+    };
+    // Arcana obelisk: a stepped plinth, a tapering rune-cut shaft, a flat gold capstone, and the
+    // arcana symbol (2x, ink-outlined) bobbing over it and turning like a coin (squeezed edge-on,
+    // a plain gold back on the far side), with sparks circling it; a carved arcana plaque low on
+    // the shaft blinks, and now and then a rune flares.
+    const arcana = ({ R, w, h }, t) => {
+      const cx = w >> 1, top = tiers(R, cx, h, [[38, 4], [30, 4], [24, 3]]), yt = top - 64, step = Math.floor(t * 6);
+      for (let y = top - 1; y >= yt; y--) { const sw = Math.round(22 - 8 * (top - y) / 64) | 1; stone(R, cx - (sw >> 1), y, sw, false); }
+      for (let j = 0; j < 5; j++) { const cw = 14 - j * 2, x0 = cx - (cw >> 1), y = yt - 1 - j; R(x0, y, 1, 1, 1); for (let i = 1; i < cw - 1; i++) R(x0 + i, y, 1, 1, i < cw / 2 ? 7 : 8); R(x0 + cw - 1, y, 1, 1, 1); }
+      R(cx - 3, yt - 6, 7, 1, 1);
+      for (let i = 0; i < 5; i++) glyph(R, RUNES[(i + 1) % 6], cx - 1, top - 12 - i * 10, (step + i) % 10 === 0 ? 8 : 2);
+      const py = top - 8;
+      R(cx - 4, py - 4, 9, 9, 1); R(cx - 3, py - 3, 7, 7, 2);
+      glyph(R, ICONS.arcana, cx - 3, py - 3, Math.floor(t * 2) % 2 ? 8 : 4);
+      const bob = [0, -1, -2, -2, -1, 0][step % 6], turn = Math.floor(t * 3) % 8, squeeze = [1, 0.7, 0.3, 0.7][turn % 4], back = turn >= 4, cy = yt - 17 + bob;
+      const at = (i) => Math.round(cx + (i - 3.5) * 2 * squeeze), cells = [];
+      ICONS.arcana.forEach((r, j) => [...r].forEach((_, i) => { if ((back ? r[6 - i] : r[i]) === '#') cells.push([at(i), Math.max(1, at(i + 1) - at(i)), cy - 7 + j * 2, i]); }));
+      for (const [x, cw, y] of cells) R(x - 1, y - 1, cw + 2, 4, 1);
+      for (const [x, cw, y, i] of cells) R(x, y, cw, 2, back || i >= 3 ? 8 : 7);
+      for (let q = 0; q < 4; q++) { const a = q / 4 * 6.283 + step * 0.4; if (Math.sin(a) > -0.2) { R(cx + Math.cos(a) * 12, cy + Math.sin(a) * 3, 1, 1, 7); if (q % 2) R(cx + Math.cos(a) * 12 + 1, cy + Math.sin(a) * 3, 1, 1, 6); } }
+    };
+    // A landmark's look only changes now and then (an armillary 4 times a second, an orb or
+    // obelisk 6, a dice tower when its top die tumbles or lands), so it is repainted only then: a
+    // canvas on the 3D board goes back to the GPU each time it is drawn.
+    const DRAW = { dice, chips, armillary, orb, arcana };
     const look = ({ k, seed }, t) => {
       if (k === 'armillary') return Math.floor(t * 4);
+      if (k === 'orb' || k === 'arcana') return Math.floor(t * 6);
+      if (k === 'chips') { const i = chipFrame(t, seed); return i < 0 ? 'rest' : 'F' + i; }
       const beat = t / 5 + seed * 0.37, n = Math.floor(beat);
       return beat - n < 0.1 ? 'T' + Math.floor(t * 12) : n;
     };
@@ -176,13 +324,20 @@ const RunMap = (() => {
         if (key === m.key) continue;
         m.key = key;
         m.g.clearRect(0, 0, m.w, m.h);
-        (m.k === 'dice' ? dice : armillary)(m, t);
+        DRAW[m.k](m, t);
       }
     };
   }
 
   /* ---------- standing props: spires, basalt columns, crystals, rune obelisks ---------- */
-  function placeProps(pl, R, C, block, runes, obel) {
+  /* Spires by ante: of the plain spikes' share, how many become strata spires (stepped ledges),
+     and how hot those run. Heat 0 is still stone; at 1 the lower seams glow; at 2 every seam and
+     the tip do, and they stand taller. The plain spike never changes. */
+  const SPIRE_ANTES = [{ strata: 0.03, heat: 0 }, { strata: 0.07, heat: 1 }, { strata: 0.3, heat: 2 }];
+  // Spires and basalt columns per classic board (more on a longer one), and the shortest kept
+  // (map units): any shorter only reads as clutter.
+  const PROP_MAX = 140, PROP_MIN_H = 36;
+  function placeProps(pl, R, C, block, runes, obel, mix, SR) {
     const near = (x, y) => { let m = 1e9; for (const b of block) { const d = Math.hypot(x - b[0], y - b[1]) - b[2]; if (d < m) m = d; } return m; };
     // A prop in front of a path or stop is kept short enough not to hide it.
     const capBehind = (x, y, w) => {
@@ -198,8 +353,8 @@ const RunMap = (() => {
       return Math.abs(x - l.c) < l.w + pad || Math.abs(x - r.c) < r.w + pad || x < l.c || x > r.c;
     };
     const props = [];
-    const scale = H / BOARD_BASE; // more board, more props (at most 220 per classic board: any more and the terrain gets too busy)
-    for (let t = 0; t < 3200 * scale && props.length < 220 * scale; t++) {
+    const scale = H / BOARD_BASE; // more board, more props (at most PROP_MAX per classic board: any more and the terrain gets too busy)
+    for (let t = 0; t < 3200 * scale && props.length < PROP_MAX * scale; t++) {
       const x = 20 + R() * (W - 40), y = 8 + R() * (H - 16);
       if (onLava(x, y, 8)) continue;
       const d = near(x, y);
@@ -208,16 +363,26 @@ const RunMap = (() => {
       let h = 16 + Math.min(d, 160) * 0.5 + big * big * big * 170 + R() * 14;
       if (y < 50) h += 60 + R() * 120; // a wall of tall spires along the far edge
       let w = 8 + h * 0.2 * (0.7 + R() * 0.6);
-      h = Math.max(16, Math.min(h, capBehind(x, y, w)));
+      // One kept too short to stand out (near a path or stop in front of it) is left out instead.
+      h = Math.min(h, capBehind(x, y, w));
+      if (h < PROP_MIN_H) continue;
       w = Math.min(w, 8 + h * 0.3);
       // Keep it off the rivers (see riverRoom; a basalt column is 1.3x as wide): one near a river
       // is kept short enough that its lean doesn't reach it, or left out.
       const room = riverRoom(x, y, w * 0.65, 0);
       if (room < 0) continue;
-      h = Math.min(h, room / (LEAN * Math.abs(x - W / 2) / (W / 2)));
-      if (h < 16) continue;
+      const maxH = room / (LEAN * Math.abs(x - W / 2) / (W / 2));
+      h = Math.min(h, maxH);
+      if (h < PROP_MIN_H) continue;
       w = Math.min(w, 8 + h * 0.3);
-      props.push({ x, y, k: R() < 0.8 ? 'spike' : 'basalt', h, w });
+      let k = R() < 0.8 ? 'spike' : 'basalt';
+      // Some spikes become the ante's strata spires (their own random stream, so the board lays
+      // out the same whatever the ante); heat makes them taller, within the same caps.
+      if (k === 'spike' && SR() < mix.strata) {
+        k = 'strata';
+        h = Math.min(h * (1 + mix.heat * 0.12), capBehind(x, y, w), maxH);
+      }
+      props.push({ x, y, k, h, w, heat: mix.heat });
     }
     for (let t = 0; t < 40; t++) {
       const y = 40 + R() * (H - 80), left = R() < 0.5, l = left ? lavaL(y) : lavaR(y);
@@ -236,25 +401,31 @@ const RunMap = (() => {
       if (!bands.has(b)) bands.set(b, []);
       bands.get(b).push(p);
     }
-    const frag = document.createDocumentFragment();
+    const frag = document.createDocumentFragment(), glows = [];
     for (const list of bands.values()) {
-      // Each prop's drawn box in canvas pixels, and the canvas that holds them all.
+      // Each prop's drawn box in canvas pixels (lo..hi across: a strata spire leans up to 2 px),
+      // and the canvas that holds them all.
       const shapes = list.map((p) => {
         let { w, h } = p;
         if (p.k === 'basalt') { h *= 0.6; w *= 1.3; }
-        return { p, w: Math.max(2, Math.round(w / 2)), h: Math.max(2, Math.round(h / 2)), cx: p.x / 2 };
+        const s = { p, w: Math.max(2, Math.round(w / 2)), h: Math.max(2, Math.round(h / 2)), cx: p.x / 2, seed: Math.floor(noise(p.x | 0, p.y | 0) * 1000) };
+        const lean = p.k === 'strata' ? 2 : 0;
+        s.lo = s.cx - s.w / 2 - lean; s.hi = s.cx + s.w / 2 + lean;
+        return s;
       });
-      const left = Math.floor(Math.min(...shapes.map((s) => s.cx - s.w / 2))) - 1;
-      const right = Math.ceil(Math.max(...shapes.map((s) => s.cx + s.w / 2))) + 1;
+      const left = Math.floor(Math.min(...shapes.map((s) => s.lo))) - 1;
+      const right = Math.ceil(Math.max(...shapes.map((s) => s.hi))) + 1;
       const tall = Math.max(...shapes.map((s) => s.h));
       const cv = document.createElement('canvas');
       cv.width = right - left; cv.height = tall;
-      const x = cv.getContext('2d');
+      const x = cv.getContext('2d'), hot = [];
       const fill = (u, v, n, k) => { if (n > 0) { x.fillStyle = k; x.fillRect(u, v, n, 1); } };
+      // A glowing pixel: drawn in the accent here, and repainted by the heat crawl (see heatTick).
+      const glow = (u, v) => { u = Math.round(u); v = Math.round(v); fill(u, v, 1, C[8]); hot.push([u, v]); };
       for (const s of shapes) {
         const { p } = s, u0 = Math.round(s.cx - s.w / 2) - left, top = tall - s.h;
         const l = lvl(lightAt(p.x, p.y), p.x | 0, p.y | 0), hi = C[l + 1], li = C[Math.max(1, l)], dk = C[Math.max(0, l - 1)];
-        // Columns across the prop's width: [end fraction, color], as the old gradients were.
+        if (p.k === 'strata') { strata(fill, glow, s.cx - left, top, s.w, s.h, s.seed, p.heat, [hi, li, dk, C[Math.min(7, l + 2)]]); continue; }        // Columns across the prop's width: [end fraction, color], as the old gradients were.
         const tones = p.k === 'spike' ? [[0.14, hi], [0.5, li], [1, dk]]
           : p.k === 'basalt' ? [[1 / 3, hi], [2 / 3, li], [1, dk]]
           : p.k === 'crystal' ? [[0.5, C[7]], [1, C[8]]]
@@ -276,9 +447,48 @@ const RunMap = (() => {
       el.className = 'rm-st rm-band';
       el.style.cssText = `left:${left * 2}px;top:${back - tall * 2}px;width:${cv.width * 2}px;height:${tall * 2}px`;
       el.appendChild(cv);
+      // A band holding hot spires gets a clear canvas over it for the heat crawl.
+      if (hot.length) {
+        const gv = document.createElement('canvas');
+        gv.width = cv.width; gv.height = cv.height;
+        el.appendChild(gv);
+        glows.push({ g: gv.getContext('2d'), w: gv.width, h: gv.height, hot });
+      }
       frag.appendChild(el);
     }
     pl.appendChild(frag);
+    // The heat crawl: every glowing pixel is the accent, with a lighter stripe climbing through it
+    // 4 steps a second, like the lava's churn; flat colors, only redrawn when the step changes.
+    let last = -1;
+    return (t) => {
+      const step = Math.floor(t * 4);
+      if (step === last || !glows.length) return;
+      last = step;
+      for (const { g, w, h, hot } of glows) {
+        g.clearRect(0, 0, w, h);
+        for (const [u, v] of hot) { g.fillStyle = C[((v + step) % 6 + 6) % 6 < 2 ? 7 : 8]; g.fillRect(u, v, 1, 1); }
+      }
+    };
+  }
+
+  /* A strata spire, stepped in five courses that widen down to its base, leaning a little; its
+     top row at `top`, centred on cx (canvas px). Each course's exposed ledge catches the light;
+     with heat, the seam under the ledges glows (the lower courses at heat 1, all and the tip at 2).
+     T: [lit, mid, shadow, ledge] tones. */
+  function strata(fill, glow, cx, top, w, h, seed, heat, T) {
+    const n = 5, lean = (r) => Math.round((1 - (r + 0.5) / h) * (seed % 2 ? 2 : -2));
+    for (let r = 0; r < h; r++) {
+      const f = (r + 0.5) / h, band = Math.ceil(f * n), half = Math.max(0.5, w / 2 * band / n - (noise(seed, band) < 0.5 ? 1 : 0));
+      const a = Math.round(cx - half), b = Math.round(cx + half), y = top + r, ledge = Math.ceil(((r + 1.5) / h) * n) > band;
+      for (let u = a; u <= b; u++) {
+        const q = (u - a) / (b - a + 1);
+        fill(u + lean(r), y, 1, ledge ? (q < 0.6 ? T[3] : T[1]) : q < 0.18 ? T[0] : q < 0.55 ? T[1] : T[2]);
+      }
+      if (ledge && r < h - 1 && (heat === 2 || (heat === 1 && f > 0.5))) {
+        for (let u = a + 1; u <= b - 1; u += 2) glow(u + lean(r + 1), y + 1);
+      }
+    }
+    if (heat === 2) glow(cx + lean(0), top);
   }
 
   /* ---------- the animated layer: lava, rune circles, orbit arcs ---------- */
@@ -550,6 +760,8 @@ const RunMap = (() => {
   const SIGN = {
     C: ['###', '#..', '#..', '#..', '###'], A: ['###', '#.#', '###', '#.#', '#.#'], S: ['###', '#..', '###', '..#', '###'],
     I: ['###', '.#.', '.#.', '.#.', '###'], N: ['#..#', '##.#', '#.##', '#..#', '#..#'], O: ['###', '#.#', '#.#', '#.#', '###'],
+    B: ['##.', '#.#', '##.', '#.#', '##.'], E: ['###', '#..', '##.', '#..', '###'], R: ['##.', '#.#', '##.', '#.#', '#.#'],
+    V: ['#.#', '#.#', '#.#', '#.#', '.#.'], T: ['###', '.#.', '.#.', '.#.', '.#.'], Y: ['#.#', '#.#', '.#.', '.#.', '.#.'],
   };
   const CAS = { W: 100, D: 36, towerX: 20, towerW: 60, towerD: 15, towerH: 72, podD: 21, podH: 22 };
   /* A palette-indexed pixel canvas: draw(rect, px, ctx) paints it. */
@@ -680,6 +892,127 @@ const RunMap = (() => {
       // Minarets: the upper and lower balconies take turns.
       const up = Math.floor(t * 2) % 2 === 0;
       M.forEach((m) => { for (const [v, on] of [[26, up], [42, !up]]) for (const u of [1, 4, 7]) m(u, v, 1, 1, on ? 7 : 8); });
+    };
+  }
+
+  /* The boss stop by ante: the casino on the first, the Great Dome observatory from the second on. */
+  const BOSS_HOUSES = ['casino', 'observatory'];
+
+  /* The Great Dome: the Dealer's observatory, on the casino's footprint. A pale stone drum on a
+     stepped plinth, its name across a frieze under a gold cornice, arched windows and the casino's
+     entrance arch; on its roof, a dome whose shutter slit swings from side to side, a telescope
+     poking out of it. An armillary on a pillar stands just outside each front corner.
+     Canvas sizes in pixels; 1 px = 2 map units. */
+  const OBS = { W: 84, H: 42, drumW: 76, roofD: 30, domeW: 96, domeH: 50, domeR: 33, armW: 26, armH: 44 };
+  // A row of pale stone lit from the left: ink ends, a bright edge, lit, mid and shadow faces, grit.
+  const paleStone = (px, x0, y, w, top) => {
+    px(x0, y, 1); px(x0 + w - 1, y, 1);
+    for (let i = 1; i < w - 1; i++) {
+      const f = i / w;
+      let k = i === 1 ? 7 : f < 0.5 ? (top ? 7 : 6) : f < 0.82 ? 5 : 4;
+      if (noise(x0 + i, y) < 0.06) k = Math.max(3, k - 1);
+      px(x0 + i, y, k);
+    }
+  };
+  // A round-topped opening, centred on cx, standing on by.
+  const archAt = (rect, cx, by, w, h, k) => {
+    for (let i = 0; i < w; i++) {
+      const d = Math.abs(i - (w - 1) / 2) / (w / 2), cut = Math.round((1 - Math.sqrt(1 - Math.min(1, d * d))) * (w / 2));
+      rect(cx - w / 2 + i, by - h + cut, 1, h - cut, k);
+    }
+  };
+  const STAR5 = ['..#..', '.###.', '#####', '.###.', '..#..'];
+  /* The drum's front: plinth, coursed stone, frieze and cornice, windows, the entrance arch. */
+  const obsFace = (C, lit) => paint(OBS.W, OBS.H, C, (rect, px) => {
+    const cx = OBS.W / 2, gy = OBS.H, hw = OBS.drumW / 2;
+    [[84, 2], [80, 2]].reduce((y, [w, h]) => { for (let j = 0; j < h; j++) paleStone(px, cx - w / 2, y - j - 1, w, j === h - 1); return y - h; }, gy);
+    const top = gy - 40;
+    for (let y = gy - 5; y >= top; y--) paleStone(px, cx - hw, y, OBS.drumW, false);
+    for (let y = gy - 9; y > top + 10; y -= 5) { rect(cx - hw + 1, y, OBS.drumW - 2, 1, 4); for (let u = cx - hw + 4 + ((y / 5) & 1) * 4; u < cx + hw - 2; u += 8) px(u, y + 1, 4); }
+    rect(cx - hw + 1, top + 3, OBS.drumW - 2, 7, 6); rect(cx - hw + 1, top + 10, OBS.drumW - 2, 1, 1);
+    let u0 = cx - Math.floor(('OBSERVATORY'.length * 4 - 1) / 2);
+    for (const ch of 'OBSERVATORY') { SIGN[ch].forEach((row, j) => [...row].forEach((c, i) => { if (c === '#') px(u0 + i, top + 4 + j, 2); })); u0 += 4; }
+    rect(cx - hw - 1, top, OBS.drumW + 2, 3, 8); rect(cx - hw - 1, top - 1, OBS.drumW + 2, 1, 1); rect(cx - hw - 1, top + 2, OBS.drumW + 2, 1, 1);
+    for (let u = cx - hw; u < cx + hw; u += 4) px(u, top, 7);
+    for (const [o, on] of [[-28, 0], [-17, 1], [17, 0], [28, 1]]) { archAt(rect, cx + o, gy - 9, 6, 13, 1); archAt(rect, cx + o, gy - 10, 4, 11, on ? 7 : 2); }
+    archAt(rect, cx, gy - 4, 14, 17, 1); archAt(rect, cx, gy - 4, 12, 16, 8); archAt(rect, cx, gy - 4, 10, 15, lit ? 8 : 0);
+    if (lit) archAt(rect, cx, gy - 4, 6, 10, 7);
+    STAR5.forEach((row, j) => [...row].forEach((c, i) => { if (c === '#') px(cx - 2 + i, top + 12 + j, 8); }));
+  });
+  /* The drum's roof, seen from above (mostly under the dome): lead with a gold rim. */
+  const obsRoof = (C) => paint(OBS.drumW, OBS.roofD, C, (rect) => {
+    rect(0, 0, OBS.drumW, OBS.roofD, 1); rect(1, 1, OBS.drumW - 2, OBS.roofD - 2, 8); rect(2, 2, OBS.drumW - 4, OBS.roofD - 4, 4);
+    for (let u = 6; u < OBS.drumW - 4; u += 8) rect(u, 2, 1, OBS.roofD - 4, 3);
+  });
+  /* The dome, slit at longitude lon (0 faces you), with the telescope out of the slit. Lit from the
+     upper left in dithered flat tones; copper ribs turn with it; `beat` picks which slit stars show. */
+  function obsDome(rect, px, C, lon, beat) {
+    const r = OBS.domeR, cx = OBS.domeW / 2, by = OBS.domeH - 3;
+    for (let dy = -r; dy <= 0; dy++) {
+      const hw = Math.floor(Math.sqrt(r * r - dy * dy) + 0.3), slitU = hw * Math.sin(lon), slitHalf = Math.max(1, 3 * Math.cos(lon));
+      const ribs = [-2, -1, 1, 2].map((i) => lon + i * 0.62).filter((L) => Math.abs(L) < 1.45).map((L) => Math.round(hw * Math.sin(L)));
+      for (let u = -hw; u <= hw; u++) {
+        const nx = u / r, ny = dy / r, nz = Math.sqrt(Math.max(0, 1 - nx * nx - ny * ny)), l = -0.45 * nx - 0.4 * ny + 0.8 * nz;
+        let k = Math.max(4, Math.min(7, 4 + Math.floor(l * 3.4 + BAY[((cx + u) & 3) + ((by + dy) & 3) * 4] / 16 - 0.6)));
+        if (ribs.includes(u)) k = Math.max(3, k - 2);
+        if (Math.abs(u - slitU) <= slitHalf && dy < -r * 0.18) {
+          const edge = Math.abs(u - slitU) > slitHalf - 1;
+          k = edge ? 2 : !edge && noise(u - Math.round(slitU), dy) < 0.09 && (beat + dy) % 3 !== 0 ? 7 : 1;
+        }
+        if (u === -hw || u === hw || dy === -r) k = 1;
+        px(cx + u, by + dy, k);
+      }
+    }
+    rect(cx - r - 1, by + 1, r * 2 + 3, 1, 1); rect(cx - r, by, r * 2 + 1, 1, 8);
+    // The telescope: a tube widening to its objective, ink-outlined, lit on its upper-left side,
+    // three gold bands, dark glass with one glint.
+    const x0 = cx + Math.sqrt(r * r - (r / 2) ** 2) * Math.sin(lon), y0 = by - r / 2, a = -Math.PI / 2 + lon * 1.1 - 0.3, len = 24, back = 2;
+    const dx = Math.cos(a), dy = Math.sin(a), nx = -dy, ny = dx, side0 = nx * -0.7 + ny * -0.7 > 0 ? 1 : -1;
+    for (const pass of [0, 1]) for (let s = -back; s <= len; s += 0.5) {
+      const f = (s + back) / (len + back), rr = 2.5 + f, e = pass ? 0 : 1;
+      for (let o = -rr - e; o <= rr + e; o += 0.5) {
+        const x = Math.round(x0 + dx * s + nx * o), y = Math.round(y0 + dy * s + ny * o);
+        if (!pass) { px(x, y, 1); continue; }
+        const side = (o * side0) / rr, gold = [[0.12, 0.2], [0.55, 0.62], [0.9, 1]].some(([p, q]) => f >= p && f <= q);
+        px(x, y, gold ? (side < -0.3 ? 7 : 8) : side < -0.45 ? 5 : side < 0.35 ? 4 : 2);
+      }
+    }
+    const ex = x0 + dx * (len + 0.5), ey = y0 + dy * (len + 0.5);
+    for (let o = -2.5; o <= 2.5; o += 0.5) px(Math.round(ex + nx * o), Math.round(ey + ny * o), 2);
+    px(Math.round(ex - nx * side0), Math.round(ey - ny * side0), 7);
+  }
+  /* A small armillary on a pillar (the unused landmark's look, scaled to stand at a corner). */
+  function obsArmillary(rect, px, step) {
+    const cx = OBS.armW >> 1, base = OBS.armH, cy = base - 31;
+    rect(cx - 7, base - 3, 14, 3, 1); rect(cx - 6, base - 3, 12, 1, 6);
+    rect(cx - 2, base - 19, 4, 16, 1); rect(cx - 1, base - 19, 2, 16, 5); px(cx - 1, base - 19, 7);
+    const ring = (rx, ry, k) => { for (let a = 0; a < 6.283; a += 0.07) px(cx + Math.cos(a) * rx, cy + Math.sin(a) * ry, k); };
+    ring(11, 11, 4);
+    const ph = step / 18;
+    ring(Math.abs(Math.cos(ph * 2.5)) * 11 + 1, 11, 6);
+    ring(11, Math.abs(Math.sin(ph * 1.6)) * 4 + 1, 8);
+    rect(cx - 3, cy - 3, 6, 6, 1); rect(cx - 2, cy - 2, 4, 4, 8); px(cx - 2, cy - 2, 7);
+    rect(cx, cy - 13, 1, 2, 8);
+  }
+  /* The observatory's moving parts, repainted only when their look changes: the dome swings its
+     slit a notch every 1.5 s (the telescope with it, a fresh scatter of stars in the slit), and the
+     armillaries' rings turn 3 steps a second, each on its own phase. Nothing blinks or fades. */
+  function observatoryLights(C, { dome, arms }) {
+    const pen = (cv) => { const g = cv.getContext('2d'); return { g, rect: (u, v, w, h, k) => { g.fillStyle = C[k]; g.fillRect(Math.round(u), Math.round(v), w, h); } }; };
+    const D = pen(dome), A = arms.map(pen);
+    const PATH = [0, 0.25, 0.5, 0.7, 0.5, 0.25, 0, -0.25, -0.5, -0.7, -0.5, -0.25];
+    let lastNotch = -1, lastRing = -1;
+    return (time) => {
+      const notch = Math.floor(time / 1.5), ring = Math.floor(time * 3);
+      if (notch !== lastNotch) {
+        lastNotch = notch;
+        D.g.clearRect(0, 0, dome.width, dome.height);
+        obsDome(D.rect, (u, v, k) => D.rect(u, v, 1, 1, k), C, PATH[notch % PATH.length], notch);
+      }
+      if (ring !== lastRing) {
+        lastRing = ring;
+        A.forEach((a, i) => { a.g.clearRect(0, 0, OBS.armW, OBS.armH); obsArmillary(a.rect, (u, v, k) => a.rect(u, v, 1, 1, k), ring * 3 + i * 7); });
+      }
     };
   }
 
@@ -968,17 +1301,32 @@ const RunMap = (() => {
     const inward = ([x, y]) => { for (let i = 0; i < 12 && riverRoom(x, y, 15, 86) < 0; i++) x += x < W / 2 ? 8 : -8; return [x, y]; };
     const obel = tile([[92, 400], [668, 180], [92, 150], [300, 34], [460, 34], [672, 520], [110, 770], [652, 800]]).map(inward).filter(([x, y]) => riverRoom(x, y, 15, 86) >= 0 && clear(x, y, 14));
     obel.forEach(([x, y]) => block.push([x, y, 18]));
-    // Landmarks: two dice towers and an armillary, or the reverse, each on clear ground, off the
+    // Landmarks: one of each of the ante's pair (dice towers and tossed chips on the first ante, talon
+    // orbs and arcana obelisks after the Pit Boss deals you back in), each on clear ground, off the
     // lava and well apart. Their own random stream, so the rest of the board is laid out as before.
     const LR = mulberry32((run.seed ^ 0xd1ce) >>> 0), marks = [];
-    const kinds = LR() < 0.5 ? ['dice', 'dice', 'armillary'] : ['armillary', 'armillary', 'dice'];
+    const [ka, kb] = MARK_PAIRS[(run.circuit || 1) > 1 ? 1 : 0];
+    const kinds = LR() < 0.5 ? [ka, kb] : [kb, ka]; // one of each per map
     // Off the rivers, top included (see riverRoom): MARK sizes are canvas px, 2 map units each.
     const offLava = (x, y, k) => riverRoom(x, y, MARK[k].w, MARK[k].h * 2) >= 0;
-    for (let t = 0; t < 400 && marks.length < kinds.length; t++) {
-      const x = 60 + LR() * (W - 120), y = 180 + LR() * (H - 300);
-      if (!offLava(x, y, kinds[marks.length]) || !clear(x, y, 34) || marks.some((m) => Math.hypot(m.x - x, m.y - y) < 220)) continue;
-      marks.push({ x, y, k: kinds[marks.length], seed: marks.length });
-      block.push([x, y, 30]);
+    // Spacing: ideally at least MARK_ROWS_APART rows apart up or down the board, so two never stand
+    // side by side in the same stretch, and MARK_COLS_APART beacon gaps apart across it (the gap
+    // between neighboring beacons in a 3-stop row), so one doesn't stand right above another. If
+    // no spot allows both, the rows rule alone; failing that, just 220 map units apart any way.
+    const rowsApart = (y) => marks.every((m) => Math.abs(m.y - y) >= MARK_ROWS_APART * RUN_ROW_GAP);
+    const colsApart = (x) => marks.every((m) => Math.abs(m.x - x) >= MARK_COLS_APART * (RUN_COL_X[3][1] - RUN_COL_X[3][0]));
+    const apart = [
+      (x, y) => rowsApart(y) && colsApart(x),
+      (x, y) => rowsApart(y),
+      (x, y) => marks.every((m) => Math.hypot(m.x - x, m.y - y) >= 220),
+    ];
+    for (const ok of apart) {
+      for (let t = 0; t < 800 && marks.length < kinds.length; t++) {
+        const x = 60 + LR() * (W - 120), y = 180 + LR() * (H - 300);
+        if (!offLava(x, y, kinds[marks.length]) || !clear(x, y, 34) || !ok(x, y)) continue;
+        marks.push({ x, y, k: kinds[marks.length], seed: marks.length });
+        block.push([x, y, 30]);
+      }
     }
 
     showScreen(`
@@ -990,13 +1338,13 @@ const RunMap = (() => {
         </div></div>
         <canvas class="rm-em" id="rmEm" width="640" height="360"></canvas>
         <div class="rhud panel">
-          <div class="rh-who"><img src="${spriteURL('hero')}" alt=""><div><div class="rh-name">${escapeHTML(heroName().toUpperCase())}</div><div class="rh-deck">${escapeHTML(run.name)}${run.circuit > 1 ? ` &middot; CIRCUIT ${run.circuit}` : ''}</div></div></div>
+          <div class="rh-who"><img src="${spriteURL('hero')}" alt=""><div><div class="rh-name">${escapeHTML(heroName().toUpperCase())}</div><div class="rh-deck">${escapeHTML(run.name)}${run.circuit > 1 ? ` &middot; ANTE ${run.circuit}` : ''}</div></div></div>
           <div class="rh-row">${ico('hp')}<span>LIFE</span><b>${run.life}/${run.maxLife}</b></div>
           <div class="rh-row">${ico('arcana')}<span>ARCANA</span><b>${run.teeth}</b></div>
           <div class="rh-row">${ico('spell')}<span>DECK</span><b id="rhDeck">${Run.deckSize()}</b></div>
           <button class="btn" id="rmDeck">VIEW DECK</button>
         </div>
-        <div class="rm-btns"><button class="mini-btn rm-gear" id="rmGear" title="Options: sound, music, screen, colors and how to play"><img src="${iconURL('gear')}" alt="Options"></button><button class="btn" id="rmMenu">MENU</button><button class="btn" id="rmQuit">ABANDON</button></div>
+        <div class="rm-btns"><button class="mini-btn rm-gear" id="rmGear"><img src="${iconURL('gear')}" alt=""></button><button class="btn" id="rmMenu">MENU</button><button class="btn" id="rmQuit">ABANDON</button></div>
         <div class="rm-tick" id="rmTick"></div>
       </div>`);
     const pl = $('#rmPl'), tick = $('#rmTick');
@@ -1004,7 +1352,8 @@ const RunMap = (() => {
     tick.textContent = idle();
 
     drawGround($('#rmGnd'), R, C);
-    placeProps(pl, R, C, block, runes, obel);
+    // The ante sets the spires' mix and heat (see SPIRE_ANTES), from their own random stream.
+    const heatTick = placeProps(pl, R, C, block, runes, obel, SPIRE_ANTES[Math.min(run.circuit || 1, SPIRE_ANTES.length) - 1], mulberry32((run.seed ^ 0x5b1e) >>> 0));
     const markTick = landmarks(pl, C, marks);
     frame(pl, C);
 
@@ -1015,7 +1364,8 @@ const RunMap = (() => {
       const el = document.createElement('div');
       const state = reach.includes(n.id) ? 'reach' : visited.has(n.id) ? 'done' : 'idle';
       if (n.t === 'boss') {
-        // The resort: footprint on the board, roofs lifted to their height, upright parts as standees.
+        // The boss's house (the casino resort, or the Great Dome from the second ante on; see
+        // BOSS_HOUSES): footprint on the board, roofs lifted to their height, upright parts as standees.
         const lit = state === 'reach', W2 = CAS.W * 2, D2 = CAS.D * 2;
         el.className = 'rm-casino';
         el.style.cssText = `left:${n.x - CAS.W}px;top:${BOSS_PIN_Y - 8 - D2}px;width:${W2}px;height:${D2}px`;
@@ -1030,22 +1380,41 @@ const RunMap = (() => {
           casino.parts.push({ el: s, z0: z, z1: z + h });
           return s;
         };
-        const tx = CAS.towerX * 2, tw = CAS.towerW * 2, td = CAS.towerD * 2, th = CAS.towerH * 2;
-        const podY = D2 - CAS.podD * 2, ph = CAS.podH * 2;
-        const face = towerFace(C), sign = crown(C), pod = podiumFace(C, lit), mins = [minaret(C), minaret(C)];
-        casinoTick = casinoLights(C, { face, sign, pod, mins });
-        el.append(
-          flat(towerRoof(C), tx, 0, th),
-          stand(face, tx + tw / 2, td, 0),
-          stand(sign, tx + tw / 2, td + 2, th - 4),
-          flat(podiumRoof(C), 0, podY, ph),
-          stand(pod, W2 / 2, D2, 0),
-          stand(dome(C, 19, 24), W2 / 2 - 50, podY + 22, ph),
-          stand(dome(C, 19, 24), W2 / 2 + 50, podY + 22, ph),
-          stand(dome(C, 31, 38), W2 / 2, podY + 26, ph),
-          stand(mins[0], 10, D2 - 4, ph),
-          stand(mins[1], W2 - 10, D2 - 4, ph),
-        );
+        const house = BOSS_HOUSES[Math.min(run.circuit || 1, BOSS_HOUSES.length) - 1];
+        if (house === 'observatory') {
+          // The Great Dome: the drum's face at the front, its roof lifted to the cornice, the dome
+          // standing in the roof's middle, an armillary just outside each front corner.
+          const drumZ = (OBS.H - 2) * 2, roofY = D2 - OBS.roofD * 2;
+          const dome = document.createElement('canvas'), arms = [0, 1].map(() => document.createElement('canvas'));
+          dome.width = OBS.domeW; dome.height = OBS.domeH;
+          arms.forEach((a) => { a.width = OBS.armW; a.height = OBS.armH; });
+          casinoTick = observatoryLights(C, { dome, arms });
+          el.append(
+            flat(obsRoof(C), W2 / 2 - OBS.drumW, roofY, drumZ),
+            stand(dome, W2 / 2, roofY + OBS.roofD, drumZ),
+            stand(obsFace(C, lit), W2 / 2, D2, 0),
+            // Just outside the plinth (it spans W2/2 ± OBS.W), so they never cut into the drum.
+            stand(arms[0], W2 / 2 - OBS.W - OBS.armW - 2, D2, 0),
+            stand(arms[1], W2 / 2 + OBS.W + OBS.armW + 2, D2, 0),
+          );
+        } else {
+          const tx = CAS.towerX * 2, tw = CAS.towerW * 2, td = CAS.towerD * 2, th = CAS.towerH * 2;
+          const podY = D2 - CAS.podD * 2, ph = CAS.podH * 2;
+          const face = towerFace(C), sign = crown(C), pod = podiumFace(C, lit), mins = [minaret(C), minaret(C)];
+          casinoTick = casinoLights(C, { face, sign, pod, mins });
+          el.append(
+            flat(towerRoof(C), tx, 0, th),
+            stand(face, tx + tw / 2, td, 0),
+            stand(sign, tx + tw / 2, td + 2, th - 4),
+            flat(podiumRoof(C), 0, podY, ph),
+            stand(pod, W2 / 2, D2, 0),
+            stand(dome(C, 19, 24), W2 / 2 - 50, podY + 22, ph),
+            stand(dome(C, 19, 24), W2 / 2 + 50, podY + 22, ph),
+            stand(dome(C, 31, 38), W2 / 2, podY + 26, ph),
+            stand(mins[0], 10, D2 - 4, ph),
+            stand(mins[1], W2 - 10, D2 - 4, ph),
+          );
+        }
         const carpet = casinoCarpet(C, lit);
         carpet.className = 'rm-c-carpet';
         carpet.style.cssText = `left:${CAS.W - 8}px;top:${D2}px`;
@@ -1064,7 +1433,7 @@ const RunMap = (() => {
       }
       el.classList.toggle('reach', state === 'reach');
       pl.appendChild(el);
-      el.onmouseenter = () => { if (state === 'reach' && !walking) aimAt(n); tick.textContent = visited.has(n.id) && n.t !== 'start' ? `${STOPS[n.t].name}: cleared` : STOPS[n.t].desc; };
+      el.onmouseenter = () => { if (state === 'reach' && !walking) aimAt(n); tick.textContent = visited.has(n.id) && n.t !== 'start' ? `${runStop(run, n.t).name}: cleared` : runStop(run, n.t).desc; };
       el.onmouseleave = () => { if (!walking) sl.load(0); tick.textContent = idle(); };
       el.onclick = () => walkTo(n.id);
     }
@@ -1146,7 +1515,7 @@ const RunMap = (() => {
       setCam((W / 2 - x) * CAM.side, Math.max(camLo, Math.min(CAM.max, CAM.min + 1000 - y + look)));
     };
     follow(sl.BX, sl.BY);
-    // Scroll the wheel to look up the board toward the casino (or back down); a jump recentres.
+    // Scroll the wheel (or drag, below) to look up the board toward the casino (or back down); a jump recentres.
     // During the opening pan, the wheel (or a click) skips it instead.
     let skipIntro = null;
     $('#rmap').addEventListener('wheel', (e) => {
@@ -1156,6 +1525,37 @@ const RunMap = (() => {
       follow(...lastFollow);
     }, { passive: false });
     $('#rmap').addEventListener('pointerdown', () => { if (skipIntro) skipIntro(); });
+    // Or drag the board with the left button (or a finger): it follows the pointer up and down.
+    // A press only becomes a drag once it has moved DRAG_START px, and the click that ends a drag
+    // is swallowed, so clicking a beacon still flings you there. Only from the board itself (or the
+    // sky round it), not the HUD, its buttons, or an overlay like the deck view.
+    const DRAG_START = 6, DRAG_SPEED = 1.5; // px; map units of look per screen px
+    let drag = null, dragged = false;
+    $('#rmap').addEventListener('pointerdown', (e) => {
+      if (e.button !== 0 || skipIntro || !(e.target === e.currentTarget || e.target.closest('.rm-view') || e.target.id === 'rmSky')) return;
+      drag = { id: e.pointerId, y: e.clientY, look, on: false };
+      dragged = false;
+    });
+    $('#rmap').addEventListener('pointermove', (e) => {
+      if (!drag || e.pointerId !== drag.id) return;
+      const dy = e.clientY - drag.y;
+      if (!drag.on) {
+        if (Math.abs(dy) < DRAG_START) return;
+        drag.on = dragged = true;
+        $('#rmap').setPointerCapture(e.pointerId);
+        $('#rmap').classList.add('dragging');
+      }
+      look = Math.max(-2000, Math.min(2000, drag.look + dy * DRAG_SPEED));
+      follow(...lastFollow);
+    });
+    const endDrag = (e) => {
+      if (!drag || e.pointerId !== drag.id) return;
+      drag = null;
+      $('#rmap').classList.remove('dragging');
+    };
+    $('#rmap').addEventListener('pointerup', endDrag);
+    $('#rmap').addEventListener('pointercancel', endDrag);
+    $('#rmap').addEventListener('click', (e) => { if (dragged) { e.stopPropagation(); e.preventDefault(); dragged = false; } }, true);
 
     // (Only a run that hasn't left the base yet: one saved mid-way before openings existed has no flag.)
     if (opts.encore) encore(opts.encore);
@@ -1379,7 +1779,12 @@ const RunMap = (() => {
         casinoTick = () => {};
         sfx('lever');
         await wait(300);
-        const parts = casino.parts, top = Math.max(...parts.map((p) => p.z1)), N = 7;
+        // The spires and landmarks at the back of the board come down with it, clearing the
+        // ground the Pit Boss works over (its hands and slingshot would pass through them).
+        // Spires are baked in full-width depth bands, so a whole band goes at once.
+        const STAGE_Y = 220; // map units: anything standing behind this line falls
+        const nearby = [...pl.querySelectorAll('.rm-band, .rm-mark')].map((el) => ({ el, z0: 0, z1: parseFloat(el.style.height), y: parseFloat(el.style.top) + parseFloat(el.style.height) })).filter((p) => p.y < STAGE_Y);
+        const parts = [...casino.parts, ...nearby], top = Math.max(...parts.map((p) => p.z1)), N = 7;
         for (let i = N - 1; i >= 0; i--) {
           const line = top * i / N;
           sfx('build', i + 1);
@@ -1540,7 +1945,7 @@ const RunMap = (() => {
     $('#rmMenu').onclick = () => { sfx('select'); showTitle(); };
     $('#rmQuit').onclick = () => Run.confirmAbandon(() => show());
 
-    // Animate the sky, lava, runes, sigils, casino lights, landmarks and rising embers at a stepped ~12fps.
+    // Animate the sky, lava, runes, sigils, casino lights, landmarks, hot spires and rising embers at a stepped ~12fps.
     // Every stop but the casino sits in a sigil ring; the start's is where the lines meet, behind the slingshot.
     const rings = nodes.filter((n) => n.t !== 'boss').map((n) => [n.x, n.y, reach.includes(n.id)]);
     const draw = fxDrawer($('#rmFx').getContext('2d'), $('#rmGnd').getContext('2d'), C, edges, runes, live, attuned, rings);
@@ -1556,6 +1961,7 @@ const RunMap = (() => {
       draw(now / 1000);
       casinoTick(now / 1000);
       markTick(now / 1000);
+      heatTick(now / 1000);
       const ex = embers();
       // Build sparks and crumble dust: thrown up, falling back.
       for (let i = bits.length - 1; i >= 0; i--) {

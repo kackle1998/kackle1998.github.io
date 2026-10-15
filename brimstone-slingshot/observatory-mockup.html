@@ -1,0 +1,356 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ante 2 Observatory</title>
+<style>
+  :root { --ink:#1f2418; --dark:#3b4430; --mid:#6e7a52; --light:#a9b47e; --paper:#d9dfb3; --white:#eef1d6; --accent:#b0953a; }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 20px 16px 40px; background: var(--paper); color: var(--ink); font: 14px/1.45 ui-monospace, Consolas, monospace; }
+  h1 { margin: 0 0 4px; font-size: 20px; letter-spacing: 2px; }
+  .sub { margin: 0 0 16px; color: var(--dark); max-width: 900px; }
+  .bar { display: flex; gap: 14px; flex-wrap: wrap; align-items: center; margin-bottom: 18px; }
+  select, label { font: inherit; color: var(--ink); }
+  select { background: var(--white); border: 2px solid var(--ink); padding: 2px 6px; }
+  .grid { display: flex; flex-wrap: wrap; gap: 18px; }
+  .card { background: var(--white); border: 2px solid var(--ink); padding: 12px; flex: 1 1 340px; max-width: 540px; }
+  .card h2 { margin: 0 0 2px; font-size: 16px; letter-spacing: 1px; }
+  .card .tag { color: var(--mid); margin-bottom: 8px; }
+  canvas.scene { width: 100%; image-rendering: pixelated; border: 2px solid var(--ink); display: block; }
+  ul { padding-left: 18px; margin: 10px 0 0; }
+  li { margin-bottom: 4px; }
+  b { color: var(--ink); }
+  .pick { display: inline-block; background: var(--accent); color: var(--ink); padding: 0 6px; margin-left: 6px; font-size: 12px; }
+</style>
+
+<h1>ANTE 2: THE OBSERVATORY</h1>
+<p class="sub">Three replacements for the Dealer's casino, drawn with the run map's own rules: a palette ramp sorted by brightness, 1 px = 2 map units, lit from the upper left, flat colors with no fades, and a 6-steps-per-second light loop. Each design keeps the casino's 100 px footprint, so it drops into the boss stop as is.</p>
+<div class="bar">
+  <label>Palette <select id="pal"></select></label>
+  <label><input type="checkbox" id="lit" checked> Reachable (door and carpet lit)</label>
+</div>
+<div class="grid" id="grid"></div>
+
+<script>
+'use strict';
+const BAY = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
+const bay = (x, y) => BAY[(x & 3) + (y & 3) * 4];
+const noise = (a, b) => { let n = (a * 374761393 + b * 668265263) | 0; n = (n ^ (n >>> 13)) * 1274126177 | 0; return ((n ^ (n >>> 16)) >>> 0) / 4294967296; };
+const rgb = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+const luma = (h) => { const [r, g, b] = rgb(h); return r * 0.299 + g * 0.587 + b * 0.114; };
+let PALETTES = {}, C = [];
+// Same ramp as runmap.js: darkest to lightest, accent last (index 8).
+const ramp = (p) => [p.bg, p.ink, p.dark, p.mid, p.light, p.artbg, p.paper, p.white].sort((a, b) => luma(a) - luma(b)).concat(p.accent);
+
+const SW = 170, SH = 200, GY = 178; // scene canvas px; ground line
+
+const FONT = {
+  O: ['###', '#.#', '#.#', '#.#', '###'], B: ['##.', '#.#', '##.', '#.#', '##.'], S: ['###', '#..', '###', '..#', '###'],
+  E: ['###', '#..', '##.', '#..', '###'], R: ['##.', '#.#', '##.', '#.#', '#.#'], V: ['#.#', '#.#', '#.#', '#.#', '.#.'],
+  A: ['###', '#.#', '###', '#.#', '#.#'], T: ['###', '.#.', '.#.', '.#.', '.#.'], Y: ['#.#', '#.#', '.#.', '.#.', '.#.'],
+};
+const STAR = ['..#..', '.###.', '#####', '.###.', '..#..'];
+
+function pen(g) {
+  const R = (u, v, w, h, k) => { g.fillStyle = C[k]; g.fillRect(Math.round(u), Math.round(v), w, h); };
+  return { R, P: (u, v, k) => R(u, v, 1, 1, k) };
+}
+const glyph = (P, rows, x, y, k) => rows.forEach((r, j) => [...r].forEach((c, i) => { if (c === '#') P(x + i, y + j, k); }));
+function text(P, word, cx, y, k) {
+  let x = cx - Math.floor((word.length * 4 - 1) / 2);
+  for (const ch of word) { glyph(P, FONT[ch], x, y, k); x += 4; }
+}
+
+/* Lit board stone round the building, as drawGround: dithered ground tones, a little speckle. */
+function ground({ P }) {
+  for (let y = 0; y < SH; y++) for (let x = 0; x < SW; x++) {
+    const l = 1 - Math.hypot(x - SW / 2, (y - SH * 0.75) * 1.3) / (SW * 0.8);
+    let k = 4 + Math.max(0, Math.min(2, Math.round(l * 2.4 + bay(x, y) / 16 - 0.5)));
+    const r = noise(x, y);
+    if (r < 0.06) k = Math.max(3, k - 1); else if (r < 0.1) k = Math.min(6, k + 1);
+    P(x, y, k);
+  }
+  for (const [x, y] of [[14, 22], [150, 40], [30, 120], [140, 150], [60, 12], [120, 96]])
+    for (const [u, v] of [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]]) P(x + u, y + v, 7);
+}
+/* The casino's carpet, run out from the door. */
+function carpet({ R }, cx, y0, lit) { R(cx - 6, y0, 12, SH - y0, 1); R(cx - 5, y0, 10, SH - y0, lit ? 8 : 5); }
+
+/* A row of pale stone lit from the left: ink ends, a bright edge, lit, mid and shadow faces, grit. */
+function stone({ P }, x0, y, w, top) {
+  P(x0, y, 1); P(x0 + w - 1, y, 1);
+  for (let i = 1; i < w - 1; i++) {
+    const f = i / w;
+    let k = i === 1 ? 7 : f < 0.5 ? (top ? 7 : 6) : f < 0.82 ? 5 : 4;
+    if (noise(x0 + i, y) < 0.06) k = Math.max(3, k - 1);
+    P(x0 + i, y, k);
+  }
+}
+function tiers(pp, cx, b, ws) { let y = b; for (const [w, h] of ws) { for (let j = 0; j < h; j++) stone(pp, cx - (w >> 1), y - j - 1, w, j === h - 1); y -= h; } return y; }
+/* A round-topped opening (door or window). */
+function arch({ R }, cx, by, w, h, k) {
+  for (let i = 0; i < w; i++) {
+    const d = Math.abs(i - (w - 1) / 2) / (w / 2), cut = Math.round((1 - Math.sqrt(1 - Math.min(1, d * d))) * (w / 2));
+    R(cx - w / 2 + i, by - h + cut, 1, h - cut, k);
+  }
+}
+function door(pp, cx, by, lit) { arch(pp, cx, by, 14, 17, 1); arch(pp, cx, by, 12, 16, 8); arch(pp, cx, by, 10, 15, lit ? 8 : 0); if (lit) arch(pp, cx, by, 6, 10, 7); }
+
+/* A telescope: a tube from (x0, y0) along angle a, widening r0 -> r1, ink-outlined, lit on its
+   upper-left side, with gold bands and a gold objective ring round dark glass and one glint. */
+function telescope({ P }, x0, y0, a, len, r0, r1, back = 0) {
+  const dx = Math.cos(a), dy = Math.sin(a), nx = -dy, ny = dx, lit = nx * -0.7 + ny * -0.7 > 0 ? 1 : -1;
+  const bands = [[0.12, 0.2], [0.55, 0.62], [0.9, 1]];
+  for (const pass of [0, 1]) for (let s = -back; s <= len; s += 0.5) {
+    const f = (s + back) / (len + back), rr = r0 + (r1 - r0) * f, e = pass ? 0 : 1;
+    for (let o = -rr - e; o <= rr + e; o += 0.5) {
+      const x = Math.round(x0 + dx * s + nx * o), y = Math.round(y0 + dy * s + ny * o);
+      if (!pass) { P(x, y, 1); continue; }
+      const side = (o * lit) / rr, gold = bands.some(([p, q]) => f >= p && f <= q);
+      P(x, y, gold ? (side < -0.3 ? 7 : 8) : side < -0.45 ? 5 : side < 0.35 ? 4 : 2);
+    }
+  }
+  // The objective: dark glass, one glint.
+  const ex = x0 + dx * (len + 0.5), ey = y0 + dy * (len + 0.5);
+  for (let o = -r1 + 1; o <= r1 - 1; o += 0.5) P(Math.round(ex + nx * o), Math.round(ey + ny * o), 2);
+  P(Math.round(ex + nx * -1 * lit), Math.round(ey + ny * -1 * lit), 7);
+}
+
+/* A hemispherical observatory dome on (cx, by), radius r: dithered shading lit from the upper left,
+   copper ribs that turn with it, and a shutter slit at longitude lon (0 faces you) with stars in it. */
+function hemi({ P, R }, cx, by, r, lon, step, slitW = 3) {
+  for (let dy = -r; dy <= 0; dy++) {
+    const hw = Math.floor(Math.sqrt(r * r - dy * dy) + 0.3);
+    const slitU = hw * Math.sin(lon), slitHalf = Math.max(1, slitW * Math.cos(lon));
+    const ribs = [-2, -1, 1, 2].map((i) => lon + i * 0.62).filter((L) => Math.abs(L) < 1.45).map((L) => Math.round(hw * Math.sin(L)));
+    for (let u = -hw; u <= hw; u++) {
+      const nx = u / r, ny = dy / r, nz = Math.sqrt(Math.max(0, 1 - nx * nx - ny * ny));
+      const l = -0.45 * nx - 0.4 * ny + 0.8 * nz;
+      let k = Math.max(4, Math.min(7, 4 + Math.floor(l * 3.4 + bay(cx + u, by + dy) / 16 - 0.6)));
+      if (ribs.includes(u)) k = Math.max(3, k - 2);
+      const inSlit = Math.abs(u - slitU) <= slitHalf && dy < -r * 0.18;
+      if (inSlit) {
+        const edge = Math.abs(u - slitU) > slitHalf - 1;
+        k = edge ? 2 : 1;
+        // A few stars in the slit, each showing on its own slow beat (no flashing).
+        if (!edge && noise(u - Math.round(slitU), dy) < 0.09 && (Math.floor(step / 9) + dy) % 3 !== 0) k = 7;
+      }
+      if (u === -hw || u === hw || dy === -r) k = 1;
+      P(cx + u, by + dy, k);
+    }
+  }
+  R(cx - r - 1, by + 1, r * 2 + 3, 1, 1); R(cx - r, by, r * 2 + 1, 1, 8);
+}
+
+/* A small armillary on a pillar, its rings turning in steps (the unused landmark's look). */
+function armillary({ R, P }, cx, base, step) {
+  R(cx - 7, base - 3, 14, 3, 1); R(cx - 6, base - 3, 12, 1, 6);
+  R(cx - 2, base - 26, 4, 23, 1); R(cx - 1, base - 26, 2, 23, 5); P(cx - 1, base - 26, 7);
+  const cy = base - 38, ring = (rx, ry, k) => { for (let a = 0; a < 6.283; a += 0.07) P(cx + Math.cos(a) * rx, cy + Math.sin(a) * ry, k); };
+  ring(11, 11, 4);
+  const ph = step / 18;
+  ring(Math.abs(Math.cos(ph * 2.5)) * 11 + 1, 11, 6);
+  ring(11, Math.abs(Math.sin(ph * 1.6)) * 4 + 1, 8);
+  R(cx - 3, cy - 3, 6, 6, 1); R(cx - 2, cy - 2, 4, 4, 8); P(cx - 2, cy - 2, 7);
+  R(cx, cy - 15, 1, 4, 8);
+}
+
+/* A planet: ink-rimmed disc, its own tone, a lit corner; an optional ring. */
+function planet({ P }, x, y, r, k, ringed) {
+  x = Math.round(x); y = Math.round(y);
+  for (let v = -r - 1; v <= r + 1; v++) for (let u = -r - 1; u <= r + 1; u++) {
+    const d = Math.hypot(u, v);
+    if (d <= r + 0.6) P(x + u, y + v, d > r - 0.4 ? 1 : (u + v < -r * 0.6 ? 7 : k));
+  }
+  if (ringed) for (let u = -r - 4; u <= r + 4; u++) if (Math.abs(u) > r - 1) { P(x + u, y + (u < 0 ? 1 : -1) * (Math.abs(u) > r + 2 ? 0 : 0), 8); }
+}
+/* Dotted orbit halves: back (sin < 0) or front. */
+function orbit({ P }, cx, cy, rx, ry, front, k) {
+  for (let a = 0, i = 0; a < 6.283; a += 1.2 / rx, i++) if ((Math.sin(a) >= 0) === front && i % 2 === 0) P(cx + Math.cos(a) * rx, cy + Math.sin(a) * ry, k);
+}
+
+/* ============ A: THE GREAT DOME ============ */
+function greatDome(pp, step, lit) {
+  const { R, P } = pp, cx = SW / 2, t = step / 6;
+  ground(pp); carpet(pp, cx, GY, lit);
+  // The dome swings its slit to and fro, a notch every 1.5 s.
+  const notch = Math.floor(t / 1.5), path = [0, 0.25, 0.5, 0.7, 0.5, 0.25, 0, -0.25, -0.5, -0.7, -0.5, -0.25];
+  const lon = path[notch % path.length];
+  armillary(pp, cx - 58, GY - 2, step);
+  armillary(pp, cx + 58, GY - 2, step + 7);
+  // Plinth and drum.
+  tiers(pp, cx, GY, [[90, 2], [84, 2]]);
+  const top = GY - 4 - 36;
+  for (let y = GY - 5; y >= top; y--) stone(pp, cx - 38, y, 76, false);
+  for (let y = GY - 9; y > top + 10; y -= 5) { R(cx - 37, y, 74, 1, 4); for (let u = cx - 34 + ((y / 5) & 1) * 4; u < cx + 36; u += 8) P(u, y + 1, 4); }
+  // Frieze with the name, then a gold cornice.
+  R(cx - 37, top + 3, 74, 7, 6); R(cx - 37, top + 10, 74, 1, 1);
+  text(P, 'OBSERVATORY', cx, top + 4, 2);
+  R(cx - 39, top, 78, 3, 8); R(cx - 39, top - 1, 78, 1, 1); R(cx - 39, top + 2, 78, 1, 1);
+  for (let u = cx - 38; u < cx + 38; u += 4) P(u, top, 7);
+  // Windows (a couple lit), and the door.
+  for (const [o, on] of [[-28, 0], [-17, 1], [17, 0], [28, 1]]) { arch(pp, cx + o, GY - 9, 6, 13, 1); arch(pp, cx + o, GY - 10, 4, 11, on ? 7 : 2); }
+  door(pp, cx, GY - 4, lit);
+  glyph(P, STAR, cx - 2, top + 12, 8);
+  // The dome and its telescope, poking out of the slit.
+  const r = 33, by = top - 2;
+  hemi(pp, cx, by, r, lon, step);
+  const hw = Math.sqrt(r * r - (r * 0.5) ** 2);
+  telescope(pp, cx + hw * Math.sin(lon), by - r * 0.5, -Math.PI / 2 + lon * 1.1 - 0.3, 24, 2.5, 3.5, 2);
+}
+
+/* ============ B: THE STAR SPIRE ============ */
+function starSpire(pp, step, lit) {
+  const { R, P } = pp, cx = SW / 2, t = step / 6;
+  ground(pp); carpet(pp, cx, GY, lit);
+  const top = GY - 104, oy = top - 6, rx = 62, ry = 10;
+  const planets = [[0.9, 0.5, 3, 6, false], [2.6, 0.32, 4, 8, true], [4.4, 0.2, 2, 3, false]]
+    .map(([p, sp, r, k, ring], i) => { const a = p + Math.floor(t * 4) / 4 * sp; return { x: cx + Math.cos(a) * rx * (1 - i * 0.12), y: oy + Math.sin(a) * ry, r, k, ring, front: Math.sin(a) >= 0, i }; });
+  orbit(pp, cx, oy, rx, ry, false, 8);
+  planets.filter((q) => !q.front).forEach((q) => planet(pp, q.x, q.y, q.r, q.k, q.ring));
+  // Plinth, and an annex with a little dome either side.
+  const pt = tiers(pp, cx, GY, [[100, 3], [88, 3], [72, 3]]);
+  for (const s of [-1, 1]) {
+    const ax = cx + s * 38;
+    for (let y = GY - 4; y > GY - 24; y--) stone(pp, ax - 10, y, 20, false);
+    R(ax - 11, GY - 25, 22, 2, 8); R(ax - 11, GY - 26, 22, 1, 1);
+    arch(pp, ax, GY - 6, 6, 10, 1); arch(pp, ax, GY - 7, 4, 8, 2);
+    hemi(pp, ax, GY - 27, 9, s * 0.5, step, 1.5);
+  }
+  // The shaft, tapering, with a gold stair winding up its face and a few slit windows.
+  for (let y = pt - 1, i = 0; y > top; y--, i++) { const sw = Math.round(30 - 6 * i / 92) | 1; stone(pp, cx - (sw >> 1), y, sw, false); }
+  for (let n = 0; n < 4; n++) {
+    const y0 = pt - 22 - n * 22;
+    for (let s = 2; s < 26; s++) { const y = Math.round(y0 - s * 0.45), w = Math.round(30 - 6 * (pt - y) / 92); if (s < w - 2) { P(cx - (w >> 1) + s, y, 8); P(cx - (w >> 1) + s, y + 1, 1); } }
+  }
+  for (const [y, on] of [[pt - 34, 0], [pt - 56, 1], [pt - 78, 0]]) { R(cx - 2, y, 4, 7, 1); R(cx - 1, y + 1, 2, 5, on ? 7 : 2); }
+  door(pp, cx, pt, lit);
+  // The gallery: a corbelled ledge, a gold floor band.
+  for (let j = 0; j < 5; j++) stone(pp, cx - 13 - j * 2, top - j, 26 + j * 4, j === 4);
+  R(cx - 23, top - 6, 46, 1, 1); R(cx - 22, top - 5, 44, 1, 8);
+  // The great telescope on its fork, sweeping a notch every 2 s.
+  const aims = [-2.35, -2.05, -1.75, -1.45, -1.15, -1.45, -1.75, -2.05], a = aims[Math.floor(t / 2) % aims.length];
+  R(cx - 6, top - 9, 12, 3, 1); R(cx - 5, top - 9, 10, 1, 8);
+  telescope(pp, cx, top - 18, a, 34, 3, 5, 12);
+  R(cx - 4, top - 18, 2, 10, 1); R(cx + 2, top - 18, 2, 10, 1); P(cx - 3, top - 17, 4); P(cx + 3, top - 17, 4);
+  // Railing over the telescope's foot.
+  R(cx - 23, top - 13, 46, 1, 1); R(cx - 22, top - 12, 44, 1, 8);
+  for (let u = cx - 22; u <= cx + 21; u += 4) R(u, top - 11, 1, 5, 8);
+  orbit(pp, cx, oy, rx, ry, true, 8);
+  planets.filter((q) => q.front).forEach((q) => planet(pp, q.x, q.y, q.r, q.k, q.ring));
+}
+
+/* ============ C: THE ORRERY HALL ============ */
+function orreryHall(pp, step, lit) {
+  const { R, P } = pp, cx = SW / 2, t = step / 6, x0 = cx - 52;
+  ground(pp); carpet(pp, cx, GY, lit);
+  // Stylobate steps.
+  for (let j = 0; j < 3; j++) { const w = 112 - j * 4; R(cx - w / 2, GY - 2 - j * 2, w, 2, 5); R(cx - w / 2, GY - 2 - j * 2, w, 1, 7); P(cx - w / 2, GY - 2 - j * 2, 1); P(cx + w / 2 - 1, GY - 2 - j * 2, 1); }
+  const cb = GY - 6, ct = GY - 32;
+  // Shaded hall behind the columns, then ten columns with gold capitals, door in the middle bay.
+  R(x0 + 1, ct, 102, cb - ct, 2); R(x0 + 1, ct, 102, 2, 1);
+  door(pp, cx, cb, lit);
+  for (let i = 0; i < 10; i++) {
+    const u = x0 + 5 + i * 10;
+    R(u - 1, cb - 2, 6, 2, 1); R(u, cb - 2, 4, 1, 6);
+    for (const [o, k] of [[0, 7], [1, 6], [2, 6], [3, 5]]) R(u + o, ct + 2, 1, cb - ct - 4, k);
+    R(u - 1, ct, 6, 2, 8); R(u - 1, ct, 1, 2, 1); R(u + 4, ct, 1, 2, 1);
+  }
+  // Entablature with the name; gold cornice.
+  R(x0, ct - 1, 104, 1, 1); R(x0, ct - 8, 104, 7, 6); R(x0, ct - 8, 1, 7, 1); R(x0 + 103, ct - 8, 1, 7, 1);
+  text(P, 'OBSERVATORY', cx, ct - 7, 2);
+  R(x0 - 2, ct - 11, 108, 3, 8); R(x0 - 2, ct - 12, 108, 1, 1); R(x0 - 2, ct - 9, 108, 1, 1);
+  // The orrery's column, rising from behind the pediment.
+  const sy = ct - 58;
+  R(cx - 3, sy, 6, ct - 12 - sy, 1); R(cx - 2, sy, 4, ct - 12 - sy, 5); R(cx - 2, sy, 1, ct - 12 - sy, 7);
+  for (const v of [sy + 14, sy + 26]) { R(cx - 4, v, 8, 2, 8); R(cx - 4, v + 2, 8, 1, 1); }
+  // Pediment: gold raking cornice, shaded tympanum, a gold star in it.
+  const pb = ct - 12, ph = 14;
+  for (let j = 0; j < ph; j++) {
+    const half = Math.round(36 - j * 36 / ph);
+    R(cx - half, pb - j, half * 2, 1, j === 0 ? 1 : 5);
+    P(cx - half, pb - j, 1); P(cx + half - 1, pb - j, 1);
+    if (j > 0) { P(cx - half + 1, pb - j, 8); P(cx + half - 2, pb - j, 8); P(cx - half + 2, pb - j, 8); P(cx + half - 3, pb - j, 8); }
+  }
+  R(cx - 1, pb - ph - 1, 2, 2, 1);
+  glyph(P, STAR, cx - 2, pb - 8, 8);
+  // The orrery: three arms turning at their own speeds, a notch at a time, round a gold sun.
+  const orbits = [[18, 0.6, 6, 2, false], [30, 0.35, 3, 3, false], [44, 0.2, 7, 4, true]];
+  const pts = orbits.map(([rx, sp, k, r, ring], i) => { const a = i * 2.1 + Math.floor(t * 3) / 3 * sp; return { rx, ry: rx * 0.28, x: cx + Math.cos(a) * rx, y: sy + Math.sin(a) * rx * 0.28, k, r, ring, front: Math.sin(a) >= 0 }; });
+  const arm = (q) => { const n = Math.ceil(Math.hypot(q.x - cx, q.y - sy)); for (let i = 0; i <= n; i++) P(cx + (q.x - cx) * i / n, sy + (q.y - sy) * i / n, 8); };
+  for (const q of pts) orbit(pp, cx, sy, q.rx, q.ry, false, 4);
+  pts.filter((q) => !q.front).forEach((q) => { arm(q); planet(pp, q.x, q.y, q.r, q.k, q.ring); });
+  for (let v = -8; v <= 8; v++) for (let u = -8; u <= 8; u++) { const d = Math.hypot(u, v); if (d <= 8.4) P(cx + u, sy + v, d > 7.6 ? 1 : u + v < -5 ? 7 : u + v > 6 ? 6 : 8); }
+  for (const q of pts) orbit(pp, cx, sy, q.rx, q.ry, true, 4);
+  pts.filter((q) => q.front).forEach((q) => { arm(q); planet(pp, q.x, q.y, q.r, q.k, q.ring); });
+  // A small observatory at each end, slits facing out, telescopes nodding.
+  for (const s of [-1, 1]) {
+    const ax = cx + s * 56;
+    for (let y = GY - 1; y > GY - 40; y--) stone(pp, ax - 11, y, 22, false);
+    R(ax - 12, GY - 41, 24, 2, 8); R(ax - 12, GY - 42, 24, 1, 1);
+    arch(pp, ax, GY - 8, 6, 12, 1); arch(pp, ax, GY - 9, 4, 10, s > 0 ? 7 : 2);
+    hemi(pp, ax, GY - 43, 12, s * 0.75, step, 2);
+    const nod = [0, 0.12, 0.2, 0.12][Math.floor(t / 1.5 + (s > 0 ? 2 : 0)) % 4];
+    telescope(pp, ax + s * 7, GY - 49, -Math.PI / 2 + s * (0.75 + nod), 13, 1.5, 2.5, 1);
+  }
+}
+
+const DESIGNS = [
+  { name: 'A. THE GREAT DOME', tag: 'The classic: a stone drum under a turning dome', pick: true, draw: greatDome, notes: [
+    '<b>Silhouette:</b> one big round shape where the casino had a tall tower. It reads as an observatory at a glance, even at the board\'s far end.',
+    '<b>Light loop:</b> the dome swings its shutter slit from side to side a notch at a time. The telescope swings with it, stars show through the slit, and two armillaries turn at the front corners.',
+    '<b>Reuses:</b> the casino\'s podium arches, door and carpet, plus the unused <code>armillary()</code> landmark, scaled down to stand where the minarets were.',
+    '<b>Encore:</b> the dome splits along its ribs and drops in segments, then the drum comes down in courses.',
+  ] },
+  { name: 'B. THE STAR SPIRE', tag: 'An astronomer\'s tower with an orrery ring', draw: starSpire, notes: [
+    '<b>Silhouette:</b> the tallest design and the most like a final boss. It is a wizard tower, matching Ante 2\'s arcana obelisks and talon orbs.',
+    '<b>Light loop:</b> the great telescope sweeps the sky a notch every 2 s, three planets orbit the gallery and pass behind the shaft, and the two annex domes face outward.',
+    '<b>Board note:</b> about 1.5x the casino\'s height, so CAM.max may need a small bump to keep the telescope on screen.',
+    '<b>Encore:</b> the planets fly off their ring, then the shaft telescopes down into the plinth.',
+  ] },
+  { name: 'C. THE ORRERY HALL', tag: 'A columned hall wearing a giant clockwork orrery', draw: orreryHall, notes: [
+    '<b>Silhouette:</b> wide and low with a moving crown. The hall echoes the palace podium, and the orrery stands where the hotel tower was.',
+    '<b>Light loop:</b> three gold arms turn round a gold sun at their own speeds, the planets pass in front of and behind it, and the small end domes nod their telescopes.',
+    '<b>Theme:</b> it matches the sky behind the board, which is already an orrery. The boss looks like the source of the sky.',
+    '<b>Encore:</b> the arms jam and fly off one by one, the sun drops through the roof, and then the colonnade falls.',
+  ] },
+];
+
+const sel = document.getElementById('pal'), litBox = document.getElementById('lit'), grid = document.getElementById('grid');
+const scenes = DESIGNS.map((d) => {
+  const card = document.createElement('div'), cv = document.createElement('canvas');
+  card.className = 'card';
+  card.innerHTML = `<h2>${d.name}${d.pick ? '<span class="pick">RECOMMENDED</span>' : ''}</h2><div class="tag">${d.tag}</div>`;
+  cv.className = 'scene'; cv.width = SW; cv.height = SH;
+  card.append(cv);
+  const ul = document.createElement('ul'); ul.innerHTML = d.notes.map((n) => `<li>${n}</li>`).join(''); card.append(ul);
+  grid.append(card);
+  return { d, pp: pen(cv.getContext('2d')) };
+});
+
+function setPalette(key) {
+  const p = PALETTES[key];
+  C = ramp(p);
+  // Page chrome from the same ramp: pale ground, darkest text.
+  const root = document.documentElement.style;
+  [['--ink', C[1]], ['--dark', C[2]], ['--mid', C[3]], ['--light', C[4]], ['--paper', C[5]], ['--white', C[6]], ['--accent', C[8]]].forEach(([v, c]) => root.setProperty(v, c));
+  document.body.style.color = C[1];
+  last = -1;
+}
+let last = -1;
+function tick() {
+  const step = Math.floor(performance.now() / 1000 * 6);
+  if (step !== last && C.length) { last = step; for (const s of scenes) s.d.draw(s.pp, step, litBox.checked); }
+  requestAnimationFrame(tick);
+}
+litBox.onchange = () => { last = -1; };
+sel.onchange = () => setPalette(sel.value);
+
+// Read the palettes straight from the game, so the mockup always matches it.
+fetch('js/options.js').then((r) => r.text()).then((src) => {
+  const m = src.match(/const PALETTES = (\{[\s\S]*?\n\});/);
+  PALETTES = new Function('return ' + m[1])();
+  for (const [k, p] of Object.entries(PALETTES)) sel.add(new Option(p.name, k));
+  setPalette('moss');
+  tick();
+});
+</script>

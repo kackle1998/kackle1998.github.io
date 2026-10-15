@@ -456,8 +456,8 @@ const Net = (() => {
           <span class="ol-icons">${(def.colors || []).map((k) => ico(COLORS[k].icon)).join('')}</span>
           <button class="btn sm" id="olDeck">CHANGE DECK</button></div>
         <div class="ol-btns">
-          <button class="btn big accent" id="olQuick" title="Get paired with the next player who is looking">QUICK MATCH</button>
-          <button class="btn big" id="olCreate" title="Open a match others can see and join">CREATE MATCH</button>
+          <button class="btn big accent" id="olQuick">QUICK MATCH</button>
+          <button class="btn big" id="olCreate">CREATE MATCH</button>
         </div>
         <div class="ol-h">OPEN MATCHES</div>
         <div class="ol-list" id="olList"><span class="muted">Loading...</span></div>

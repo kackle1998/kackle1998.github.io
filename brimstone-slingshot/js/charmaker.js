@@ -81,7 +81,7 @@ const CharMaker = (() => {
           </div>
           <div class="muted ch-note">Your character replaces the default portrait in your player panel and on the victory screen. Changes save automatically.</div>
           <div class="cm-actions">
-            <button class="btn sm" id="resetBtn" title="Go back to the built-in character">RESET TO DEFAULT</button>
+            <button class="btn sm" id="resetBtn">RESET TO DEFAULT</button>
           </div>
         </section>
 
@@ -93,15 +93,15 @@ const CharMaker = (() => {
           </div>
           <canvas id="pix" width="352" height="352"></canvas>
           <div class="cm-toolbtns">
-            <button class="tool" id="undoBtn" title="Undo (Ctrl+Z)">UNDO</button>
+            <button class="tool" id="undoBtn">UNDO</button>
             <button class="tool" id="clearBtn">CLEAR</button>
-            <button class="tool" id="flipBtn" title="Flip horizontally">FLIP</button>
-            <button class="tool" data-shift="0,-1" title="Shift up">&#9650;</button>
-            <button class="tool" data-shift="0,1" title="Shift down">&#9660;</button>
-            <button class="tool" data-shift="-1,0" title="Shift left">&#9664;</button>
-            <button class="tool" data-shift="1,0" title="Shift right">&#9654;</button>
+            <button class="tool" id="flipBtn">FLIP</button>
+            <button class="tool" data-shift="0,-1">&#9650;</button>
+            <button class="tool" data-shift="0,1">&#9660;</button>
+            <button class="tool" data-shift="-1,0">&#9664;</button>
+            <button class="tool" data-shift="1,0">&#9654;</button>
           </div>
-          <button class="btn sm cm-template" id="template" title="Copy any existing art onto the canvas">START FROM ART...</button>
+          <button class="btn sm cm-template" id="template">START FROM ART...</button>
         </section>
       </div>`);
 
@@ -122,7 +122,6 @@ const CharMaker = (() => {
     // Logged in: the character's name is the account's username.
     if (Cloud.user()) {
       $('#fName').readOnly = true;
-      $('#fName').title = 'Your name is your account username.';
     }
   }
 

@@ -81,7 +81,7 @@ const Palette = {
 Palette.apply(Store.read(PALETTE_KEY, 'moss'));
 
 /* ---------- options screen ----------
-   Rows: sound effects, music, CRT, palette, how to play, back. Esc goes back.
+   Rows: sound effects, music, CRT, palette, starting ante and skip to beacon (debug), how to play, back. Esc goes back.
    Opened from the title; over a match from the gear button, where BACK becomes
    RESUME and returns to the table; or from the run map's gear, where `backTo`
    redraws the map (in the new colors, if the palette changed). */
@@ -112,6 +112,16 @@ function showOptions() {
           <button class="db-step" data-d="1" aria-label="Next palette">&gt;</button>
         </div>
       </div>
+      ${isDev() ? `<div class="opt-row"><span class="opt-label">START ANTE (DEBUG)</span>
+        <div class="opt-pal" id="optAnte">
+          <button class="db-step" data-d="-1" aria-label="Earlier starting ante">&lt;</button>
+          <span class="opt-pval">${startAnte()}</span>
+          <button class="db-step" data-d="1" aria-label="Later starting ante">&gt;</button>
+        </div>
+      </div>
+      <div class="opt-row"><span class="opt-label">SKIP TO BEACON (DEBUG)</span>
+        <button class="opt-check${skipBeacon() ? ' on' : ''}" id="optSkip" role="checkbox" aria-checked="${skipBeacon()}" aria-label="Skip to beacon"></button>
+      </div>` : ''}
       <div class="opt-row opt-btn-row"><button class="btn" id="optRules">HOW TO PLAY</button></div>
       <div class="opt-row opt-btn-row"><button class="btn" id="optBack">${optInMatch ? 'RESUME' : 'BACK'}</button></div>
     </div>`, true);
@@ -120,6 +130,8 @@ function showOptions() {
   $$('#optMusic .btn').forEach((b) => (b.onclick = () => optMusic(b.dataset.v === 'on')));
   $$('#optCrt .btn').forEach((b) => (b.onclick = () => optCrt(b.dataset.v === 'on')));
   $$('#optPal .db-step').forEach((b) => (b.onclick = () => stepPalette(+b.dataset.d)));
+  $$('#optAnte .db-step').forEach((b) => (b.onclick = () => stepStartAnte(+b.dataset.d)));
+  if ($('#optSkip')) $('#optSkip').onclick = toggleSkipBeacon;
   $('#optRules').onclick = () => { sfx('select'); showTitleRules(optInMatch); };
   $('#optBack').onclick = () => {
     sfx('select');
@@ -155,6 +167,31 @@ function stepPalette(step) {
   sfx('select');
   CRT.pulse(0.6);
   if (optInMatch && game) { render(); inspectDefault(); } // redraw the table behind in the new colors
+  showOptions();
+}
+
+/* Debug tools are only for the developer's account (usernames are unique ignoring case).
+   Everyone else, guests included, never sees them and they have no effect. */
+const DEV_USER = 'kyle';
+const isDev = () => typeof Cloud !== 'undefined' && (Cloud.user() || '').toLowerCase() === DEV_USER;
+
+/* Debug: the ante a new run starts on (Run.start reads it), 1 to START_ANTE_MAX, kept between
+   sessions. Runs already under way keep their own ante. Always 1 off the dev account. */
+const START_ANTE_KEY = 'cardgrave.debugStartAnte.v1', START_ANTE_MAX = 3;
+const startAnte = () => isDev() ? Math.max(1, Math.min(START_ANTE_MAX, Store.read(START_ANTE_KEY, 1) | 0)) : 1;
+function stepStartAnte(step) {
+  Store.write(START_ANTE_KEY, Math.max(1, Math.min(START_ANTE_MAX, startAnte() + step)));
+  sfx('select');
+  showOptions();
+}
+
+/* Debug: when on, every beacon not yet visited is lit on the run map, so you can sling straight
+   to any stop instead of following the links (Run.reach reads it). Kept between sessions. */
+const SKIP_BEACON_KEY = 'cardgrave.debugSkipBeacon.v1';
+const skipBeacon = () => isDev() && !!Store.read(SKIP_BEACON_KEY, false);
+function toggleSkipBeacon() {
+  Store.write(SKIP_BEACON_KEY, !skipBeacon());
+  sfx('select');
   showOptions();
 }
 

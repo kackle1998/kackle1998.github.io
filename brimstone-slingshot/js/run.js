@@ -64,6 +64,14 @@ const BOSS_RULES = {
   dice:    { name: 'LOADED DICE', text: 'All your face-down traps are swept away.' },
 };
 
+/* This ante's boss (data.js RUN_BOSSES): null for the Dealer, or the boss that replaces it. */
+const runBoss = (s) => RUN_BOSSES[Math.min(s.circuit || 1, RUN_BOSSES.length) - 1];
+/* A stop's name and tooltip; the boss stop's follow the ante's boss. */
+const runStop = (s, t) => {
+  const b = t === 'boss' && runBoss(s);
+  return b ? { ...STOPS.boss, name: b.name, desc: b.stop } : STOPS[t];
+};
+
 const runRand = (R, n) => Math.floor(R() * n);
 function runShuffle(R, a) {
   for (let i = a.length - 1; i > 0; i--) { const j = runRand(R, i + 1); [a[i], a[j]] = [a[j], a[i]]; }
@@ -215,7 +223,7 @@ const RUN_EVENTS = [
     choices: [
       { label: 'DIP A CREATURE', pick: (d) => !d.sigils.includes('haste') && d.sigils.length < 4, need: 'Needs a creature without Haste.',
         act: (run, d) => {
-          if ((run.debugRoll ?? Math.random()) < 0.25) { run.remove(d.rid); return `${d.name} melted away.`; }
+          if (((isDev() ? run.debugRoll : null) ?? Math.random()) < 0.25) { run.remove(d.rid); return `${d.name} melted away.`; }
           run.rc(d.rid).sigils.push('haste');
           return `${d.name} came out with Haste.`;
         } },
@@ -375,8 +383,8 @@ const WHEEL_SPIN_MS = 4200;
 const Run = {
   s: null,           // the saved run, or null
   ids: [],           // CARDS ids registered for the current run
-  debugRoll: null,   // console: force the 25% death rolls (0 = the bad outcome)
-  debugEvent: null,  // console: force the next ? stop's event id
+  debugRoll: null,   // console, dev account only: force the 25% death rolls (0 = the bad outcome)
+  debugEvent: null,  // console, dev account only: force the next ? stop's event id
 
   load() {
     const s = Store.read(RUN_KEY, null);
@@ -492,7 +500,7 @@ const Run = {
         <div class="tablets">${DECKS.map((d, i) => `
           <div class="tablet" data-i="${i}">
             <div class="t-art"><img src="${spriteURL(d.feature)}" alt=""></div>
-            <div class="t-icons">${d.colors.map((c) => ico(COLORS[c].icon)).join('')}<span class="t-life" title="Starting life">${ico('hp')}<b>${runDeck(d).life}</b></span></div>
+            <div class="t-icons">${d.colors.map((c) => ico(COLORS[c].icon)).join('')}<span class="t-life">${ico('hp')}<b>${runDeck(d).life}</b></span></div>
             <div class="t-name">${d.name.toUpperCase()}</div>
             <div class="t-desc">${d.desc}</div>
           </div>`).join('')}
@@ -524,6 +532,7 @@ const Run = {
       cur: 0, done: [], visited: [0], node: null, events: [], dealerBonus: 0,
       stats: { stops: 0, battles: 0, teeth: 0 },
     };
+    if (startAnte() > 1) this.s.circuit = startAnte(); // debug: start further in (see Options)
     this.s.map = genRunMap(this.rand(1));
     this.s.bossRule = Object.keys(BOSS_RULES)[runRand(this.rand(2), 3)];
     pick.forEach((id) => this.add(id));
@@ -540,14 +549,17 @@ const Run = {
 
   reach() {
     const s = this.s, n = s.map.nodes[s.cur];
-    return n.t === 'boss' ? [] : s.map.edges.filter((e) => e[0] === s.cur).map((e) => e[1]);
+    if (n.t === 'boss') return [];
+    // Debug (see Options): any stop not yet visited, linked or not.
+    if (skipBeacon()) return s.map.nodes.filter((m) => !s.visited.includes(m.id)).map((m) => m.id);
+    return s.map.edges.filter((e) => e[0] === s.cur).map((e) => e[1]);
   },
 
   /* The figurine arrived at stop `id` (js/runmap.js). */
   go(id) {
     const s = this.s, ei = s.map.edges.findIndex((e) => e[0] === s.cur && e[1] === id);
-    if (ei < 0) return;
-    s.done.push(ei);
+    if (ei < 0 && !this.reach().includes(id)) return;
+    if (ei >= 0) s.done.push(ei); // a debug skip has no link to mark
     s.cur = id;
     s.visited.push(id);
     s.stats.stops++;
@@ -663,15 +675,17 @@ const Run = {
   },
 
   /* ---------- battle ---------- */
-  /* The opponent's hand: a rival plays their own deck's colors, the boss Dealer a random pair. */
+  /* The opponent's hand: a rival plays their own deck's colors, a later ante's boss its own
+     colors (RUN_BOSSES: the Cosmologist plays three), the boss Dealer a random pair. */
   dealerDeck(n, rival) {
-    const boss = n.t === 'boss', R = this.rand(100 + n.id);
+    const boss = n.t === 'boss', R = this.rand(100 + n.id), chief = boss && runBoss(this.s);
     const home = rival && DECKS[rival.deck];
-    const colors = home ? home.colors.slice(0, 2) : runShuffle(R, COLOR_KEYS.slice()).slice(0, 2);
+    const colors = home ? home.colors.slice(0, 2) : chief ? chief.colors.slice() : runShuffle(R, COLOR_KEYS.slice()).slice(0, 2);
     // The Dealer deals itself commons only: the rarer cards are yours to find.
     const pool = runPool(colors, runCircuitCap(this.s, boss ? BOSS_COST_CAP : DEALER_COST_CAP[n.row])).filter((c) => rarityOf(c) === 'common');
-    const list = {}, lands = boss ? 5 : 4;
-    colors.forEach((k) => (list['land_' + k] = lands));
+    // Tomes: 10 for a boss, 8 otherwise, shared evenly across its colors (any extra to the first).
+    const list = {}, lands = boss ? 10 : 8;
+    colors.forEach((k, i) => (list['land_' + k] = Math.floor(lands / colors.length) + (i < lands % colors.length ? 1 : 0)));
     for (let k = 0, guard = 0; k < (boss ? 10 : 10) && guard < 200; guard++) {
       const open = pool.filter((c) => (list[c.id] || 0) < 2);
       if (!open.length) break;
@@ -680,7 +694,7 @@ const Run = {
       k++;
     }
     const feature = Object.keys(list).filter((id) => CARDS[id].type === 'creature').sort((a, b) => costTotal(CARDS[b].cost) - costTotal(CARDS[a].cost))[0];
-    const name = boss ? 'House Rules' : home ? home.name : DEALER_DECK_NAMES[colors.slice().sort().join('+')];
+    const name = chief ? chief.deck : boss ? 'House Rules' : home ? home.name : DEALER_DECK_NAMES[colors.slice().sort().join('+')];
     return { name, colors, feature: feature || 'dealer', list };
   },
 
@@ -708,8 +722,8 @@ const Run = {
     const cpuDeck = this.dealerDeck(n, rival);
     node.phase = 'battle';
     this.save();
-    // startGame opens with the VS screen (the rival's, or the Dealer's).
-    startGame(this.deckDef(), { cpuDeck, life: [s.life, life], boss: boss ? s.bossRule : null, run: true, foe: rival });
+    // startGame opens with the VS screen (the rival's, the ante's boss's, or the Dealer's).
+    startGame(this.deckDef(), { cpuDeck, life: [s.life, life], boss: boss ? s.bossRule : null, run: true, foe: rival || (boss && runBoss(s)) || null });
   },
 
   /* Called by js/ui.js when a run battle ends (or is conceded). */
@@ -731,7 +745,9 @@ const Run = {
   },
 
   /* ---------- the encore: beating the casino deals you a new circuit ---------- */
-  /* The casino falls and the Pit Boss flings you back to the base (js/runmap.js), then a new
+  /* (Players see each circuit as an Ante: the map's HUD reads "ANTE 2" on the second. In code and
+     in saved runs it stays s.circuit.)
+     The casino falls and the Pit Boss flings you back to the base (js/runmap.js), then a new
      circuit is dealt. Each casino counts as a win on the record; the run goes on until you lose.
      s.encore marks the encore as owed, so a reload partway through skips to the new circuit
      rather than winning the casino twice. */
@@ -795,7 +811,7 @@ const Run = {
         '', `<button class="btn" id="rnAtk">+1 ATTACK</button><button class="btn" id="rnHp">+2 HEALTH</button><button class="btn" id="rnLeave">LEAVE</button>`);
       this.cardGrid($('#rnBody'), [d], null);
       const boost = (stat, by) => {
-        if (k >= 1 && (this.debugRoll ?? Math.random()) < 0.25) {
+        if (k >= 1 && ((isDev() ? this.debugRoll : null) ?? Math.random()) < 0.25) {
           sfx('die');
           CRT.pulse(0.8, true);
           this.remove(d.rid);
@@ -947,7 +963,7 @@ const Run = {
     if (!node.ev) {
       const fresh = RUN_EVENTS.filter((e) => !s.events.includes(e.id));
       const from = fresh.length ? fresh : RUN_EVENTS;
-      const forced = RUN_EVENTS.find((e) => e.id === this.debugEvent);
+      const forced = isDev() && RUN_EVENTS.find((e) => e.id === this.debugEvent);
       node.ev = forced ? forced.id : from[runRand(this.rand(300 + n.id), from.length)].id;
       this.debugEvent = null;
       s.events.push(node.ev);
@@ -969,7 +985,7 @@ const Run = {
       `<div class="rn-event"><img class="rn-art" src="${spriteURL(ev.art)}" alt=""><p>${escapeHTML(ev.text)}</p></div>`,
       ev.choices.map((ch, i) => {
         const ok = this.canChoose(ch);
-        return `<button class="btn" data-ch="${i}" ${ok ? '' : `disabled title="${escapeHTML(ch.need || '')}"`}>${escapeHTML(ch.label)}</button>`;
+        return `<button class="btn" data-ch="${i}" ${ok ? '' : `disabled`}>${escapeHTML(ch.label)}</button>`;
       }).join('') + (ev.choices.some((ch) => !this.canChoose(ch)) ? `<div class="rn-need">${escapeHTML(ev.choices.find((ch) => !this.canChoose(ch)).need || '')}</div>` : ''));
     $$('[data-ch]').forEach((b) => (b.onclick = () => {
       const ch = ev.choices[+b.dataset.ch];
@@ -1065,7 +1081,7 @@ const Run = {
             <div class="slot-readout" id="slRead"></div>
           </div>${pillar}
         </div>
-        <button class="slot-lever${spinning ? ' pulled' : ''}" id="slLever" title="${t ? 'Reroll' : 'Pull the lever'}"><img class="slot-bone" src="${spriteURL('slot_bone')}" alt=""></button>
+        <button class="slot-lever${spinning ? ' pulled' : ''}" id="slLever"><img class="slot-bone" src="${spriteURL('slot_bone')}" alt=""></button>
       </div>`,
       t ? `<button class="btn" id="slTake" ${spinning ? 'disabled' : ''}>TAKE IT</button><button class="btn" id="slPull" ${spinning ? 'disabled' : ''}>REROLL (${price})</button>`
         : `<button class="btn" id="slPull" ${spinning ? 'disabled' : ''}>PULL THE LEVER</button><button class="btn" id="rnLeave" ${spinning ? 'disabled' : ''}>LEAVE</button>`);
@@ -1263,7 +1279,7 @@ const Run = {
           <div class="rn-sub"><span id="rnDeckN">${this.deckSize()}</span> cards. Tomes are free to add or take out.</div></div></div>
         <div class="rn-lands">${s.colors.map((k) => `
           <div class="rn-land" data-k="${k}">${ico(COLORS[k].icon)}<span>${COLORS[k].land.toUpperCase()}<i class="rn-rec">${rec[k]} REC.</i></span>
-            <button class="mini-btn" data-d="-1" title="Remove a ${COLORS[k].land}">-</button><b>${s.lands[k] || 0}</b><button class="mini-btn" data-d="1" title="Add a ${COLORS[k].land}">+</button>
+            <button class="mini-btn" data-d="-1">-</button><b>${s.lands[k] || 0}</b><button class="mini-btn" data-d="1">+</button>
           </div>`).join('')}
         </div>
         <div class="rn-body" id="rnDeckBody"></div>

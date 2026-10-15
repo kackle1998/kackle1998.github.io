@@ -130,7 +130,7 @@ const CardMaker = (() => {
     $('#fSigils').innerHTML = Object.entries(SIGILS).map(([k, s]) => {
       const on = cur.sigils.includes(k);
       const extra = on && (k === 'snipe' || k === 'mend') ? stepper('', '', k, cur[k]) : '';
-      return `<div class="cm-sigil${on ? ' on' : ''}" data-k="${k}" title="${escapeHTML(s.text({ snipe: 'N', mend: 'N' }))}">
+      return `<div class="cm-sigil${on ? ' on' : ''}" data-k="${k}">
         ${ico(s.icon)}<span>${s.name}</span>${extra}</div>`;
     }).join('');
     $$('.cm-sigil').forEach((el) => (el.onclick = (e) => {
@@ -274,7 +274,7 @@ const CardMaker = (() => {
         const mine = me && r.author === me;
         return `<div class="com-item"><div class="card creature">${cardInnerHTML(c)}</div>
           <div class="com-by muted">by ${escapeHTML(r.author)}</div>
-          <button class="btn sm" data-i="${i}" ${mine ? 'disabled title="This is your card"' : ''}>COPY</button></div>`;
+          <button class="btn sm" data-i="${i}" ${mine ? 'disabled' : ''}>COPY</button></div>`;
       }).join('') || `<div class="muted">${COM.search ? 'No matches.' : 'No cards shared yet.'}</div>`;
       grid.querySelectorAll('button[data-i]').forEach((b) => (b.onclick = () => copyCommunityCard(COM.cards[+b.dataset.i])));
     } catch (e) {
@@ -301,9 +301,9 @@ const CardMaker = (() => {
           <div class="cm-sync" id="sync"></div>
           <span class="db-spacer"></span>
           <div id="acctSlot"></div>
-          <button class="btn sm hidden" id="communityBtn" title="Browse cards made by other players">COMMUNITY</button>
-          <button class="btn sm" id="exportBtn" title="Download all your cards as a .json backup">EXPORT</button>
-          <button class="btn sm" id="importBtn" title="Load cards from a .json file">IMPORT</button>
+          <button class="btn sm hidden" id="communityBtn">COMMUNITY</button>
+          <button class="btn sm" id="exportBtn">EXPORT</button>
+          <button class="btn sm" id="importBtn">IMPORT</button>
           <input type="file" id="importFile" accept=".json,application/json" hidden>
           <button class="btn sm" id="cmBack">BACK</button>
         </div>
@@ -342,15 +342,15 @@ const CardMaker = (() => {
           </div>
           <canvas id="pix" width="352" height="352"></canvas>
           <div class="cm-toolbtns">
-            <button class="tool" id="undoBtn" title="Undo (Ctrl+Z)">UNDO</button>
+            <button class="tool" id="undoBtn">UNDO</button>
             <button class="tool" id="clearBtn">CLEAR</button>
-            <button class="tool" id="flipBtn" title="Flip horizontally">FLIP</button>
-            <button class="tool" data-shift="0,-1" title="Shift up">&#9650;</button>
-            <button class="tool" data-shift="0,1" title="Shift down">&#9660;</button>
-            <button class="tool" data-shift="-1,0" title="Shift left">&#9664;</button>
-            <button class="tool" data-shift="1,0" title="Shift right">&#9654;</button>
+            <button class="tool" id="flipBtn">FLIP</button>
+            <button class="tool" data-shift="0,-1">&#9650;</button>
+            <button class="tool" data-shift="0,1">&#9660;</button>
+            <button class="tool" data-shift="-1,0">&#9664;</button>
+            <button class="tool" data-shift="1,0">&#9654;</button>
           </div>
-          <button class="btn sm cm-template" id="template" title="Copy any existing art onto the canvas">START FROM ART...</button>
+          <button class="btn sm cm-template" id="template">START FROM ART...</button>
         </section>
 
         <section class="cm-col cm-preview panel">

@@ -25,7 +25,7 @@ function showDeckBuilder(id, resume = false) {
       <div class="db-top panel">
         <div class="db-title">DECK BUILDER</div>
         <input id="dbName" class="db-input" maxlength="20" spellcheck="false" aria-label="Deck name">
-        <button class="btn sm" id="dbArt" title="Choose or draw this deck's art"><img id="dbArtImg" alt="">ART</button>
+        <button class="btn sm" id="dbArt"><img id="dbArtImg" alt="">ART</button>
         <select id="dbLoad" class="db-input" aria-label="Load a deck"></select>
         <button class="btn sm" id="dbNew">NEW</button>
         <button class="btn sm" id="dbSave">SAVE</button>
@@ -255,9 +255,9 @@ function dbArtChoose(wrap) {
     ${dbArtHead(cur)}
     <div class="da-body">
       <div class="da-grid">
-        <button class="da-tile new" id="daDraw" title="Draw your own 16x16 art"><b>+</b>${drawn ? 'EDIT MY<br>DRAWING' : 'DRAW<br>NEW ART'}</button>
-        ${drawn ? `<button class="da-tile on" id="daKeep" title="Keep the art you drew"><img src="${spriteURL(cur)}" alt=""><span>My drawing</span></button>` : ''}
-        <button class="da-tile${!pick && !drawn ? ' on' : ''}" id="daAuto" title="Use the deck's most expensive creature (changes as you build)">
+        <button class="da-tile new" id="daDraw"><b>+</b>${drawn ? 'EDIT MY<br>DRAWING' : 'DRAW<br>NEW ART'}</button>
+        ${drawn ? `<button class="da-tile on" id="daKeep"><img src="${spriteURL(cur)}" alt=""><span>My drawing</span></button>` : ''}
+        <button class="da-tile${!pick && !drawn ? ' on' : ''}" id="daAuto">
           <img src="${spriteURL(auto)}" alt=""><span>Auto</span></button>
       </div>
       ${section('CARDS IN THIS DECK', inDeck)}
@@ -288,13 +288,13 @@ function dbArtDraw(wrap) {
         <div class="cm-toolbtns">
           <button class="tool" id="undoBtn">UNDO</button>
           <button class="tool" id="clearBtn">CLEAR</button>
-          <button class="tool" id="flipBtn" title="Flip horizontally">FLIP</button>
-          <button class="tool" data-shift="0,-1" title="Shift up">&#9650;</button>
-          <button class="tool" data-shift="0,1" title="Shift down">&#9660;</button>
-          <button class="tool" data-shift="-1,0" title="Shift left">&#9664;</button>
-          <button class="tool" data-shift="1,0" title="Shift right">&#9654;</button>
+          <button class="tool" id="flipBtn">FLIP</button>
+          <button class="tool" data-shift="0,-1">&#9650;</button>
+          <button class="tool" data-shift="0,1">&#9660;</button>
+          <button class="tool" data-shift="-1,0">&#9664;</button>
+          <button class="tool" data-shift="1,0">&#9654;</button>
         </div>
-        <button class="btn sm cm-template" id="template" title="Copy any existing art onto the canvas">START FROM ART...</button>
+        <button class="btn sm cm-template" id="template">START FROM ART...</button>
       </section>
       <div class="da-side">
         <div class="da-h">PREVIEW</div>
@@ -364,7 +364,7 @@ function dbRender() {
 
   // filters
   $('#dbTabs').innerHTML = ['all', ...COLOR_KEYS].map((k) =>
-    `<button class="db-tab${DB.tab === k ? ' on' : ''}" data-k="${k}" title="${k === 'all' ? 'All colors' : COLORS[k].name}">${k === 'all' ? 'ALL' : ico(COLORS[k].icon)}</button>`).join('');
+    `<button class="db-tab${DB.tab === k ? ' on' : ''}" data-k="${k}">${k === 'all' ? 'ALL' : ico(COLORS[k].icon)}</button>`).join('');
   const nCustom = customIds.length;
   $('#dbSource').innerHTML = [['all', 'ALL CARDS'], ['base', 'BASE'], ['custom', `MINE (${nCustom})`]].map(([k, label]) =>
     `<button class="db-tab${DB.source === k ? ' on' : ''}" data-s="${k}">${label}</button>`).join('');
@@ -409,7 +409,7 @@ function dbRender() {
   const rows = creatures.sort(([a], [b]) => costTotal(CARDS[a].cost) - costTotal(CARDS[b].cost) || CARDS[a].name.localeCompare(CARDS[b].name));
   $('#dbList').innerHTML = rows.map(([id, n]) => {
     const c = CARDS[id];
-    return `<div class="db-row${c.custom ? ' custom' : ''}" data-id="${id}" title="Click to remove one">
+    return `<div class="db-row${c.custom ? ' custom' : ''}" data-id="${id}">
       <span class="db-rcost">${costHTML(c.cost)}</span><span class="db-rname">${escapeHTML(c.name)}</span><span class="db-rn">x${n}</span></div>`;
   }).join('') || '<div class="muted db-none">Click cards on the left to add them.</div>';
   $$('#dbList .db-row').forEach((r) => {

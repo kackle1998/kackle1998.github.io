@@ -81,11 +81,11 @@ const PixelEditor = (() => {
 
   function renderTools() {
     q('#palette').innerHTML = PAINTS.map(([ch, name]) =>
-      `<button class="sw${paint === ch ? ' on' : ''}${ch === '.' ? ' erase' : ''}" data-ch="${ch}" title="${name}" style="${PAL[ch] ? `background:${PAL[ch]}` : ''}"></button>`).join('');
+      `<button class="sw${paint === ch ? ' on' : ''}${ch === '.' ? ' erase' : ''}" data-ch="${ch}" style="${PAL[ch] ? `background:${PAL[ch]}` : ''}"></button>`).join('');
     qa('#palette .sw').forEach((b) => (b.onclick = () => { paint = b.dataset.ch; if (tool === 'pick') tool = 'pen'; renderTools(); }));
     q('#tools').innerHTML = [['pen', 'PEN'], ['fill', 'FILL'], ['pick', 'PICK']].map(([k, l]) =>
       `<button class="tool${tool === k ? ' on' : ''}" data-tool="${k}">${l}</button>`).join('') +
-      `<button class="tool${mirror ? ' on' : ''}" id="mirrorBtn" title="Paint both halves at once">MIRROR</button>`;
+      `<button class="tool${mirror ? ' on' : ''}" id="mirrorBtn">MIRROR</button>`;
     qa('#tools [data-tool]').forEach((b) => (b.onclick = () => { tool = b.dataset.tool; renderTools(); }));
     q('#mirrorBtn').onclick = () => { mirror = !mirror; renderTools(); draw(); };
   }
@@ -109,7 +109,7 @@ const PixelEditor = (() => {
   }
 
   function artTile(key, label = artLabel(key), on = false) {
-    return `<button class="da-tile${on ? ' on' : ''}" data-art="${escapeHTML(key)}" title="${escapeHTML(label)}">
+    return `<button class="da-tile${on ? ' on' : ''}" data-art="${escapeHTML(key)}">
       <img src="${spriteURL(key)}" alt=""><span>${escapeHTML(label)}</span></button>`;
   }
 

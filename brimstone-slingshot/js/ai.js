@@ -95,25 +95,42 @@ const AI = {
     return empty[Math.floor(Math.random() * empty.length)];
   },
 
+  /* What tapping `a` costs us: attacking means it can't guard on the enemy's turn.
+     Rough damage the enemy could then push through, weighted up sharply if it would be lethal. */
+  exposure(g, p, a, gone) {
+    const o = g.opp(p);
+    const rest = g.guardsOf(p).filter((c) => c !== a);
+    const foes = g.livingBoard(o).filter((e) => e !== gone);
+    let leak = 0;
+    if (!rest.length) leak = foes.reduce((n, e) => n + g.attackOf(e), 0);
+    else if (!rest.some((c) => has(c, 'airborne') || has(c, 'reach'))) {
+      leak = foes.filter((e) => has(e, 'airborne')).reduce((n, e) => n + g.attackOf(e), 0);
+    }
+    if (!leak) return has(a, 'guardian') && !rest.some((c) => has(c, 'guardian')) ? 1 : 0;
+    return leak >= p.life ? 50 + leak : leak * 0.8;
+  },
+
   /* Pick the single best attack available, or null to stop attacking. */
   chooseAttack(g, p) {
     const o = g.opp(p);
-    const enemies = g.livingBoard(o);
     let best = null, bestScore = 0.5;
     for (const a of p.board) {
       if (!g.canAttack(a)) continue;
+      const risk = this.exposure(g, p, a);
       for (const t of g.targets(a)) {
         let s;
         if (t.player != null) {
-          s = 100 + g.attackOf(a);
+          const n = g.attackOf(a);
+          s = n >= o.life ? 999 : 6 + n * 2 - risk; // lethal always swings; otherwise weigh the counter-hit
         } else {
           const d = g.findCreature(t.uid);
           const r = g.fightPreview(a, d);
           s = (r.dDies ? this.value(g, d) + 3 : r.toD * 0.4)
             - (r.aDies ? this.value(g, a) : r.toA * 0.3)
             + r.pierce * 1.5;
-          if (r.dDies && enemies.length === 1) s += 4; // opens the way for direct hits
+          if (r.dDies && !d.attacked && g.guardsOf(o).length === 1) s += 4; // opens the way for direct hits
           if (has(a, 'leech')) s += r.toD * 0.3;
+          s -= r.dDies ? this.exposure(g, p, a, d) : risk; // tapped or dead, it won't be guarding
         }
         if (s > bestScore) { bestScore = s; best = { a, t }; }
       }

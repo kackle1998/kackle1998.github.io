@@ -110,6 +110,7 @@ class Game {
       if (!c) continue;
       c.sick = false;
       c.attacked = false;
+      c.held = false;
       if (has(c, 'regen') && c.dmg > 0) {
         this.fx.push({ kind: 'heal', uid: c.uid, n: c.dmg });
         c.dmg = 0;
@@ -380,7 +381,7 @@ class Game {
     switch (t.fx) {
       case 'snare': this.damageCreature(a, t.n, false); return a.dead;
       case 'reflect': case 'prism': this.damageCreature(a, this.attackOf(a), false); return true;
-      case 'stasis': this.livingBoard(this.opp(owner)).forEach((c) => (c.attacked = true)); return true;
+      case 'stasis': this.livingBoard(this.opp(owner)).forEach((c) => (c.held = true)); return true; // held, not tapped: they still guard
       case 'pit': this.damageCreature(ctx.creature, Math.max(1, hpLeft(ctx.creature)), true); return true;
       case 'counter': this.say(`${ctx.spell.name} was countered.`, owner); return true;
       case 'cage': this.say(`${a.name} was caught in the cage.`, owner); return true;
@@ -438,6 +439,8 @@ class Game {
   }
 
   livingBoard(p) { return p.board.filter((c) => c && !c.dead); }
+  /* Untapped creatures guard their owner; a creature that has attacked can't until it untaps. */
+  guardsOf(p) { return this.livingBoard(p).filter((c) => !c.attacked); }
 
   strongestEnemy(p) {
     const es = this.livingBoard(this.opp(p));
@@ -446,18 +449,18 @@ class Game {
   }
 
   canAttack(c) {
-    return !!c && !this.over && !c.dead && c.owner === this.active && !c.sick && !c.attacked && this.attackOf(c) > 0;
+    return !!c && !this.over && !c.dead && c.owner === this.active && !c.sick && !c.attacked && !c.held && this.attackOf(c) > 0;
   }
 
   /* Legal targets: [{uid}] creatures and/or {player} for a direct hit. */
   targets(c) {
     const o = this.opp(this.players[c.owner]);
-    const enemies = this.livingBoard(o);
-    const guards = enemies.filter((e) => has(e, 'guardian'));
+    const enemies = this.livingBoard(o), up = this.guardsOf(o);
+    const guards = up.filter((e) => has(e, 'guardian'));
     if (guards.length) return guards.map((e) => ({ uid: e.uid }));
-    const t = enemies.map((e) => ({ uid: e.uid }));
-    const sky = enemies.some((e) => has(e, 'airborne') || has(e, 'reach')); // flyers and Reach guard the sky
-    if (!enemies.length || (has(c, 'airborne') && !sky)) t.push({ player: o.idx });
+    const t = enemies.map((e) => ({ uid: e.uid })); // tapped creatures can still be attacked
+    const sky = up.some((e) => has(e, 'airborne') || has(e, 'reach')); // untapped flyers and Reach guard the sky
+    if (!up.length || (has(c, 'airborne') && !sky)) t.push({ player: o.idx });
     return t;
   }
 
