@@ -134,6 +134,9 @@ function sfx(name, n = 1) {
     // The sigil wheel: a heave to set it turning, then a peg clicking past the pointer.
     case 'wheel': S.noise(0.14, 0.06); S.tone(220, 0.22, 'square', 0.04, 440); break;
     case 'wheelTick': S.tone(1500, 0.015, 'square', 0.016); S.noise(0.01, 0.03); break;
+    // The bowling lane: the ball rumbling down the boards, and a clatter for each step that pins fall.
+    case 'bowlRoll': S.noise(1.0, 0.035); S.tone(70, 1.0, 'triangle', 0.06, 55); break;
+    case 'pins': S.noise(0.08 + 0.02 * n, 0.09); S.tone(620 + n * 90, 0.05, 'square', 0.025, 380); break;
     case 'lose':[392, 330, 262, 196].forEach((f, i) => S.tone(f, 0.32, 'square', 0.05, null, i * 0.22)); break;
   }
 }
@@ -1541,6 +1544,33 @@ async function startGame(deckDef, opts = {}) {
    Not just g.over: a move that ends the game still has to settle and reach endGame(). */
 function abandoned(g) { return game !== g || ended; }
 
+/* Your portrait: the cards still in your library, shuffled fresh each time it opens, so it
+   shows what's left without giving away the order you'll draw them in. The shuffle is for
+   display only (Math.random, not the game's seeded RNG, so online matches stay in step). */
+function showLibrary() {
+  if (!game || ended || !$('#screen').classList.contains('hidden')) return;
+  const lib = game.players[ME].library.slice();
+  for (let i = lib.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [lib[i], lib[j]] = [lib[j], lib[i]];
+  }
+  sfx('select');
+  showScreen(`
+    <div class="rn panel lib">
+      <div class="rn-head"><img class="rn-icon" src="${spriteURL('hero')}" alt="">
+        <div class="rn-headtext"><div class="rn-title">YOUR LIBRARY</div>
+        <div class="rn-sub">${lib.length} card${lib.length === 1 ? '' : 's'} left to draw, in no particular order.</div></div></div>
+      <div class="rn-body" id="libBody"></div>
+      <div class="rn-btns"><button class="btn" id="libClose">CLOSE</button></div>
+    </div>`, true);
+  Run.cardGrid($('#libBody'), lib, null, lib.length > 7);
+  $('#libClose').onclick = closeLibrary;
+}
+function closeLibrary() { Run.tip(null); sfx('select'); hideScreen(); }
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && $('.lib') && !$('#screen').classList.contains('hidden')) { e.preventDefault(); closeLibrary(); }
+});
+
 function showConcede() {
   if (!game || ended || !$('#screen').classList.contains('hidden')) return;
   sfx('select');
@@ -1733,6 +1763,7 @@ function tallyUp(els) {
 $('#bellImg').src = spriteURL('bell');
 $('#bell').addEventListener('click', playerEndTurn);
 $('#cpuPanel').addEventListener('click', onEnemyPanel);
+$('#youPanel').addEventListener('click', (e) => { if (e.target.closest('.portrait')) showLibrary(); });
 $('#gearImg').src = iconURL('gear');
 $('#gearBtn').addEventListener('click', () => {
   if (!game || ended || !$('#screen').classList.contains('hidden')) return;
@@ -1774,4 +1805,6 @@ showTitle();
 // The old cardmaker.html / charmaker.html addresses redirect here with a hash.
 if (location.hash === '#cardmaker') CardMaker.show();
 else if (location.hash === '#character') CharMaker.show();
+// index.html?bowltest opens the bowling test bench (Run.bowlTest in js/run.js).
+if (new URLSearchParams(location.search).has('bowltest')) Run.bowlTest();
 if (location.hash) history.replaceState(null, '', location.pathname + location.search);

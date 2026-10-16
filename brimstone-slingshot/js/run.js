@@ -55,6 +55,7 @@ const STOPS = {
   altar:  { name: 'SIGIL ALTAR', icon: 'ri_altar',  desc: 'Sigil altar: sacrifice a creature to move its sigil.' },
   trade:  { name: 'TRADER',      icon: 'ri_arcana',  desc: 'Trader: spend arcana on cards and tonic.' },
   event:  { name: '???',         icon: 'ri_event',  desc: 'Unknown: something hums under the board.' },
+  bowl:   { name: 'BRIMSTONE LANES', icon: 'ri_rack', desc: 'Bowling: one ball, ten pins, an arcana for every pin that falls.' },
   boss:   { name: 'THE DEALER',  icon: 'ri_chip',   desc: 'The Dealer: the house always plays last.' },
 };
 
@@ -124,6 +125,7 @@ function runOffer(R, colors, n, { row = 1, weight = () => 1, least = 'common', s
 const runPrice = (c) => Math.min(4, Math.max(2, costTotal(c.cost))) + RARITY_MARKUP[rarityOf(c)];
 function getRunRecord() { return { wins: 0, losses: 0, ...Store.read(RUN_RECORD_KEY, {}) }; }
 
+const RUN_BOWL_ODDS = 0.25;                             // chance a map has a bowling lane (js/bowl.js)
 /* Start, 5 rows of 2-3 stops, then the boss. Links run in sorted order, so the map's arcs never cross. */
 function genRunMap(R) {
   const even = (v) => Math.round(v / 2) * 2;
@@ -161,6 +163,12 @@ function genRunMap(R) {
       }
       edges.push([A[i], B[j]]);
     }
+  }
+  // Now and then a campfire, trader or altar is a bowling lane instead (rolled last, so the rest of
+  // the map comes out as it would without it). The last row's campfire always stays.
+  if (R() < RUN_BOWL_ODDS) {
+    const can = nodes.filter((n) => n.row < RUN_ROWS && ['fire', 'trade', 'altar'].includes(n.t));
+    if (can.length) can[runRand(R, can.length)].t = 'bowl';
   }
   return { nodes, edges, layout: RUN_LAYOUT };
 }
@@ -385,6 +393,17 @@ const WHEEL_PX = 112;                                   // drawn at this size, s
 const WHEEL_SKIP = ['snipe', 'mend', 'undying'];        // sigils with an amount, and the mythicals' Undying, stay off the wheel
 const WHEEL_SPIN_MS = 4200;
 
+/* The bowling lane (js/bowl.js), a rare stop of its own (RUN_BOWL_ODDS): one throw, an arcana per pin,
+   and a bonus for a strike. BOWL_STOP is what Run.bowl shows in the header. */
+const BOWL_STOP = { title: 'BRIMSTONE LANES', art: 'ri_rack',
+  text: 'Ten pins stand at the end of a long lane. One ball, one throw. Every pin that falls pays an arcana.' };
+const BOWL_PER_PIN = 1;
+const BOWL_STRIKE_BONUS = 3;
+const BOWL_SLIDE_HZ = 0.35;                              // the ball sliding along the foul line, sweeps a second
+const BOWL_AIM_HZ = 0.4;                                 // the aim swinging
+const BOWL_BAR_HZ = 0.8;                                 // the power bar's marker
+const BOWL_STEP_MS = 100;                                // one frame of the throw
+
 const Run = {
   s: null,           // the saved run, or null
   ids: [],           // CARDS ids registered for the current run
@@ -400,7 +419,7 @@ const Run = {
     this.register();
     return this.s;
   },
-  save() { if (this.s) Store.write(RUN_KEY, this.s); },
+  save() { if (this.s && !this.bwTest) Store.write(RUN_KEY, this.s); }, // the bowling test bench never saves
   rand(salt) { return mulberry32((this.s.seed + salt * 7919) >>> 0); },
 
   /* ---------- run cards: CARDS['run_<rid>'] built from the base card plus the run's changes ---------- */
@@ -584,6 +603,7 @@ const Run = {
       case 'altar': return this.transfer({ icon: 'ri_altar', title: 'SIGIL ALTAR', consume: true });
       case 'trade': return this.trader(n);
       case 'event': return this.event(n);
+      case 'bowl': return this.bowl(n, BOWL_STOP);
       default: return this.leave();
     }
   },
@@ -987,6 +1007,8 @@ const Run = {
       s.events.push(node.ev);
       this.save();
     }
+    // Bowling was a ? event before it became a stop of its own; a saved run that rolled it still bowls.
+    if (node.ev === 'bowl') return this.bowl(n, BOWL_STOP);
     const ev = RUN_EVENTS.find((e) => e.id === node.ev);
     if (ev.screen) return this[ev.screen](n, ev);
     if (node.choice != null) {
@@ -1288,6 +1310,162 @@ const Run = {
       else setTimeout(done, 450);
     };
     requestAnimationFrame(frame);
+  },
+
+  /* ---------- the bowling lane (a ? stop event) ----------
+     node.bw.step: 0 slide the ball along the foul line, 1 aim, 2 stop the power bar. Each choice is
+     saved as it is set, and the throw (node.bw.res) is rolled and saved before the ball rolls,
+     so a reload picks up where you were and shows the same pins falling. */
+  bowl(n, ev, animate = false) {
+    const node = this.s.node, bw = node.bw || (node.bw = { step: 0 }), test = this.bwTest;
+    const res = bw.res, down = res ? res.at.filter((a) => a >= 0).length : 0, strike = down === Bowl.PINS.length;
+    const pay = down * BOWL_PER_PIN + (strike ? BOWL_STRIKE_BONUS : 0);
+    let said = strike ? `STRIKE! +${pay} ARCANA` : down ? `${down} PIN${down > 1 ? 'S' : ''}: +${pay} ARCANA` : 'GUTTER BALL';
+    if (test && res) said += ` · ${this.bowlTally()}`;
+    const SUBS = ['Slide along the foul line. Click or press Space to set your spot.',
+      'Pick your line. Click or press Space to set the angle.',
+      'Stop the bar to throw. A soft throw hooks more; a hard one carries more pins.'];
+    const SETS = ['SET SPOT', 'SET ANGLE', 'THROW'];
+    const pillar = `<div class="slot-pillar">${Array.from({ length: 8 }, (_, i) => `<img src="${iconURL(i % 2 ? 'crossbones' : 'skull', PAL['+'])}" alt="">`).join('')}</div>`;
+    this.screen(ev.art, ev.title, res ? (animate ? 'The ball rolls...' : said) : SUBS[bw.step],
+      `<div class="slot-mach">
+        <div class="slot-cab">${pillar}
+          <div class="slot-main"><div class="bw-stage" id="bwStage"></div></div>${pillar}
+        </div>
+      </div>`,
+      res ? (test ? `<button class="btn" id="bwTake" ${animate ? 'disabled' : ''}>THROW AGAIN</button><button class="btn" id="rnLeave">DONE</button>`
+        : `<button class="btn" id="bwTake" ${animate ? 'disabled' : ''}>${pay ? 'TAKE IT' : 'CONTINUE'}</button>`)
+        : `<button class="btn" id="bwGo">${SETS[bw.step]}</button><button class="btn" id="rnLeave">${test ? 'DONE' : 'LEAVE'}</button>`);
+    $('.rn').classList.add('rn-slots');
+    const stage = $('#bwStage'), draw = Bowl.mount(stage), P = Bowl.PINS;
+    const side = P.map((p) => (p.x < Bowl.CX ? -1 : 1)), still = P.map(() => 0);
+    const tri = (p) => { p -= Math.floor(p); return p < 0.5 ? p * 2 : 2 - p * 2; };
+    if (this.bwKey) document.removeEventListener('keydown', this.bwKey);
+    this.bwKey = null;
+
+    if (res) {
+      // The throw: the figurine leans in, the ball rolls and hooks, pins fall, the sweep clears them,
+      // then the arcana count up one at a time.
+      const roll = Bowl.path(bw.bx, bw.aim, bw.pow), at = res.at, last = Math.max(...at);
+      const sweep = Math.max(Bowl.LEAN + Bowl.ROLL, last + 3) + 3, done = sweep + pay + 2;
+      const frame = (k) => {
+        const t = Math.max(0, Math.min(1, (k - Bowl.LEAN) / Bowl.ROLL)), b = roll(t);
+        draw({
+          fx: bw.bx - 9, bx: b.x, by: b.y, ball: k <= Bowl.LEAN + Bowl.ROLL - 1, spin: Math.max(0, k - Bowl.LEAN) * 1.3,
+          lean: k < 2 ? 14 * (k + 1) : k < 5 ? 20 - (k - 1) * 5 : 0, bob: k >= 5,
+          pins: at.map((a) => (a < 0 ? 0 : k >= sweep ? -1 : k >= a ? Math.min(3, 1 + k - a) : 0)), side: res.side,
+          meter: null, arcana: k > sweep ? Math.min(pay, k - sweep) : 0,
+        });
+      };
+      const finish = () => {
+        if (test) {
+          // The test bench: throw again (button, click or Space), or DONE to go back.
+          const again = () => { sfx('select'); this.s.node = {}; this.bowl(n, ev); };
+          $('#bwTake').onclick = again;
+          stage.onclick = again;
+          this.bwKey = (e) => {
+            if (!stage.isConnected) { document.removeEventListener('keydown', this.bwKey); this.bwKey = null; return; }
+            if (e.code === 'Space' && !e.repeat) { e.preventDefault(); again(); }
+          };
+          document.addEventListener('keydown', this.bwKey);
+          $('#rnLeave').onclick = () => { sfx('select'); this.bowlTestEnd(); };
+          return;
+        }
+        $('#bwTake').onclick = () => {
+          sfx('select');
+          if (pay) this.gainTeeth(pay);
+          this.finishStop(ev.art, ev.title, strike ? `Strike! All ten pins go down. You take ${pay} arcana.`
+            : down ? `${down} pin${down > 1 ? 's' : ''} go down. You take ${pay} arcana.`
+              : 'The ball drops into the gutter. Not a single pin falls.');
+        };
+      };
+      if (!animate || FAST) { frame(done); return finish(); }
+      // Draw the first frame now: the screen was just rebuilt, and waiting for the timer leaves it blank for a step.
+      frame(0);
+      let k = 1;
+      const timer = setInterval(() => {
+        if (!stage.isConnected) return clearInterval(timer);
+        frame(k);
+        if (k === Bowl.LEAN) sfx('bowlRoll');
+        const fell = at.filter((a) => a === k).length;
+        if (fell) sfx('pins', fell);
+        if (k > sweep && k - sweep <= pay) sfx('tally');
+        if (k++ >= done) {
+          clearInterval(timer);
+          $('.rn-sub').textContent = said;
+          $('#bwTake').disabled = false;
+          if (pay) sfx('payout');
+          finish();
+        }
+      }, BOWL_STEP_MS);
+      return;
+    }
+
+    // Setting up the throw: what the sweeping part shows at time `now`, stepped so it moves in frames.
+    let t0 = performance.now();
+    const HZ = [BOWL_SLIDE_HZ, BOWL_AIM_HZ, BOWL_BAR_HZ], STEP = [100, 100, 50];
+    const value = (now) => tri(Math.floor((now - t0) / STEP[bw.step]) * STEP[bw.step] / 1000 * HZ[bw.step] + 0.25);
+    const show = (now) => {
+      const v = value(now), bx = bw.step ? bw.bx : Bowl.CX + (v * 2 - 1) * Bowl.SLIDE;
+      draw({ fx: bx - 9, bx, by: Bowl.BALL_Y, ball: true, spin: 0, lean: 0, aim: bw.step === 1 ? (v * 2 - 1) * 0.2 : bw.step === 2 ? bw.aim : null,
+        pins: still, side, meter: bw.step === 2 ? v : null, arcana: 0 });
+    };
+    const timer = setInterval(() => { if (!stage.isConnected) return clearInterval(timer); show(performance.now()); }, 50);
+    show(t0);
+    const set = () => {
+      if (document.activeElement) document.activeElement.blur(); // so Space doesn't also press the button
+      const now = performance.now(), v = value(now);
+      if (bw.step === 0) bw.bx = Bowl.CX + (v * 2 - 1) * Bowl.SLIDE;
+      else if (bw.step === 1) bw.aim = (v * 2 - 1) * 0.2;
+      else {
+        bw.pow = v;
+        bw.res = Bowl.roll(bw.bx, bw.aim, bw.pow);
+        if (test) test.throws.push({ bx: bw.bx, aim: bw.aim, pow: bw.pow, down: bw.res.at.filter((a) => a >= 0).length });
+        this.save();
+        clearInterval(timer);
+        sfx('lever');
+        return this.bowl(n, ev, true);
+      }
+      bw.step++;
+      this.save();
+      sfx('select');
+      t0 = now;
+      $('#bwGo').textContent = SETS[bw.step];
+      $('.rn-sub').textContent = SUBS[bw.step];
+    };
+    $('#bwGo').onclick = set;
+    stage.onclick = set;
+    this.bwKey = (e) => {
+      if (!stage.isConnected) { document.removeEventListener('keydown', this.bwKey); this.bwKey = null; return; }
+      if (e.code === 'Space' && !e.repeat) { e.preventDefault(); set(); }
+    };
+    document.addEventListener('keydown', this.bwKey);
+    $('#rnLeave').onclick = () => { sfx('select'); if (test) this.bowlTestEnd(); else this.leave(); };
+  },
+
+  /* The bowling test bench: throw as often as you like, with a running tally. Nothing is saved and
+     no arcana are paid; your run (if any) is put back untouched by DONE. Open it with Run.bowlTest()
+     in the console, or index.html?bowltest. Run.bwTest.throws lists every throw's inputs and pins. */
+  bowlTest() {
+    if (!this.bwTest) {
+      if (!this.s) this.load(); // so the header shows your run's life and arcana
+      this.bwTest = { real: this.s, throws: [] };
+    }
+    const r = this.bwTest.real;
+    this.s = { life: r ? r.life : 20, maxLife: r ? r.maxLife : 20, teeth: r ? r.teeth : 0, node: {} };
+    this.bowl(null, BOWL_STOP);
+  },
+  bowlTestEnd() {
+    if (this.bwKey) document.removeEventListener('keydown', this.bwKey);
+    this.bwKey = null;
+    this.s = this.bwTest.real;
+    this.bwTest = null;
+    showTitle();
+  },
+  bowlTally() {
+    const t = this.bwTest.throws, n = t.length, sum = t.reduce((a, x) => a + x.down, 0);
+    const strikes = t.filter((x) => x.down === Bowl.PINS.length).length, gutters = t.filter((x) => !x.down).length;
+    return `THROW ${n} · AVG ${(sum / n).toFixed(1)} · ${strikes} STRIKE${strikes === 1 ? '' : 'S'} · ${gutters} GUTTER${gutters === 1 ? '' : 'S'}`;
   },
 
   /* ---------- the deck, as seen from the map ---------- */

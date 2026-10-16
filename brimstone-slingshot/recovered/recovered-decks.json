@@ -1,0 +1,40 @@
+[
+    {
+        "name":  "Casting Couch",
+        "list":  {
+                     "elk":  2,
+                     "hare":  1,
+                     "wolf":  2,
+                     "drain":  1,
+                     "ghoul":  1,
+                     "might":  1,
+                     "stoat":  2,
+                     "grizzly":  1,
+                     "beartrap":  1,
+                     "land_paw":  6,
+                     "revenant":  1,
+                     "land_bone":  6,
+                     "mooseking":  1,
+                     "c_mv05m13024eu":  2,
+                     "c_mv45eguu0lj5":  2
+                 },
+        "lastPlayed":  "2026-10-11T19:07:00.800112+00:00"
+    },
+    {
+        "name":  "Deathtouch",
+        "list":  {
+                     "rat":  3,
+                     "crow":  3,
+                     "ghoul":  3,
+                     "raise":  3,
+                     "draugr":  3,
+                     "bonelord":  1,
+                     "massacre":  1,
+                     "revenant":  1,
+                     "land_bone":  8,
+                     "opengrave":  1,
+                     "c_mv45y038tt96":  3
+                 },
+        "lastPlayed":  "2026-10-11T23:10:09.406501+00:00"
+    }
+]
