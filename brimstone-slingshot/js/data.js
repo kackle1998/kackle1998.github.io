@@ -507,6 +507,19 @@ function parseCost(s) {
 }
 function costTotal(c) { return (c.g || 0) + COLOR_KEYS.reduce((n, k) => n + (c[k] || 0), 0); }
 
+/* A card's colors come from its cost: every color it has pips of, so 1 Bone + 1 Gem is a Bone and Gem
+   card, and a card with no colored pips (a token, or generic cost only) is Devoid: []. Only a tome
+   stores a `color`, the energy it makes. */
+function cardColors(c) {
+  if (c.type === 'land') return [c.color];
+  return COLOR_KEYS.filter((k) => c.cost && c.cost[k] > 0);
+}
+/* Sort key that groups cards by their first color, with Devoid cards after every color. */
+function colorOrder(c) {
+  const k = cardColors(c)[0];
+  return k ? COLOR_KEYS.indexOf(k) : COLOR_KEYS.length;
+}
+
 /* Card rarity, MtG style: the rarer a card, the stronger it is for its cost. Commons sit on the
    Card Maker's power budget (custom.js cardBudget), rares 2-3 above it, mythicals 4 or more above
    it or break a rule outright. Rare and mythical cards wear a frame (render.js), and a Dealer's Run
@@ -521,66 +534,66 @@ function rarityOf(c) { return c && RARITIES[c.rarity] ? c.rarity : 'common'; }
 
 const CARDS = {};
 /* A name longer than 12 characters is clipped on the card face. */
-function creature(id, name, color, cost, atk, hp, sigils = [], extra = {}) {
-  CARDS[id] = { id, name, type: 'creature', color, cost: parseCost(cost), atk, hp, sigils, sprite: id, ...extra };
+function creature(id, name, cost, atk, hp, sigils = [], extra = {}) {
+  CARDS[id] = { id, name, type: 'creature', cost: parseCost(cost), atk, hp, sigils, sprite: id, ...extra };
 }
 
 // Beast
-creature('stoat',     'Stoat',      'paw', 'P',    1, 2, [], { flavor: 'Small, quick, and very rude.' });
-creature('hare',      'Hare',       'paw', 'P',    1, 1, ['haste'], { flavor: 'Gone before you blink.' });
-creature('wolf',      'Wolf',       'paw', '1P',   3, 2, [], { flavor: 'It hunts where the moss grows thick.' });
-creature('boar',      'Raging Boar','paw', '1PP',  3, 3, ['haste']);
-creature('elk',       'Elk',        'paw', '2P',   3, 4, ['trample']);
-creature('grizzly',   'Grizzly',    'paw', '2PP',  5, 5, ['trample'], { flavor: 'The forest goes quiet when it wakes.' });
-creature('mooseking', 'Moose King', 'paw', '3PP',  6, 6, ['trample', 'rally'], { flavor: 'Crowned by the antlers of a hundred rivals.' });
-creature('porcupine', 'Porcupine',  'paw', 'P',    1, 2, ['thorns'], { flavor: 'Pet it once. Only once.' });
-creature('badger',    'Badger',     'paw', '1P',   2, 2, ['bloodlust'], { flavor: 'It does not back down. It never learned how.' });
-creature('cub',       'Bear Cub',   'paw', '1P',   1, 2, ['grow'], { flavor: 'Feed it. Watch it. Then run.' });
-creature('weaver',    'Web Weaver', 'paw', '2P',   2, 4, ['reach'], { flavor: 'The canopy is hers. Nothing flies through it twice.' });
-creature('alpha',     'Alpha Wolf', 'paw', '2PP',  5, 5, ['rally', 'bloodlust'], { rarity: 'rare', flavor: 'The pack hunts as one. It hunts first.' });
-creature('oldtusk',   'Old Tusk',   'paw', '3PP',  7, 7, ['trample', 'thorns', 'warcry'], { rarity: 'mythical', flavor: 'It walked the world before the first card was dealt.' });
-CARDS.pup = { id: 'pup', name: 'Wolf Pup', type: 'creature', color: 'paw', cost: parseCost('0'), atk: 1, hp: 1, sigils: [], sprite: 'pup', token: true };
+creature('stoat',     'Stoat',      'P',    1, 2, [], { flavor: 'Small, quick, and very rude.' });
+creature('hare',      'Hare',       'P',    1, 1, ['haste'], { flavor: 'Gone before you blink.' });
+creature('wolf',      'Wolf',       '1P',   3, 2, [], { flavor: 'It hunts where the moss grows thick.' });
+creature('boar',      'Raging Boar','1PP',  3, 3, ['haste']);
+creature('elk',       'Elk',        '2P',   3, 4, ['trample']);
+creature('grizzly',   'Grizzly',    '2PP',  5, 5, ['trample'], { flavor: 'The forest goes quiet when it wakes.' });
+creature('mooseking', 'Moose King', '3PP',  6, 6, ['trample', 'rally'], { flavor: 'Crowned by the antlers of a hundred rivals.' });
+creature('porcupine', 'Porcupine',  'P',    1, 2, ['thorns'], { flavor: 'Pet it once. Only once.' });
+creature('badger',    'Badger',     '1P',   2, 2, ['bloodlust'], { flavor: 'It does not back down. It never learned how.' });
+creature('cub',       'Bear Cub',   '1P',   1, 2, ['grow'], { flavor: 'Feed it. Watch it. Then run.' });
+creature('weaver',    'Web Weaver', '2P',   2, 4, ['reach'], { flavor: 'The canopy is hers. Nothing flies through it twice.' });
+creature('alpha',     'Alpha Wolf', '2PP',  5, 5, ['rally', 'bloodlust'], { rarity: 'rare', flavor: 'The pack hunts as one. It hunts first.' });
+creature('oldtusk',   'Old Tusk',   '3PP',  7, 7, ['trample', 'thorns', 'warcry'], { rarity: 'mythical', flavor: 'It walked the world before the first card was dealt.' });
+CARDS.pup = { id: 'pup', name: 'Wolf Pup', type: 'creature', cost: parseCost('0'), atk: 1, hp: 1, sigils: [], sprite: 'pup', token: true };
 // Bone
-creature('rat',       'Grave Rat',  'bone', 'K',   1, 1, ['bonespawn']);
-creature('bat',       'Vampire Bat','bone', '1K',  1, 2, ['airborne', 'leech']);
-creature('draugr',    'Draugr',     'bone', '1K',  1, 3, ['bonespawn'], { flavor: 'Something still stirs inside the armor.' });
-creature('ghoul',     'Ghoul',      'bone', '2K',  2, 2, ['deathtouch']);
-creature('crow',      'Plague Crow','bone', '2K',  1, 2, ['airborne', 'deathtouch']);
-creature('revenant',  'Revenant',   'bone', '2KK', 4, 4, ['leech']);
-creature('bonelord',  'Bone Lord',  'bone', '3KK', 4, 4, ['rally', 'bonespawn'], { flavor: 'All bones answer to the crown.' });
-creature('hellhound', 'Hellhound',  'bone', '1K',  2, 2, ['spite'], { flavor: 'Its last breath is still fire.' });
-creature('banshee',   'Banshee',    'bone', '2K',  2, 2, ['airborne', 'spite'], { flavor: 'Her scream outlives her.' });
-creature('robber',    'Grave Robber','bone','2K',  2, 3, ['scholar', 'bonespawn'], { flavor: 'Every grave has something worth taking.' });
-creature('nightgaunt','Nightgaunt', 'bone', '2KK', 3, 4, ['airborne', 'deathtouch', 'leech'], { rarity: 'rare', flavor: 'No face. No sound. No mercy.' });
-creature('dracolich', 'Dracolich',  'bone', '3KK', 5, 5, ['airborne', 'undying', 'spite', 'leech'], { rarity: 'mythical', flavor: 'Kill it again. See what happens.' });
-CARDS.skeleton = { id: 'skeleton', name: 'Skeleton', type: 'creature', color: 'bone', cost: parseCost('0'), atk: 1, hp: 1, sigils: [], sprite: 'skeleton', token: true };
+creature('rat',       'Grave Rat',  'K',   1, 1, ['bonespawn']);
+creature('bat',       'Vampire Bat','1K',  1, 2, ['airborne', 'leech']);
+creature('draugr',    'Draugr',     '1K',  1, 3, ['bonespawn'], { flavor: 'Something still stirs inside the armor.' });
+creature('ghoul',     'Ghoul',      '2K',  2, 2, ['deathtouch']);
+creature('crow',      'Plague Crow','2K',  1, 2, ['airborne', 'deathtouch']);
+creature('revenant',  'Revenant',   '2KK', 4, 4, ['leech']);
+creature('bonelord',  'Bone Lord',  '3KK', 4, 4, ['rally', 'bonespawn'], { flavor: 'All bones answer to the crown.' });
+creature('hellhound', 'Hellhound',  '1K',  2, 2, ['spite'], { flavor: 'Its last breath is still fire.' });
+creature('banshee',   'Banshee',    '2K',  2, 2, ['airborne', 'spite'], { flavor: 'Her scream outlives her.' });
+creature('robber',    'Grave Robber','2K',  2, 3, ['scholar', 'bonespawn'], { flavor: 'Every grave has something worth taking.' });
+creature('nightgaunt','Nightgaunt', '2KK', 3, 4, ['airborne', 'deathtouch', 'leech'], { rarity: 'rare', flavor: 'No face. No sound. No mercy.' });
+creature('dracolich', 'Dracolich',  '3KK', 5, 5, ['airborne', 'undying', 'spite', 'leech'], { rarity: 'mythical', flavor: 'Kill it again. See what happens.' });
+CARDS.skeleton = { id: 'skeleton', name: 'Skeleton', type: 'creature', cost: parseCost('0'), atk: 1, hp: 1, sigils: [], sprite: 'skeleton', token: true };
 // Gem
-creature('shard',     'Mox Shard',  'gem', 'G',    0, 4, ['guardian'], { flavor: 'It hums when struck.' });
-creature('golem',     'Stone Golem','gem', '1G',   2, 4, ['regen']);
-creature('moth',      'Crystal Moth','gem','1G',   1, 2, ['airborne', 'regen']);
-creature('geode',     'Heal Geode', 'gem', '1G',   1, 3, ['mend'], { mend: 3 });
-creature('sentinel',  'Gem Sentinel','gem','2G',   1, 5, ['guardian']);
-creature('shardblade','Shardblade', 'gem', '1GG',  3, 2, ['quick']);
-creature('drake',     'Prism Drake','gem', '2GG',  3, 4, ['airborne']);
-creature('colossus',  'Gem Colossus','gem','3GG',  5, 7, ['guardian', 'regen'], { flavor: 'A mountain that learned to walk.' });
-creature('bud',       'Crystal Bud','gem', '1G',   0, 3, ['grow'], { flavor: 'Give it a century. Or three turns.' });
-creature('crab',      'Quartz Crab','gem', '1G',   1, 3, ['thorns'], { flavor: 'Its shell grew teeth.' });
-creature('obsidian',  'Obsidian Eye','gem','2G',   1, 4, ['guardian', 'reach'], { flavor: 'It watches the sky so you don\'t have to.' });
-creature('warden',    'Gem Warden', 'gem', '2GG',  4, 6, ['guardian', 'regen', 'thorns'], { rarity: 'rare', flavor: 'Nothing has ever moved it. Plenty has tried.' });
-creature('diamondwyrm','Diamond Wyrm','gem','3GG', 5, 7, ['airborne', 'quick', 'regen', 'thorns'], { rarity: 'mythical', flavor: 'It hoards nothing. It is the hoard.' });
-CARDS.statue = { id: 'statue', name: 'Stone Statue', type: 'creature', color: 'gem', cost: parseCost('0'), atk: 0, hp: 3, sigils: [], sprite: 'statue', token: true, flavor: 'Whatever it was, it is a statue now.' };
+creature('shard',     'Mox Shard',  'G',    0, 4, ['guardian'], { flavor: 'It hums when struck.' });
+creature('golem',     'Stone Golem','1G',   2, 4, ['regen']);
+creature('moth',      'Crystal Moth','1G',   1, 2, ['airborne', 'regen']);
+creature('geode',     'Heal Geode', '1G',   1, 3, ['mend'], { mend: 3 });
+creature('sentinel',  'Gem Sentinel','2G',   1, 5, ['guardian']);
+creature('shardblade','Shardblade', '1GG',  3, 2, ['quick']);
+creature('drake',     'Prism Drake','2GG',  3, 4, ['airborne']);
+creature('colossus',  'Gem Colossus','3GG',  5, 7, ['guardian', 'regen'], { flavor: 'A mountain that learned to walk.' });
+creature('bud',       'Crystal Bud','1G',   0, 3, ['grow'], { flavor: 'Give it a century. Or three turns.' });
+creature('crab',      'Quartz Crab','1G',   1, 3, ['thorns'], { flavor: 'Its shell grew teeth.' });
+creature('obsidian',  'Obsidian Eye','2G',   1, 4, ['guardian', 'reach'], { flavor: 'It watches the sky so you don\'t have to.' });
+creature('warden',    'Gem Warden', '2GG',  4, 6, ['guardian', 'regen', 'thorns'], { rarity: 'rare', flavor: 'Nothing has ever moved it. Plenty has tried.' });
+creature('diamondwyrm','Diamond Wyrm','3GG', 5, 7, ['airborne', 'quick', 'regen', 'thorns'], { rarity: 'mythical', flavor: 'It hoards nothing. It is the hoard.' });
+CARDS.statue = { id: 'statue', name: 'Stone Statue', type: 'creature', cost: parseCost('0'), atk: 0, hp: 3, sigils: [], sprite: 'statue', token: true, flavor: 'Whatever it was, it is a statue now.' };
 // Arcane
-creature('apprentice','Apprentice', 'hat', 'H',    1, 1, ['scholar']);
-creature('wisp',      'Wisp',       'hat', '1H',   2, 1, ['airborne']);
-creature('adept',     'Fire Adept', 'hat', '1H',   1, 2, ['snipe'], { snipe: 1 });
-creature('owl',       'Owl Familiar','hat','2H',   2, 2, ['airborne', 'scholar']);
-creature('battlemage','Battlemage', 'hat', '2H',   3, 2, ['quick']);
-creature('archmage',  'Archmage',   'hat', '3HH',  3, 4, ['snipe', 'scholar'], { snipe: 3, flavor: 'Old enough to remember the first card.' });
-creature('wyrm',      'Storm Wyrm', 'hat', '3HH',  5, 4, ['airborne'], { flavor: 'Thunder follows it like a dog.' });
-creature('crane',     'Paper Crane','hat', '1H',   1, 1, ['airborne', 'scholar'], { flavor: 'Folded from a spell that didn\'t work.' });
-creature('monk',      'Thunder Monk','hat','2H',   2, 3, ['shockwave'], { flavor: 'Every prayer ends in thunder.' });
-creature('djinn',     'Storm Djinn','hat', '3H',   4, 5, ['airborne', 'quick'], { rarity: 'rare', flavor: 'It grants three wishes. All of them are lightning.' });
-creature('phoenix',   'Phoenix',    'hat', '2HH',  4, 4, ['airborne', 'haste', 'undying'], { rarity: 'mythical', flavor: 'It has died a thousand times. It is not tired of it.' });
+creature('apprentice','Apprentice', 'H',    1, 1, ['scholar']);
+creature('wisp',      'Wisp',       '1H',   2, 1, ['airborne']);
+creature('adept',     'Fire Adept', '1H',   1, 2, ['snipe'], { snipe: 1 });
+creature('owl',       'Owl Familiar','2H',   2, 2, ['airborne', 'scholar']);
+creature('battlemage','Battlemage', '2H',   3, 2, ['quick']);
+creature('archmage',  'Archmage',   '3HH',  3, 4, ['snipe', 'scholar'], { snipe: 3, flavor: 'Old enough to remember the first card.' });
+creature('wyrm',      'Storm Wyrm', '3HH',  5, 4, ['airborne'], { flavor: 'Thunder follows it like a dog.' });
+creature('crane',     'Paper Crane','1H',   1, 1, ['airborne', 'scholar'], { flavor: 'Folded from a spell that didn\'t work.' });
+creature('monk',      'Thunder Monk','2H',   2, 3, ['shockwave'], { flavor: 'Every prayer ends in thunder.' });
+creature('djinn',     'Storm Djinn','3H',   4, 5, ['airborne', 'quick'], { rarity: 'rare', flavor: 'It grants three wishes. All of them are lightning.' });
+creature('phoenix',   'Phoenix',    '2HH',  4, 4, ['airborne', 'haste', 'undying'], { rarity: 'mythical', flavor: 'It has died a thousand times. It is not tired of it.' });
 
 for (const k of COLOR_KEYS) {
   CARDS['land_' + k] = { id: 'land_' + k, name: COLORS[k].land, type: 'land', color: k, cost: parseCost('0'), sigils: [], sprite: 'land_' + k };
@@ -589,43 +602,43 @@ for (const k of COLOR_KEYS) {
 /* ---------- spells (sorcery speed: cast on your own turn only, then to the grave) ----------
    fx: what it does. n: how much. target: 'enemy' | 'ally' creature, or none. Art = its icon.
    extra: rarity, and `makes`, the token a spell puts on the board. */
-function spell(id, name, color, cost, fx, n, target, short, text, extra = {}) {
-  CARDS[id] = { id, name, type: 'spell', color, cost: parseCost(cost), fx, n, target, short, text, sigils: [], sprite: id, ...extra };
+function spell(id, name, cost, fx, n, target, short, text, extra = {}) {
+  CARDS[id] = { id, name, type: 'spell', cost: parseCost(cost), fx, n, target, short, text, sigils: [], sprite: id, ...extra };
   SPRITES[id] = iconSprite(id);
 }
-spell('might',    'Feral Might', 'paw',  '1P',  'buff',    2, 'ally',  'Ally gets +2/+2',      'Your target creature gets +2 attack and +2 health for good.');
-spell('howl',     'Pack Howl',   'paw',  '2PP', 'howl',    1, null,    'All allies +1/+1',     'Every creature you control gets +1 attack and +1 health for good.');
-spell('drain',    'Soul Drain',  'bone', '1K',  'drain',   2, null,    'Enemy -2, you +2',     'Deal 2 damage to the enemy and gain 2 life.');
-spell('massacre', 'Massacre',    'bone', '3KK', 'massacre', 2, null,  'Foes -2/-2, drain 2',  'Every enemy creature gets -2/-2 until end of turn. If any perish, the enemy loses 2 life and you gain 2.');
-spell('raise',    'Raise Dead',  'bone', '2K',  'raise',   1, null,    'Grave creature to hand', 'Return a random creature from your grave to your hand.');
-spell('restore',  'Crystal Mend','gem',  '1G',  'restore', 2, 'ally',  'Heal ally, +2 life',   'Fully heal your target creature and gain 2 life.');
-spell('shatter',  'Shatter',     'gem',  '2GG', 'shatter', 3, 'enemy', 'Kill foe, 3 atk or less', 'Destroy target enemy creature with 3 or less attack.');
-spell('firebolt', 'Firebolt',    'hat',  '1H',  'bolt',    3, 'enemy', '3 damage to a foe',    'Deal 3 damage to target enemy creature.');
-spell('insight',  'Insight',     'hat',  '2H',  'draw',    2, null,    'Draw 2 cards',         'Draw 2 cards.');
-spell('meteor',   'Meteor',      'hat',  '3HH', 'quake',   2, null,    '2 damage to all foes', 'Deal 2 damage to every enemy creature.');
-spell('wolfden',  'Wolf Den',    'paw',  '1P',  'swarm',   2, null,    'Two 1/1 pups',         'Summon two 1/1 Wolf Pups into your empty slots.', { makes: 'pup' });
-spell('stampede', 'Stampede',    'paw',  '2PP', 'stampede', 2, null,   'Allies +2 atk, Piercing', 'Every creature you control gets +2 attack and Piercing for good.', { rarity: 'rare' });
-spell('coil',     'Death Coil',  'bone', '1K',  'coil',    2, 'enemy', 'Foe -2, you +2 life',  'Deal 2 damage to target enemy creature and gain 2 life.');
-spell('exhume',   'Exhume',      'bone', '2KK', 'exhume',  1, null,    'Grave creature to board', 'The priciest creature in your grave rises into an empty slot on your board.', { rarity: 'rare' });
-spell('petrify',  'Petrify',     'gem',  '1GG', 'petrify', 0, 'enemy', 'Foe becomes 0/3 stone', 'Target enemy creature turns into a 0/3 Stone Statue with no sigils.', { rarity: 'rare', makes: 'statue' });
-spell('spark',    'Spark',       'hat',  'H',   'spark',   1, 'enemy', '1 to a foe, draw 1',   'Deal 1 damage to target enemy creature, then draw a card.');
-spell('chainbolt','Chain Bolt',  'hat',  '1HH', 'chain',   3, 'enemy', '3 to a foe and enemy', 'Deal 3 damage to target enemy creature and 3 to the enemy.', { rarity: 'rare' });
-spell('mindtheft','Mind Theft',  'hat',  '3HH', 'theft',   0, 'enemy', 'Steal a foe',          'Take control of target enemy creature for good. It waits a turn to attack, unless it has Haste.', { rarity: 'mythical' });
+spell('might',    'Feral Might', '1P',  'buff',    2, 'ally',  'Ally gets +2/+2',      'Your target creature gets +2 attack and +2 health for good.');
+spell('howl',     'Pack Howl',   '2PP', 'howl',    1, null,    'All allies +1/+1',     'Every creature you control gets +1 attack and +1 health for good.');
+spell('drain',    'Soul Drain',  '1K',  'drain',   2, null,    'Enemy -2, you +2',     'Deal 2 damage to the enemy and gain 2 life.');
+spell('massacre', 'Massacre',    '3KK', 'massacre', 2, null,  'Foes -2/-2, drain 2',  'Every enemy creature gets -2/-2 until end of turn. If any perish, the enemy loses 2 life and you gain 2.');
+spell('raise',    'Raise Dead',  '2K',  'raise',   1, null,    'Grave creature to hand', 'Return a random creature from your grave to your hand.');
+spell('restore',  'Crystal Mend','1G',  'restore', 2, 'ally',  'Heal ally, +2 life',   'Fully heal your target creature and gain 2 life.');
+spell('shatter',  'Shatter',     '2GG', 'shatter', 3, 'enemy', 'Kill foe, 3 atk or less', 'Destroy target enemy creature with 3 or less attack.');
+spell('firebolt', 'Firebolt',    '1H',  'bolt',    3, 'enemy', '3 damage to a foe',    'Deal 3 damage to target enemy creature.');
+spell('insight',  'Insight',     '2H',  'draw',    2, null,    'Draw 2 cards',         'Draw 2 cards.');
+spell('meteor',   'Meteor',      '3HH', 'quake',   2, null,    '2 damage to all foes', 'Deal 2 damage to every enemy creature.');
+spell('wolfden',  'Wolf Den',    '1P',  'swarm',   2, null,    'Two 1/1 pups',         'Summon two 1/1 Wolf Pups into your empty slots.', { makes: 'pup' });
+spell('stampede', 'Stampede',    '2PP', 'stampede', 2, null,   'Allies +2 atk, Piercing', 'Every creature you control gets +2 attack and Piercing for good.', { rarity: 'rare' });
+spell('coil',     'Death Coil',  '1K',  'coil',    2, 'enemy', 'Foe -2, you +2 life',  'Deal 2 damage to target enemy creature and gain 2 life.');
+spell('exhume',   'Exhume',      '2KK', 'exhume',  1, null,    'Grave creature to board', 'The priciest creature in your grave rises into an empty slot on your board.', { rarity: 'rare' });
+spell('petrify',  'Petrify',     '1GG', 'petrify', 0, 'enemy', 'Foe becomes 0/3 stone', 'Target enemy creature turns into a 0/3 Stone Statue with no sigils.', { rarity: 'rare', makes: 'statue' });
+spell('spark',    'Spark',       'H',   'spark',   1, 'enemy', '1 to a foe, draw 1',   'Deal 1 damage to target enemy creature, then draw a card.');
+spell('chainbolt','Chain Bolt',  '1HH', 'chain',   3, 'enemy', '3 to a foe and enemy', 'Deal 3 damage to target enemy creature and 3 to the enemy.', { rarity: 'rare' });
+spell('mindtheft','Mind Theft',  '3HH', 'theft',   0, 'enemy', 'Steal a foe',          'Take control of target enemy creature for good. It waits a turn to attack, unless it has Haste.', { rarity: 'mythical' });
 
 /* ---------- traps (paid for and set face-down on your turn; spring on the enemy's) ----------
    trigger: the enemy action that springs it. Only one trap springs per action. */
-function trap(id, name, color, cost, trigger, fx, n, short, text, extra = {}) {
-  CARDS[id] = { id, name, type: 'trap', color, cost: parseCost(cost), trigger, fx, n, short, text, sigils: [], sprite: id, ...extra };
+function trap(id, name, cost, trigger, fx, n, short, text, extra = {}) {
+  CARDS[id] = { id, name, type: 'trap', cost: parseCost(cost), trigger, fx, n, short, text, sigils: [], sprite: id, ...extra };
   SPRITES[id] = iconSprite(id);
 }
-trap('beartrap',   'Bear Trap',   'paw',  '1P', 'attack', 'snare',   3, 'Attacker takes 3',      'When an enemy creature attacks, deal 3 damage to it. If it perishes, the attack is stopped.');
-trap('opengrave',  'Open Grave',  'bone', '2K', 'summon', 'pit',     4, 'Kill summon, 4+ atk',   'When the enemy summons a creature with 4 or more attack, destroy it.');
-trap('mirrorward', 'Mirror Ward', 'gem',  '1G', 'attack', 'reflect', 0, 'Reflect direct hit',    'When an enemy creature attacks you directly, stop the attack and deal its attack to itself.');
-trap('counter',    'Counterspell','hat',  '1H', 'spell',  'counter', 0, 'Cancel a spell',        'When the enemy casts a spell, cancel it. Their energy is still spent.');
-trap('stasisrune', 'Stasis Rune', 'hat',  '2H', 'attack', 'stasis',  0, 'Stop all attacks',      'When an enemy creature attacks, stop it. None of their creatures may attack again this turn.');
-trap('cage',       'Crystal Cage','gem',  '1G', 'attack', 'cage',    0, 'Stop an attack',        'When an enemy creature attacks, stop the attack.');
-trap('prismward',  'Prism Ward',  'gem', '1GG', 'attack', 'prism',   0, 'Reflect any attack',    'When an enemy creature attacks, stop it and deal its attack to itself.', { rarity: 'rare' });
-trap('glyph',      'Fire Glyph',  'hat',  '1H', 'summon', 'glyph',   2, 'Summon takes 2',        'When the enemy summons a creature, deal 2 damage to it.');
+trap('beartrap',   'Bear Trap',   '1P', 'attack', 'snare',   3, 'Attacker takes 3',      'When an enemy creature attacks, deal 3 damage to it. If it perishes, the attack is stopped.');
+trap('opengrave',  'Open Grave',  '2K', 'summon', 'pit',     4, 'Kill summon, 4+ atk',   'When the enemy summons a creature with 4 or more attack, destroy it.');
+trap('mirrorward', 'Mirror Ward', '1G', 'attack', 'reflect', 0, 'Reflect direct hit',    'When an enemy creature attacks you directly, stop the attack and deal its attack to itself.');
+trap('counter',    'Counterspell','1H', 'spell',  'counter', 0, 'Cancel a spell',        'When the enemy casts a spell, cancel it. Their energy is still spent.');
+trap('stasisrune', 'Stasis Rune', '2H', 'attack', 'stasis',  0, 'Stop all attacks',      'When an enemy creature attacks, stop it. None of their creatures may attack again this turn.');
+trap('cage',       'Crystal Cage','1G', 'attack', 'cage',    0, 'Stop an attack',        'When an enemy creature attacks, stop the attack.');
+trap('prismward',  'Prism Ward',  '1GG', 'attack', 'prism',   0, 'Reflect any attack',    'When an enemy creature attacks, stop it and deal its attack to itself.', { rarity: 'rare' });
+trap('glyph',      'Fire Glyph',  '1H', 'summon', 'glyph',   2, 'Summon takes 2',        'When the enemy summons a creature, deal 2 damage to it.');
 
 const DECKS = [
   {

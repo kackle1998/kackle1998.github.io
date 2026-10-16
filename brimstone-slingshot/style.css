@@ -594,6 +594,7 @@ a.btn { text-decoration: none; display: inline-block; }
   background: var(--light); border: 3px solid var(--ink); display: flex; align-items: center; justify-content: center;
 }
 .db-tab .ico { width: 18px; height: 18px; }
+.db-tab .gen { width: 18px; height: 18px; font-size: 18px; line-height: 18px; }
 .db-tab:hover { background: var(--white); }
 .db-tab.on { background: var(--paper); box-shadow: inset 0 -4px 0 var(--accent); }
 .db-pageinfo { margin-left: auto; font-family: var(--pixel); font-size: 12px; }

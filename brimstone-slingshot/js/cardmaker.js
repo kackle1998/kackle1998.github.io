@@ -15,8 +15,8 @@ const CardMaker = (() => {
 
   function newRecord() {
     return {
-      id: newCustomId(), name: 'New Card', color: 'paw',
-      cost: { g: 1, paw: 1, bone: 0, gem: 0, hat: 0 }, atk: 2, hp: 2,
+      id: newCustomId(), name: 'New Card',
+      cost: { g: 0, paw: 0, bone: 0, gem: 0, hat: 0 }, atk: 0, hp: 1,
       sigils: [], snipe: 1, mend: 2, flavor: '', pixels: Array(PixelEditor.SIZE).fill(PixelEditor.BLANK_ROW),
     };
   }
@@ -112,16 +112,6 @@ const CardMaker = (() => {
     if (document.activeElement !== f) f.value = cur.name;
     const fl = $('#fFlavor');
     if (document.activeElement !== fl) fl.value = cur.flavor || '';
-
-    $('#fColor').innerHTML = COLOR_KEYS.map((k) =>
-      `<button class="cm-color${cur.color === k ? ' on' : ''}" data-k="${k}">${ico(COLORS[k].icon)}<span>${COLORS[k].name}</span></button>`).join('');
-    $$('.cm-color').forEach((b) => (b.onclick = () => {
-      const old = cur.color;
-      cur.color = b.dataset.k;
-      // Move the old color's pips to the new color, which is what you almost always want.
-      if (old !== cur.color && cur.cost[old]) { cur.cost[cur.color] += cur.cost[old]; cur.cost[old] = 0; setVal(cur.color, cur.cost[cur.color]); }
-      changed();
-    }));
 
     $('#fCost').innerHTML = stepper('ANY', '', 'g', cur.cost.g) +
       COLOR_KEYS.map((k) => stepper('', ico(COLORS[k].icon), k, cur.cost[k])).join('');
@@ -396,7 +386,6 @@ const CardMaker = (() => {
           <label class="cm-field"><span>NAME</span>
             <input class="db-input" id="fName" maxlength="16" spellcheck="false">
           </label>
-          <div class="cm-field"><span>COLOR</span><div class="cm-colors" id="fColor"></div></div>
           <div class="cm-field"><span>COST</span><div class="cm-steppers" id="fCost"></div></div>
           <div class="cm-field"><span>STATS</span><div class="cm-steppers" id="fStats"></div></div>
           <div class="cm-field"><span>SIGILS <em class="muted">(up to 4)</em></span><div class="cm-sigils" id="fSigils"></div></div>

@@ -71,6 +71,13 @@ function rarityTag(c) {
   return r === 'common' ? '' : ` &middot; ${RARITIES[r].name.toLowerCase()}`;
 }
 
+/* The inspector's type line: 'Bone and Gem', or 'Devoid' for a card with no colored pips. */
+function colorNames(c) {
+  const names = cardColors(c).map((k) => COLORS[k].name);
+  if (!names.length) return 'Devoid';
+  return names.length > 1 ? names.slice(0, -1).join(', ') + ' and ' + names[names.length - 1] : names[0];
+}
+
 /* Inner markup of a card face. `atk`/`hpNow` let the game show buffs and damage. */
 function cardInnerHTML(c, atk = c.atk, hpNow = c.hp - (c.dmg || 0)) {
   const name = escapeHTML(c.name);
@@ -84,7 +91,7 @@ function cardInnerHTML(c, atk = c.atk, hpNow = c.hp - (c.dmg || 0)) {
   }
   if (c.type === 'spell' || c.type === 'trap') {
     return `${rarityFrame(c)}
-      <div class="c-band">${ico(COLORS[c.color].icon, '', PAL.w)} ${c.type.toUpperCase()}</div>
+      <div class="c-band">${c.type.toUpperCase()}</div>
       <div class="c-name">${name}</div>
       <img class="c-art" src="${spriteURL(c.sprite)}" alt="">
       <div class="c-cost">${costHTML(c.cost)}</div>
@@ -92,7 +99,7 @@ function cardInnerHTML(c, atk = c.atk, hpNow = c.hp - (c.dmg || 0)) {
       <div class="c-glare"></div>`;
   }
   return `${rarityFrame(c)}
-    <div class="c-band">${ico(COLORS[c.color].icon, '', PAL.w)} ${c.token ? 'TOKEN' : 'CREATURE'}</div>
+    <div class="c-band">${c.token ? 'TOKEN' : 'CREATURE'}</div>
     <div class="c-name">${name}</div>
     <img class="c-art" src="${spriteURL(c.sprite)}" alt="">
     <div class="c-cost">${costHTML(c.cost)}</div>
@@ -181,14 +188,14 @@ function inspectHTML(c, atk = c.atk, hpNow = c.hp - (c.dmg || 0)) {
       : 'Pay its cost on your turn to set it face-down. It springs by itself during the enemy\'s turn, then goes to your grave.';
     return `
       <div class="i-head"><span class="i-name">${name}</span><span class="i-cost">${costHTML(c.cost)}</span></div>
-      <div class="i-type">${COLORS[c.color].name} ${c.type}${rarityTag(c)}</div>
+      <div class="i-type">${colorNames(c)} ${c.type}${rarityTag(c)}</div>
       <div class="i-body"><img class="i-art" src="${spriteURL(c.sprite)}" alt=""></div>
       <div class="i-sigil">${ico(c.type)}<div>${escapeHTML(c.text)}</div></div>
       <div class="i-sigil muted">${how}</div>`;
   }
   return `
     <div class="i-head"><span class="i-name">${name}</span><span class="i-cost">${costHTML(c.cost)}</span></div>
-    <div class="i-type">${COLORS[c.color].name} ${c.token ? 'token' : 'creature'}${c.custom ? ' &middot; custom' : ''}${rarityTag(c)}</div>
+    <div class="i-type">${colorNames(c)} ${c.token ? 'token' : 'creature'}${c.custom ? ' &middot; custom' : ''}${rarityTag(c)}</div>
     <div class="i-body">
       <img class="i-art" src="${spriteURL(c.sprite)}" alt="">
       <div class="i-stats">${ico('atk')} ${atk}${atk > c.atk ? ` <span class="muted">(${c.atk}+${atk - c.atk})</span>` : ''}<br>${ico('hp')} ${hpNow}/${c.hp}</div>

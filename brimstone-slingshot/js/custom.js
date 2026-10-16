@@ -34,20 +34,23 @@ function newCustomId() { return 'c_' + Date.now().toString(36) + Math.random().t
 
 /* Turn a stored record into a playable card definition (or null if broken). */
 function customToCard(d) {
-  if (!d || typeof d.id !== 'string' || !d.name || !COLORS[d.color]) return null;
+  if (!d || typeof d.id !== 'string' || !d.name) return null;
   const cost = { g: 0, paw: 0, bone: 0, gem: 0, hat: 0 };
   for (const k of Object.keys(cost)) cost[k] = clampInt(d.cost && d.cost[k], 0, 9);
   const sigils = [...new Set((d.sigils || []).filter((s) => SIGILS[s]))].slice(0, 4);
   const card = {
-    id: d.id, name: String(d.name).slice(0, 16), type: 'creature', color: d.color, cost,
+    id: d.id, name: String(d.name).slice(0, 16), type: 'creature', cost,
     atk: clampInt(d.atk, 0, 20), hp: clampInt(d.hp, 1, 30, 1), sigils,
-    sprite: Array.isArray(d.pixels) && d.pixels.length ? 'spr_' + d.id : 'land_' + d.color,
+    sprite: Array.isArray(d.pixels) && d.pixels.length ? 'spr_' + d.id : 'spr_blank',
     custom: true, flavor: d.flavor ? String(d.flavor).slice(0, 80) : '',
   };
   if (sigils.includes('snipe')) card.snipe = clampInt(d.snipe, 1, 9, 1);
   if (sigils.includes('mend')) card.mend = clampInt(d.mend, 1, 9, 2);
   return card;
 }
+
+/* Empty art for a stored card with no pixels. */
+SPRITES.spr_blank = cleanArtRows([]);
 
 let customIds = [];
 

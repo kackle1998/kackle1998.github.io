@@ -86,12 +86,11 @@ function refreshDeckBuilder() {
 
 /* ---------- data ---------- */
 function dbPool() {
-  const order = (c) => COLOR_KEYS.indexOf(c.color);
   return Object.values(CARDS)
     .filter((c) => c.type !== 'land' && !c.token && !c.runCard)
-    .filter((c) => DB.tab === 'all' || c.color === DB.tab)
+    .filter((c) => DB.tab === 'all' || (DB.tab === 'devoid' ? !cardColors(c).length : cardColors(c).includes(DB.tab)))
     .filter((c) => DB.source === 'all' || (DB.source === 'custom') === !!c.custom)
-    .sort((a, b) => order(a) - order(b) || costTotal(a.cost) - costTotal(b.cost) || a.name.localeCompare(b.name));
+    .sort((a, b) => colorOrder(a) - colorOrder(b) || costTotal(a.cost) - costTotal(b.cost) || a.name.localeCompare(b.name));
 }
 
 function dbAdd(id, n = 1) {
@@ -363,8 +362,9 @@ function dbRender() {
   $('#dbDelete').disabled = !d.id;
 
   // filters
-  $('#dbTabs').innerHTML = ['all', ...COLOR_KEYS].map((k) =>
-    `<button class="db-tab${DB.tab === k ? ' on' : ''}" data-k="${k}">${k === 'all' ? 'ALL' : ico(COLORS[k].icon)}</button>`).join('');
+  // Devoid (no colored pips) wears the generic cost tile with an X in place of a number.
+  $('#dbTabs').innerHTML = ['all', ...COLOR_KEYS, 'devoid'].map((k) =>
+    `<button class="db-tab${DB.tab === k ? ' on' : ''}" data-k="${k}" ${k === 'devoid' ? 'title="Devoid"' : ''}>${k === 'all' ? 'ALL' : k === 'devoid' ? '<span class="gen">X</span>' : ico(COLORS[k].icon)}</button>`).join('');
   const nCustom = customIds.length;
   $('#dbSource').innerHTML = [['all', 'ALL CARDS'], ['base', 'BASE'], ['custom', `MINE (${nCustom})`]].map(([k, label]) =>
     `<button class="db-tab${DB.source === k ? ' on' : ''}" data-s="${k}">${label}</button>`).join('');

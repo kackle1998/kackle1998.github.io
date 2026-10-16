@@ -133,6 +133,8 @@ const PixelEditor = (() => {
     sfx('select');
     closePicker();
     const mine = customIds.map((id) => CARDS[id].sprite).filter((k) => k.startsWith('spr_') && SPRITES[k]);
+    // Library cards (custom.js) keep their art under spr_<id> too, so the built-in list below skips it.
+    const library = libraryIds.map((id) => CARDS[id] && CARDS[id].sprite).filter((k) => k && k.startsWith('spr_') && SPRITES[k]);
     const builtIn = Object.keys(SPRITES).filter((k) => !k.startsWith('spr_') && !k.startsWith('deck_') && !k.endsWith('_default'));
     const wrap = document.createElement('div');
     wrap.className = 'da-wrap tpl-wrap';
@@ -144,6 +146,7 @@ const PixelEditor = (() => {
       </div>
       <div class="da-body">
         ${artSection('MY CARD MAKER ART', mine)}
+        ${artSection('GAME LIBRARY ART', library)}
         ${artSection('ALL ART', builtIn)}
       </div>
       <div class="da-foot"><button class="btn sm" id="tplCancel">CANCEL</button></div>

@@ -93,7 +93,7 @@ function runPickN(R, arr, n, weight = () => 1) {
 /* Built-in cards a run can hand out: no lands, tokens, custom or run cards, and payable from `colors`. */
 function runPool(colors, maxCost = 99) {
   return Object.values(CARDS).filter((c) => c.type !== 'land' && !c.token && !c.custom && !c.runCard
-    && colors.includes(c.color) && COLOR_KEYS.every((k) => !c.cost[k] || colors.includes(k))
+    && COLOR_KEYS.every((k) => !c.cost[k] || colors.includes(k))
     && costTotal(c.cost) <= maxCost);
 }
 
@@ -1487,7 +1487,7 @@ const Run = {
         <div class="rn-btns"><button class="btn" id="rnDeckClose">CLOSE</button></div>
       </div>`;
     host.appendChild(wrap);
-    this.cardGrid($('#rnDeckBody'), this.cards().sort((a, b) => COLOR_KEYS.indexOf(a.color) - COLOR_KEYS.indexOf(b.color) || costTotal(a.cost) - costTotal(b.cost)), null, true);
+    this.cardGrid($('#rnDeckBody'), this.cards().sort((a, b) => colorOrder(a) - colorOrder(b) || costTotal(a.cost) - costTotal(b.cost)), null, true);
     wrap.querySelectorAll('.rn-land').forEach((row) => row.querySelectorAll('[data-d]').forEach((b) => (b.onclick = () => {
       if (!this.setLands(row.dataset.k, +b.dataset.d)) return;
       row.querySelector('b').textContent = s.lands[row.dataset.k];
