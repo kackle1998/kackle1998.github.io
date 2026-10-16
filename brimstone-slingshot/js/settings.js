@@ -5,7 +5,7 @@
    edge), and something alive in the background, all hotter each ante.
      Scene.setting(sc, name, opts) builds one behind the action and returns the ground
      (Scene.ground's { clear, shade, patch }) for contact shadows.
-   Names: ruins (the run map's spires), crypt, casino, lava, graveyard, forge (Factory.build).
+   Names: ruins (the run map's spires), crypt (a stone wall with sagging arches), casino, lava, graveyard, forge (Factory.build).
    opts: { heat (0..2, RunMap.SPIRE_ANTES), area, clear, near, light, rubble, shards, shadows,
    over }: as Scene.ground and Scene.ruins. `near` props use the spire kinds ('spike' tall,
    'basalt' low, 'strata' the one that shows the heat); each setting renames them to its own.
@@ -73,23 +73,6 @@
   const seams = (glow, x, top, h, heat) => { if (heat) for (let v = Math.round(h * (heat === 2 ? 0 : 0.5)); v < h - 1; v += 2) glow(x, top + v); };
 
   const ART = {
-    // The crypt: pillars, tombs, and braziers that burn higher each ante.
-    crypt(fill, glow, C, l, k, cx, top, w, h, seed, heat) {
-      if (k === 'pillar') return body(fill, cx, top, w, h, (f) => (f < 0.05 || f > 0.95 ? 0.5 : f < 0.09 || f > 0.91 ? 0.42 : 0.32), T3(C, l));
-      if (k === 'tomb') {
-        body(fill, cx, top, w, h, (f) => (f < 0.3 ? 0.18 + 0.32 * f / 0.3 : 0.5), T3(C, l));
-        const c = Math.round(cx - w / 6);
-        for (let v = Math.round(h * 0.4); v < h * 0.8; v++) fill(c, top + v, 1, dk(C, l));
-        fill(c - 2, top + Math.round(h * 0.5), 5, dk(C, l));
-        return;
-      }
-      // brazier: a bowl on a stand, flames above it
-      const bowl = top + Math.round(h * 0.45);
-      body(fill, cx, top, w, h, (f) => (f < 0.45 ? 0 : f < 0.6 ? 0.5 - (f - 0.45) * 2 : f > 0.94 ? 0.3 : 0.1), T3(C, l));
-      if (!heat) { fill(Math.round(cx - w * 0.3), bowl, Math.round(w * 0.6), dk(C, l)); return; }
-      const fh = Math.round(h * (0.12 + 0.14 * heat));
-      for (let v = 1; v <= fh; v++) { const hw = Math.round(w * 0.4 * (1 - v / (fh + 1))); for (let u = -hw; u <= hw; u++) if ((u + v) % 2 === 0) glow(cx + u, bowl - v); }
-    },
     // The casino floor: slot cabinets, chip stacks, and card towers that catch fire.
     casino(fill, glow, C, l, k, cx, top, w, h, seed, heat) {
       if (k === 'slot') {
@@ -147,6 +130,135 @@
     },
   };
 
+  /* ---------- the crypt: a damp stone wall with sagging arches, lit by candles ---------- */
+  /* Built like the forge: a floor and a wall rather than props to the horizon. The flagstone floor
+     runs up to a wall of damp stone blocks (darker and streaked toward its foot) standing at
+     D_WALL, with six arches whose crowns have sagged: open ones dark inside, one bricked up, one
+     half fallen in on its rubble, and cracks running up from the dropped keystones. Candles stand
+     in clusters at the arch feet, on ledges between them, and in four groups on the floor; more
+     are lit each ante (and taller at ante 3), and at ante 3 eyes drift in the open arches. The
+     wall's art is at 2 map units a pixel, WW x WH, its left edge at plane x WX. */
+  const D_WALL = -130, WX = -1100, WW = 1800, WH = 230;
+  function hs(a, b) { let n = (a * 374761393 + b * 668265263) | 0; n = (n ^ (n >>> 13)) * 1274126177 | 0; return ((n ^ (n >>> 16)) >>> 0) / 4294967296; }
+  const ARCHES = [...Array(6)].map((_, i) => ({ cx: 150 + i * 300, r: 40, sag: 5 + Math.round(hs(i, 3) * 7), kind: i % 3 })); // kind 0 open, 1 bricked up, 2 fallen in
+  // One pixel of a stone-block wall H px tall (courses 10 px, blocks 26 px, staggered), lit from the upper left, damp toward its foot.
+  function stoneAt(x, y, H, s) {
+    const cs = y % 10, course = Math.floor(y / 10), bx = x + (course % 2) * 13 + Math.floor(hs(course, s) * 9), bi = Math.floor(bx / 26), cx = pmod(bx, 26);
+    if (cs === 9 || cx === 25) return 3;
+    const dark = hs(bi, course + s) < 0.22;
+    let k = dark ? 4 : 5;
+    if (cs === 0 || cx === 0) k = dark ? 5 : 6; else if (cs === 8 || cx === 24) k -= 1;
+    const d = (y - (H - 80)) / 80;
+    if (d > 0 && bay(x, y) < d * 13) k = Math.max(3, k - 1);
+    if (hs(Math.floor(x / 6), 77 + s) > 0.86 && y > H - 120 && bay(x, y) < 7) k = Math.max(3, k - 1); // damp streaks
+    return k;
+  }
+  // A sagging arch's curve: the height of its edge dx from the middle (springing at sy, radii rx, ry, the crown dropped by sag).
+  const curve = (dx, sy, rx, ry, sag) => { const q = cl(1 - (dx / rx) ** 2); return sy - ry * Math.sqrt(q) + sag * q; };
+  // The arch ring of voussoirs th px deep: a ramp index, -2 inside the opening, -1 outside the ring.
+  function ringTone(x, y, cx, sy, rx, ry, sag, th) {
+    const dx = x - cx;
+    if (Math.abs(dx) >= rx + th || y > sy) return -1;
+    const yo = curve(dx, sy, rx + th, ry + th, sag);
+    if (y < yo) return -1;
+    if (Math.abs(dx) < rx && y >= curve(dx, sy, rx, ry, sag)) return -2;
+    const a = Math.atan2(sy - y, dx * ry / rx), seg = a / (Math.PI / 13);
+    if (seg - Math.floor(seg) < 0.07) return 3;
+    if (Math.abs(dx) < rx && y >= curve(dx, sy, rx, ry, sag) - 1.5) return 3;
+    if (y < yo + 1.5) return 4;
+    return Math.abs(a - Math.PI / 2) < 0.12 ? 7 : dx < 0 ? 6 : 5; // the keystone catches the light
+  }
+  function wallArt(C) {
+    const cv = document.createElement('canvas');
+    cv.width = WW; cv.height = WH;
+    const g = cv.getContext('2d'), img = g.createImageData(WW, WH), px = img.data, RGB = C.map(Scene.rgb);
+    const put = (x, y, k) => { if (x < 0 || y < 0 || x >= WW || y >= WH) return; const o = (y * WW + x) * 4, c = RGB[k]; px[o] = c[0]; px[o + 1] = c[1]; px[o + 2] = c[2]; px[o + 3] = 255; };
+    const R = mulberry32(5), sy = WH - 88;
+    for (let y = 0; y < WH; y++) for (let x = 0; x < WW; x++) {
+      let k = stoneAt(x, y, WH, 0);
+      for (const a of ARCHES) {
+        const t = ringTone(x, y, a.cx, sy, a.r, a.r, a.sag, 9), dx = x - a.cx, ad = Math.abs(dx);
+        if (t >= 0) k = t;
+        if (y > sy && ad < a.r + 7 && ad >= a.r) k = ad < a.r + 1 ? 3 : dx < 0 ? (ad > a.r + 5 ? 4 : 6) : (ad > a.r + 5 ? 3 : 5); // the jambs
+        if (t !== -2 && !(y > sy && ad < a.r)) continue;
+        const top = curve(dx, sy, a.r, a.r, a.sag);
+        if (a.kind === 1) { const st = stoneAt(x * 2, y * 2, WH * 2, 4); k = st === 3 ? 1 : st >= 6 ? 3 : 2; } // bricked up, in shadow
+        else { k = dx > a.r - 5 ? 3 : y - top < 3 || bay(x, y) < 3 ? 1 : 0; if (y > WH - 4) k = 1; } // dark inside; the right reveal lit
+        if (a.kind === 2) { const hh = WH - 26 + Math.round(ad * 0.45 + hs(x >> 2, 1) * 4); if (y > hh) { const st = stoneAt(x * 3, y * 3, WH * 3, 9); k = st === 3 ? 2 : st - 1; } } // fallen-in rubble
+      }
+      put(x, y, k);
+    }
+    const crack = (x, y, len) => { for (let i = 0; i < len; i++) { put(x, y, 2); put(x - 1, y, 6); y += 1; x += R() < 0.4 ? (R() < 0.5 ? -1 : 1) : 0; } };
+    for (const a of ARCHES) crack(a.cx + 2, sy - a.r - a.sag - 6, 28 + Math.round(R() * 20));
+    for (let i = 0; i < 34; i++) crack(Math.floor(R() * WW), Math.floor(R() * WH * 0.7), 10 + Math.floor(R() * 28));
+    for (const a of ARCHES) if (a.kind === 2) for (let j = 0; j < 14; j++) { const x = a.cx + a.r + 4 + Math.floor(R() * 40), y = WH - 1 - Math.floor(R() * 10); put(x, y, 3); put(x + 1, y, 5); put(x, y - 1, 6); }
+    g.putImageData(img, 0, 0);
+    return cv;
+  }
+  // Candles on the wall (wall px): clusters at the arch feet and three on a ledge between arches.
+  const CANDLES = (() => {
+    const R = mulberry32(12), out = [];
+    ARCHES.forEach((a) => {
+      for (const side of [-1, 1]) {
+        if (a.kind === 2 && side > 0) continue; // the rubble side
+        const bx = a.cx + side * (a.r + 18);
+        for (let j = 0; j < 3 + Math.floor(R() * 3); j++) out.push({ x: bx + Math.round((R() - 0.5) * 16), y: WH - 1 - Math.floor(R() * 3), h: 4 + Math.floor(R() * 7), id: out.length });
+      }
+      for (const [dx, h] of [[-8, 5], [-3, 8], [3, 6]]) out.push({ x: a.cx + 150 + dx, y: WH - 60, h, id: out.length });
+    });
+    return out;
+  })();
+  const candleArt = ({ P }, c) => { for (let v = 0; v < c.h; v++) { P(c.x, c.y - v, v === c.h - 1 ? 6 : 7); P(c.x + 1, c.y - v, 5); } P(c.x + 2, c.y - Math.floor(c.h / 2), 6); P(c.x - 1, c.y, 3); P(c.x + 2, c.y, 3); };
+  // A candle flame in three stepped frames (never blinking), `tall` px taller at ante 3; the wick under it.
+  const flameArt = ({ R }, c, st, tall) => { const f = (st + c.id) % 3, h = [3, 4, 3][f] + tall; R(c.x, c.y - c.h - h + 1, 2, h - 1, 8); R(c.x + [0, 0, 1][f], c.y - c.h - h, 1, 2, 7); R(c.x + (c.id % 2), c.y - c.h, 1, 1, 1); };
+  const lit = (heat, c) => hs(c.id, 7) < [0.35, 0.75, 1][heat];
+  function crypt(sc, heat, { shadows = [], over }) {
+    const { C } = sc;
+    sc.stage.firstChild.remove(); // the nebula sky: the wall stands in front of it
+    const gnd = Scene.ground(sc, {
+      x0: -1200, y0: D_WALL, w: 1920, h: (820 - D_WALL) / 2, tones: [3, 4, 5, 6], seed: 31, grit: 1500,
+      light: (X, Y) => 1.15 - Math.hypot((X - 640) / 1300, (Y - 300) / 700),
+      pattern: (X, Y) => { const r = Math.floor(Y / 28); return pmod(Y, 28) < 2 || pmod(X + (r % 2) * 24, 48) < 2 ? 3 : -1; }, // flagstones
+      shadows: [[-1200, D_WALL, 2640, D_WALL + 18], ...shadows], over, // the wall's foot in shade
+    });
+    const wall = wallArt(C);
+    sc.stand(wall, WX, D_WALL, WW * 2, WH * 2);
+    const wp = Scene.pen(wall.getContext('2d'), C);
+    for (const c of CANDLES) candleArt(wp, c);
+    const hot = document.createElement('canvas');
+    hot.width = WW; hot.height = WH;
+    sc.stand(hot, WX, D_WALL + 1, WW * 2, WH * 2);
+    const hg = hot.getContext('2d'), hp = Scene.pen(hg, C);
+    // Candles on the floor, nearer than the wall, so the flames sit in the depth too.
+    const floor = [[180, 250], [1250, 230], [330, 120], [1120, 90]].map(([x, d], i) => {
+      const cv = document.createElement('canvas');
+      cv.width = 26; cv.height = 22;
+      sc.stand(cv, x, d, 52, 44);
+      const g = cv.getContext('2d'), p = Scene.pen(g, C), cs = [0, 1, 2, 3].map((j) => ({ x: 3 + j * 5 + (j % 2), y: 21 - (j % 2), h: 5 + ((i + j) * 3) % 7, id: 100 + i * 4 + j }));
+      cs.forEach((c) => candleArt(p, c));
+      return { g, p, cs };
+    });
+    motes(sc, { n: 24, dir: 1, ks: [6], fps: 3, depth: -100, h: 200 }); // dust drifting down
+    let last = -1;
+    sc.every(50, () => {
+      const st = Math.floor(performance.now() / 160);
+      if (st === last) return;
+      last = st;
+      hg.clearRect(0, 0, WW, WH);
+      for (const c of CANDLES) if (lit(heat, c)) flameArt(hp, c, st, heat === 2 ? 1 : 0);
+      if (heat === 2) ARCHES.forEach((a, i) => { // eyes drifting in the dark of the open arches
+        if (a.kind) return;
+        const dx = [-12, -9, -6, -3, 0, -3, -6, -9][Math.floor(st / 3 + i) % 8];
+        hp.R(a.cx + dx, WH - 58, 2, 1, 8); hp.R(a.cx + dx + 6, WH - 58, 2, 1, 8);
+      });
+      for (const f of floor) {
+        f.g.clearRect(0, 0, 26, 22);
+        for (const c of f.cs) { candleArt(f.p, c); if (heat && lit(heat, c)) flameArt(f.p, c, st, 0); }
+      }
+    });
+    return gnd;
+  }
+
   /* ---------- the settings ---------- */
   // Each: ground options for the heat, the props (kinds, size), and the life behind the action.
   const SET = {
@@ -154,15 +266,7 @@
       ground: () => ({}),
       life(sc, heat) { motes(sc, heat ? { n: 15 + 25 * heat } : { n: 20, dir: 1, ks: [5], fps: 4 }); },
     },
-    crypt: {
-      ground: () => ({ seed: 31, grit: 1500, pattern: (X, Y) => { const r = Math.floor(Y / 28); return pmod(Y, 28) < 2 || pmod(X + (r % 2) * 24, 48) < 2 ? 3 : -1; } }),
-      kinds: { spike: 'pillar', basalt: 'tomb', strata: 'brazier' }, size: { pillar: [0.9, 0.7], tomb: [0.8, 1.3], brazier: [0.5, 1] },
-      life(sc, heat) {
-        motes(sc, { n: 25, dir: 1, ks: [6], fps: 3 });
-        if (heat) motes(sc, { n: 10 * heat, depth: -150, h: 90, seed: 4 });
-        crosser(sc, { depth: -260, w: 13, h: 6, lift: 70, period: 7, draw: ({ R }, f) => { R(5, 2, 3, 3, 1); if (f) { R(0, 3, 5, 1, 1); R(8, 3, 5, 1, 1); } else { R(1, 0, 4, 2, 1); R(8, 0, 4, 2, 1); R(4, 1, 1, 1, 1); R(8, 1, 1, 1, 1); } } }); // a bat
-      },
-    },
+    crypt: { build: crypt },
     casino: {
       ground: () => ({ seed: 17, grit: 1200, pattern: (X, Y) => (pmod(X + Y, 64) < 2 || pmod(X - Y, 64) < 2 ? 4 : -1) }),
       kinds: { spike: 'slot', basalt: 'chips', strata: 'tower' }, size: { slot: [0.45, 1.3], chips: [0.5, 0.6], tower: [0.6, 1.2] },
@@ -190,6 +294,7 @@
     if (name === 'forge') return Factory.build(sc, heat, { rubble, shards, shadows, over });
     const S = SET[name];
     if (!S) throw new Error('No scene setting called ' + name + ' - try ' + Object.keys(SET).concat('forge').join(', '));
+    if (S.build) return S.build(sc, heat, { shadows, over });
     const gnd = Scene.ground(sc, { x0: -1200, y0: -1000, w: 1920, h: 900, light, rubble, shards, shadows, over, ...S.ground(heat), ...more });
     Scene.ruins(sc, { area, clear, near, heat, draw: ART[name] || RunMap.propArt, kinds: S.kinds, size: S.size });
     S.life(sc, heat);

@@ -20,6 +20,8 @@ const Draft = (() => {
   const AX0 = -12, AW = 174;              // the upright planes' left edge and width (scene px); they run from the sky (y 0) to GY
   // The entrance, in scene px (x 4 for map units): the tail of the map's lob, as Run.bowl's BOWL_LAND.
   const LAND = { across: 80, back: 10, high: 40, ms: 700 };
+  // Where the stage's edge falls in scene x (Scene.span, measured by mount), so the lob starts off screen at any stage size.
+  let EDGE = Infinity;
   const { bay, cl, CARD } = Scene;
 
   /* ---------- the timeline ---------- */
@@ -43,7 +45,7 @@ const Draft = (() => {
     if (t < LANDED) {
       // In on the tail of the map's lob, from off the left at the top of the arc, into the pouch.
       const L = Scene.land(cl(t * 1000 / LAND.ms), LAND.high * U);
-      S.fx = FX - LAND.across * L.k;
+      S.fx = FX - Math.max(LAND.across, FX - EDGE) * L.k;
       S.depth = D_FIG - LAND.back * U * L.k;
       S.feet = PF - L.z / U;
       S.rot = L.rot;
@@ -174,6 +176,7 @@ const Draft = (() => {
   function mount(stage, heat) {
     // Framed like the bowling lane, but pulled back and down a little so the cards rising over the pack stay in shot.
     const sc = Scene.mount(stage, { rows: 700, top: 90 });
+    EDGE = (Scene.span(sc, D_FIG, LAND.high * U)[0] - 720) / U + 75 - 24;
     // Pale ash out to the horizon, lit from the upper left round the pack and dimming into the distance.
     const gnd = Scene.ground(sc, {
       x0: -1200, y0: -1000, w: 1920, h: 900,

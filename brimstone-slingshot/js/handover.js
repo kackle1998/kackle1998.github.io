@@ -9,7 +9,7 @@
      swap    you raise your weakest card, the left hand takes it, the right hand hands over a new one
      relic   a card in each hand behind a portcullis; you pay 6 life (hearts), both gates rise and
              both cards float to you to choose from
-     pile    (Bone Pile) the hands claw up out of heaps of bones instead of sliding in
+     pile    (Bone Pile) heaps of bones lie on the ground under the hovering hands
    The card backs turn in the scene, then the real faces open over it (.dr-pick, as Bone Draft).
    Built on the scene kit (js/scene.js): only the hands' timeline, the eyes, the heaps and the
    portcullis are its own.
@@ -30,7 +30,7 @@ const Handover = (() => {
   const ease = (k) => k * k * (3 - 2 * k), mix = (a, b, k) => a + (b - a) * k;
   const nz = (a, b) => { const s = Math.sin(a * 127.1 + b * 311.7) * 43758.5453; return s - Math.floor(s); };
 
-  const Y = GY - 20, LX = 15, RX = 135;   // a hand's anchor height; where the hands rest (scene x)
+  const Y = GY - 50, LX = 15, RX = 135;   // a hand's anchor height (floating well off the ground); where the hands rest (scene x)
   const HEAD = { x: CX - 7, y: GY - 42 }; // the card over your head (its top left)
   const CARDS_AT = [CX, 56];              // where the real faces open, over your head (Run.handover places them)
   const LANDED = LAND.ms / 1000 + Scene.SQUASH.ms / 1000, ARRIVE = 1.4, REST = 2.5; // the hands slide in over 1 s from ARRIVE; you wait at REST
@@ -49,8 +49,8 @@ const Handover = (() => {
   };
   for (const T of Object.values(TL)) { T.turned = T.turn + TURN_S; T.end = T.turned + 1.2; }
 
-  /* make({ mode: 'give' | 'swap' | 'relic', pile, gold }) builds one event's scene: `pile` raises the
-     hands out of heaps of bones, `gold` frames the card backs in gold (rare or better). Returns
+  /* make({ mode: 'give' | 'swap' | 'relic', pile, gold }) builds one event's scene: `pile` lays
+     heaps of bones under the hands, `gold` frames the card backs in gold (rare or better). Returns
      { at, mount, REST, TURNED, END, ENTER_CUES, CUES, CARDS_AT }.
      at(t) is the scene's whole state at t seconds, with no DOM:
        { t, hero: { fx, feet, depth, rot, sx, sy }, eyes: { open, lx, ly }, bob (the hands hover),
@@ -59,11 +59,13 @@ const Handover = (() => {
          hearts: [[x, y]], gates: [left, right] raised 0..1 or null } */
   function make({ mode, pile = false, gold = false }) {
     const T = TL[mode], { turned: TURNED, end: END } = T;
+    // The stage's edges in scene x, measured by mount (Scene.span): l, r for the hands, fig for your lob. Until then, the old fixed offsets.
+    const off = { l: Infinity, r: -Infinity, fig: Infinity };
     const fly = (u, arc, a, b) => ({ x: mix(a.x, b.x, u), y: mix(a.y, b.y, u) - Math.sin(Math.PI * u) * arc });
     function at(t) {
       const L = Scene.land(cl(t * 1000 / LAND.ms), LAND.high * U);
       const S = {
-        t, hero: { fx: CX - LAND.across * L.k, feet: GY - L.z / U, depth: D_FIG - LAND.back * U * L.k, rot: L.rot, sx: 1, sy: 1 },
+        t, hero: { fx: CX - Math.max(LAND.across, CX - off.fig) * L.k, feet: GY - L.z / U, depth: D_FIG - LAND.back * U * L.k, rot: L.rot, sx: 1, sy: 1 },
         eyes: { open: t < 0.9 ? 0 : t < 1.3 ? [0.35, 0.7, 1][Math.floor((t - 0.9) * 7)] : 1, lx: t < 1.5 ? 0 : t < 1.9 ? -1 : t < 2.3 ? 1 : 0, ly: 0.4 },
         hands: [], cards: [], hearts: [], gates: null, bob: t >= ARRIVE + 1 && t < TURNED,
       };
@@ -72,7 +74,7 @@ const Handover = (() => {
       // The hands slide in from either side (or rise out of the heaps) and leave the way they came.
       const ax = mode === 'relic' ? [0, 150] : [LX, RX];
       const hand = (side, tx, ex) => {
-        const a = ease(cl(t - ARRIVE)) * (1 - ease(cl(t - ex))), o = pile ? [0, 58] : [side * 130, 0];
+        const a = ease(cl(t - ARRIVE)) * (1 - ease(cl(t - ex))), o = [side < 0 ? Math.min(-130, off.l - HAND.w - tx) : Math.max(130, off.r + HAND.w - tx), 0]; // from past the stage's edge
         return { side, x: tx + o[0] * (1 - a), y: Y + o[1] * (1 - a), a };
       };
       S.hands.push(hand(-1, ax[0], TURNED + 0.1), hand(1, ax[1], TURNED));
@@ -115,7 +117,7 @@ const Handover = (() => {
     const CUES = (mode === 'give' ? [[T.take, 'twang'], [T.take + T.fly, 'place']]
       : mode === 'swap' ? [[T.aTake, 'place'], [T.take, 'place']]
         : [[T.hearts, 'hit'], [T.gate, 'lever'], [T.take, 'twang']]).concat([[T.turn, 'place'], [TURNED, 'tally']]);
-    return { at, mount: (stage, heat) => mount(stage, heat, { mode, pile }), REST, TURNED, END, ENTER_CUES, CUES, CARDS_AT };
+    return { at, mount: (stage, heat) => mount(stage, heat, { mode, pile, off }), REST, TURNED, END, ENTER_CUES, CUES, CARDS_AT };
   }
 
   /* ---------- the art (scene px) ---------- */
@@ -172,8 +174,12 @@ const Handover = (() => {
   /* Build the scene in `stage` with the spires' heat (0..2, RunMap.SPIRE_ANTES). Returns draw(state)
      for at(t)'s states, with draw.alive() and draw.toStage(x, y) (a scene point on the hands' plane,
      in stage px). The hands hover (a stepped bob) while you wait, on the scene's own timer. */
-  function mount(stage, heat, { mode, pile }) {
+  function mount(stage, heat, { mode, pile, off }) {
     const sc = Scene.mount(stage, CAM);
+    // Where the screen's edges are, so the hands and your lob come in from off screen at any stage size.
+    const sx = (X) => (X - 720) / U + 75, [hl, hr] = Scene.span(sc, D_ACT, (GY - Y) * U), [fl] = Scene.span(sc, D_FIG, LAND.high * U);
+    Object.assign(off, { l: sx(hl), r: sx(hr), fig: sx(fl) - 24 });
+    const x0 = Math.min(AX0, Math.floor(off.l) - HAND.w - 10), w = Math.max(AX0 + AW, Math.ceil(off.r) + HAND.w + 10) - x0;
     const gnd = Scene.ground(sc, {
       x0: -1200, y0: FAR, w: 1920, h: (800 - FAR) / 2,
       light: (X, Y) => 1.2 - Math.hypot((X - 620) / 1300, (Y - 380) / 900),
@@ -199,7 +205,7 @@ const Handover = (() => {
     Scene.ruins(sc, { area: { x0: -1170, x1: 2610, y0: FAR, y1: 300 }, clear: { x0: 340, x1: 1100, y: FAR }, near, heat, count: 150, wall: 0.3 }); // a low far row, and nothing scattered in the middle at any depth, so the eyes show
 
     // The upright planes: the eyes, hands and gates behind you; the cards and hearts in front of you.
-    const plane = (depth) => Scene.plane(sc, { left: mx(AX0), x0: AX0, depth, w: AW, h: GY });
+    const plane = (depth) => Scene.plane(sc, { left: mx(x0), x0, depth, w, h: GY }); // wide enough for the hands to start off screen
     const act = plane(D_ACT), front = plane(D_FRONT), fig = Scene.figure(sc, { s: U });
     // The Pit Boss hides far back, behind every spire, his eyes glinting between them: a big plane at the far edge of the ash.
     const watch = Scene.plane(sc, { left: mx(CX) - EYES.w * EYES.u / 2, x0: CX - EYES.w / 2, depth: FAR - 20, w: EYES.w, h: EYES.h, u: EYES.u });
@@ -214,7 +220,7 @@ const Handover = (() => {
       const b = Math.floor(performance.now() / 400);
       const hs = S.hands.map((h) => ({ ...h, y: h.y + (S.bob ? (b + (h.side > 0 ? 0 : 1)) % 2 : 0) }));
       // Contact shadows on the ash: yours (smaller and thinner the higher you are) and each hand's.
-      const z = (GY - S.hero.feet) * U, shown = pile ? [] : hs.filter((h) => h.a > 0.02);
+      const z = (GY - S.hero.feet) * U, shown = hs.filter((h) => h.a > 0.02);
       const key = [Math.round(S.hero.fx), Math.round(S.hero.depth), Math.round(z / 16), ...shown.map((h) => Math.round(h.x))].join();
       if (key !== shadowKey) {
         shadowKey = key;
@@ -227,9 +233,9 @@ const Handover = (() => {
       act.clear(); front.clear(); watch.clear();
       const p = act.p, g = act.g, held = (c) => { const h = hs[c.on === 'L' ? 0 : 1]; return { x: c.on === 'L' ? h.x + 30 : h.x - 45, y: h.y - 10 }; };
       eyes(watch.p, CX, EYES.y, S.eyes.open, S.eyes.lx, S.eyes.ly);
+      if (pile) { heap(p, LX + 10); heap(p, RX - 10); } // the bones lie on the ground; the hands float over them
       for (const c of S.cards) if (c.on) { const at = held(c); Scene.cardArt(p, Math.round(at.x), Math.round(at.y), c.gold); }
-      for (const h of hs) act.art(hands[h.side], Math.round(h.x - HAND.ax), Math.round(h.y - HAND.ay), U / 2); // below the ground line the plane ends: they come up out of it
-      if (pile) { heap(p, LX + 10); heap(p, RX - 10); }
+      for (const h of hs) act.art(hands[h.side], Math.round(h.x - HAND.ax), Math.round(h.y - HAND.ay), U / 2);
       if (S.gates) { gate(p, GATE.l, S.gates[0]); gate(p, GATE.r, S.gates[1]); }
       // In front of you: the cards over your head, the hearts leaving you.
       for (const c of S.cards) if (!c.on) Scene.cardArt(front.p, Math.round(c.x), Math.round(c.y), c.gold, CARD.TURN[c.f]);

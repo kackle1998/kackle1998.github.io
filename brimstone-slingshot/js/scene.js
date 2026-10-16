@@ -232,6 +232,18 @@ const Scene = (() => {
     }
   }
 
+  /* Where the stage's left and right edges fall, as plane x (map units), on an upright plane at
+     `depth`, `z` map units up. Entrances start past these so they come in from off screen on any
+     stage size or camera, and planes that things slide in on must reach past them too. */
+  function span(sc, depth, z = 0) {
+    const el = document.createElement('div');
+    sc.stand(el, -4000, depth, 9000, 2);
+    el.style.transform = `translateZ(${z}px) rotateX(-90deg)`;
+    const r = el.getBoundingClientRect(), s = sc.stage.getBoundingClientRect(), k = 9000 / r.width;
+    el.remove();
+    return [-4000 + (s.left - r.left) * k, -4000 + (s.right - r.left) * k];
+  }
+
   /* ---------- upright planes ---------- */
   /* An upright canvas standing at `depth`, w x h scene px of `u` map units each, its left edge at
      scene x x0 and plane x `left`, from the sky (scene y 0) down to the ground (scene y h). Draw
@@ -297,5 +309,5 @@ const Scene = (() => {
     R(x + 6, y + 8, 3, 6, k); R(x + 5, y + 9, 5, 4, k); R(x + 7, y + 7, 1, 8, k);
   }
 
-  return { mount, figure, land, SQUASH, play, ground, ruins, plane, toStage, slingshot, CARD, cardArt, pen, bay, lvl, cl, rgb };
+  return { mount, figure, land, SQUASH, play, ground, ruins, span, plane, toStage, slingshot, CARD, cardArt, pen, bay, lvl, cl, rgb };
 })();

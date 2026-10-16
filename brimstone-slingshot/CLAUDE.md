@@ -23,7 +23,8 @@ After showing the mockups, ask which designs to keep before changing any game co
 
 Event scenes are the exception to the flat canvas above. They're mocked up in the game's own 2.5D
 scene, with the template in the event-animation skill (below), so the preview looks the way the
-game will.
+game will. Show one mockup per design (A, B, C), not a column per ante: the template's Ante
+buttons rebuild each stage at that ante's heat.
 
 ## Event scenes: use the event-animation skill
 

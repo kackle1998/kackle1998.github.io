@@ -18,6 +18,8 @@ const Rune = (() => {
   const FX = 75, CA = 26, CB = 114;      // where you stand, and the two creatures' left edges (scene x)
   // The entrance, in scene px (x 4 for map units): the tail of the map's lob, in from the left.
   const LAND = { across: 150, back: 10, high: 60, ms: 700 };
+  // Where the stage's edge falls in scene x (Scene.span, measured by mount), so the lob starts off screen at any stage size.
+  let EDGE = Infinity;
   const CAM = { rows: 700, top: 178 };   // the camera (Scene.mount): the circle, the creatures and the reservoir behind
   const RR = 56, RC = 66, RX = mx(FX) - RC * 2, RY = D_FIG - RC * 2; // the circle's radius, its canvas middle and its plane corner
   const { cl } = Scene;
@@ -37,7 +39,7 @@ const Rune = (() => {
     const S = { fx: FX, feet: GY, depth: D_FIG, rot: 0, sx: 1, sy: 1, pips: [], pulse: 0, fast: t >= T_COPY && t < T_ABS, chip: null, trail: [] };
     if (t < LANDED) {
       const L = Scene.land(cl(t * 1000 / LAND.ms), LAND.high * U);
-      S.fx = FX - LAND.across * L.k;
+      S.fx = FX - Math.max(LAND.across, FX - EDGE) * L.k;
       S.depth = D_FIG - LAND.back * U * L.k;
       S.feet = GY - L.z / U;
       S.rot = L.rot;
@@ -72,6 +74,7 @@ const Rune = (() => {
      on its own timer. */
   function mount(stage, heat) {
     const sc = Scene.mount(stage, CAM);
+    EDGE = (Scene.span(sc, D_FIG, LAND.high * U)[0] - 720) / U + 75 - 24;
     const gnd = Factory.build(sc, heat, {
       rubble: [[250, 450, 3], [1010, 400, 2]], shards: [[330, 454], [1000, 470]],
       shadows: [[mx(CA) - 8, D_ACT - 6, mx(CA + 14) + 8, D_ACT + 12], [mx(CB) - 8, D_ACT - 6, mx(CB + 14) + 8, D_ACT + 12]],
