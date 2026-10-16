@@ -21,6 +21,10 @@ not as files. Draw them the way the game's art engine in `js/runmap.js` does:
 
 After showing the mockups, ask which designs to keep before changing any game code.
 
+Event scenes are the exception to the flat canvas above. They're mocked up in the game's own 2.5D
+scene, with the template in the event-animation skill (below), so the preview looks the way the
+game will.
+
 ## Event scenes: use the event-animation skill
 
 Every scene a stop opens (the bowling lane, Bone Draft, and any new one) is built on the scene kit in

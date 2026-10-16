@@ -1121,8 +1121,8 @@ const RunMap = (() => {
   const POUCH = { w: 76, h: 12, up: 8 };
   /* The follow camera's travel up the board (style.css --cam, map units): `min` frames the base's
      slingshot at the bottom of the screen, `max` stops with the casino at the top. `side` is how
-     much it follows you sideways. */
-  const CAM = { min: -340, max: 210, side: 0.5 }; // `up` above the feet: the bottom 10% of the figure
+     much it follows you sideways: 0, so the table always stays centered whichever stop you're at. */
+  const CAM = { min: -340, max: 210, side: 0 }; // `up` above the feet: the bottom 10% of the figure
   const forkArt = (C) => paint(SL.w, SL.h, C, (rect, px) => {
     const c = SL.w / 2;
     // Thick strokes, outlined, lit from the left: [x, y] centers from base to tips.
@@ -1530,8 +1530,8 @@ const RunMap = (() => {
 
     // The camera follows you up the board: it frames map point (x, y) (where your slingshot
     // stands, or your figurine in flight) as the base's slingshot is framed at the start, by
-    // sliding the board toward you, up to CAM.max so the casino doesn't run off the top, and
-    // part of the way sideways so the board's edges stay in view.
+    // sliding the board toward you, up to CAM.max so the casino doesn't run off the top. It keeps
+    // the table centered side to side (CAM.side).
     // (CAM was tuned on the classic board, whose base sits at y 960: the same framing on any
     // board is cam = CAM.min + 1000 - y, starting lower the further down the base is.)
     const camLo = CAM.min + 1000 - (nodes[0].y + 40);
@@ -2009,5 +2009,5 @@ const RunMap = (() => {
     if (opts.fromDark) curtain($('#rmap'), C, 1, 0, 700);
   }
 
-  return { show, wipe, cleared, forkArt, pouchArt, ramp, SL, POUCH, VSB, vsBackdrop, skyDrawer, RUNE, propArt, SPIRE_ANTES, BAY }; // the bowling lane (js/bowl.js) reuses the sky and the rune // the VS splash (ui.js) reuses the slingshot art and the sky
+  return { show, wipe, cleared, forkArt, pouchArt, ramp, SL, POUCH, VSB, vsBackdrop, skyDrawer, RUNE, propArt, SPIRE_ANTES, BAY, HAND, handArt }; // the bowling lane (js/bowl.js) reuses the sky and the rune // the VS splash (ui.js) reuses the slingshot art and the sky
 })();

@@ -125,9 +125,11 @@ const Scene = (() => {
      { clear(), shade(X, Y, rx, ry): a dithered contact shadow round plane point X, Y (radii in
      px; put it down and right of the thing, away from the light), patch(X, Y, w, h, f(i, j) =>
      color): paint over px }. */
-  function ground(sc, { x0, y0, w, h, light, tones = [3, 4, 5, 6], seed = 23, grit = 3000, rubble = [], shards = [], shadows = [], over }) {
+  // pattern(X, Y): an optional floor pattern (flagstones, felt, cracks), a ramp index per plane point, or -1 for plain ground.
+  function ground(sc, { x0, y0, w, h, light, tones = [3, 4, 5, 6], seed = 23, grit = 3000, rubble = [], shards = [], shadows = [], over, pattern }) {
     const { C, RGB, pl } = sc, R0 = mulberry32(seed), lit = new Float32Array(w * h), mark = new Int8Array(w * h).fill(-1);
     for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) lit[y * w + x] = cl(light(x0 + x * 2, y0 + y * 2));
+    if (pattern) for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) mark[y * w + x] = pattern(x0 + x * 2, y0 + y * 2);
     for (let i = 0; i < grit; i++) mark[Math.floor(R0() * h) * w + Math.floor(R0() * w)] = R0() < 0.7 ? 3 : 4;
     const gx = (X) => Math.round((X - x0) / 2), gy = (Y) => Math.round((Y - y0) / 2);
     const blob = (X, Y, r, ks) => {
@@ -178,12 +180,15 @@ const Scene = (() => {
      { k: 'spike' | 'basalt' | 'strata', x, d (depth), h, w (px), l (light 0..3), seed }. `heat`
      (RunMap.SPIRE_ANTES): 0 still stone, 1 the strata's lower seams glow, 2 all of them and the
      tips, with a lighter stripe crawling up through them 4 steps a second, as on the map. */
-  function ruins(sc, { area, clear, near = [], heat = 0, count = 380, seed = 5 }) {
+  /* Other settings (js/settings.js) scatter their own props the same way: `draw` has propArt's
+     signature, `kinds` renames 'spike' / 'basalt' / 'strata' to the setting's own kinds, and
+     `size` { kind: [h, w] } scales each kind's height and width. */
+  function ruins(sc, { area, clear, near = [], heat = 0, count = 380, seed = 5, wall = 1, draw = RunMap.propArt, kinds = {}, size = {} }) { // wall: how tall the far row is, 1 as the other scenes
     const { C, stand, every } = sc, RS = mulberry32(seed), hot = [];
     const art = (x, p, cx, top) => {
       const fill = (u, v, n, c) => { if (n > 0) { x.fillStyle = c; x.fillRect(u, v, n, 1); } }, mine = [];
       const glow = (u, v) => { u = Math.round(u); v = Math.round(v); fill(u, v, 1, C[8]); mine.push([u, v]); };
-      RunMap.propArt(fill, glow, C, p.l, p.k, cx, top, Math.round(p.w), Math.round(p.h), p.seed || 0, heat);
+      draw(fill, glow, C, p.l, p.k, cx, top, Math.round(p.w), Math.round(p.h), p.seed || 0, heat);
       if (mine.length) hot.push({ x, px: mine });
     };
     const field = [];
@@ -193,10 +198,12 @@ const Scene = (() => {
       if (field.some((p) => Math.abs(p.x - x) < 22 && Math.abs(p.d - d) < 16)) continue;
       const big = RS(), far = cl(-d / 600);
       let h = 30 + big * big * big * 220 + RS() * 30 + far * RS() * 140; // map units
-      if (d < area.y0 + 160) h += 160 + RS() * 160;
+      if (d < area.y0 + 160) h += (160 + RS() * 160) * wall;
       let w = Math.min(8 + h * 0.2 * (0.7 + RS() * 0.6), 8 + h * 0.3), k = 'spike';
       if (RS() < 0.2) { k = 'basalt'; h *= 0.6; w *= 1.3; }
-      field.push({ k, x, d, h: Math.max(8, Math.round(h / 2)), w: Math.max(4, Math.round(w / 2)), l: d < -650 ? 1 : d < -200 ? 2 : 3 });
+      k = kinds[k] || k;
+      const [sh, sw] = size[k] || [1, 1];
+      field.push({ k, x, d, h: Math.max(8, Math.round(h * sh / 2)), w: Math.max(4, Math.round(w * sw / 2)), l: d < -650 ? 1 : d < -200 ? 2 : 3 });
     }
     const bands = new Map();
     for (const p of field) { const b = Math.floor(p.d / 32); if (!bands.has(b)) bands.set(b, []); bands.get(b).push(p); }
@@ -208,8 +215,8 @@ const Scene = (() => {
       for (const p of list.sort((a, b) => a.d - b.d)) art(x, p, p.x / 2 - left, tall - p.h);
       stand(cv, left * 2, back, cv.width * 2, tall * 2);
     }
-    for (const p of near) {
-      const cw = p.w + 6, cv = document.createElement('canvas');
+    for (const q of near) {
+      const p = { ...q, k: kinds[q.k] || q.k }, cw = p.w + 6, cv = document.createElement('canvas');
       cv.width = cw; cv.height = p.h;
       art(cv.getContext('2d'), p, cw / 2, 0);
       stand(cv, p.x - cw, p.d, cw * 2, p.h * 2);

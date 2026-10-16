@@ -226,12 +226,14 @@ const RUN_EVENTS = [
     ],
   },
   {
-    id: 'pool', title: 'MOLTEN POOL', art: 'ri_pool',
+    id: 'pool', title: 'MOLTEN POOL', art: 'ri_pool', screen: 'dip',
     text: 'A pool of slow fire. Dip a creature from your deck in: three times in four it comes out with Haste, but one time in four it melts away for good.',
     choices: [
+      // Run.dip rolls `melt` and saves it before the card goes in, so the scene can show it.
       { label: 'DIP A CREATURE', pick: (d) => !d.sigils.includes('haste') && d.sigils.length < 4, need: 'Needs a creature without Haste.',
-        act: (run, d) => {
-          if (((isDev() ? run.debugRoll : null) ?? Math.random()) < 0.25) { run.remove(d.rid); return `${d.name} melted away.`; }
+        melts: (run) => ((isDev() ? run.debugRoll : null) ?? Math.random()) < 0.25,
+        act: (run, d, ch, melt = ch.melts(run)) => {
+          if (melt) { run.remove(d.rid); return `${d.name} melted away.`; }
           run.rc(d.rid).sigils.push('haste');
           return `${d.name} came out with Haste.`;
         } },
@@ -239,7 +241,7 @@ const RUN_EVENTS = [
     ],
   },
   {
-    id: 'bones', title: 'BONE PILE', art: 'skeleton',
+    id: 'bones', title: 'BONE PILE', art: 'skeleton', screen: 'handover', hands: { mode: 'give', pile: true }, // the Pit Boss's hands (Run.handover, js/handover.js)
     text: 'A heap of bones. One of them is still twitching.',
     choices: [
       { label: 'TAKE A SKELETON', see: () => CARDS.skeleton, act: (run) => { const rc = run.add('skeleton'); return { text: 'A Skeleton (0-cost 1/1) joins your deck.', cards: [run.card(rc.rid)] }; } },
@@ -247,7 +249,7 @@ const RUN_EVENTS = [
     ],
   },
   {
-    id: 'offer', title: "THE DEALER'S OFFER", art: 'dealer',
+    id: 'offer', title: "THE DEALER'S OFFER", art: 'dealer', screen: 'handover', hands: { mode: 'give', gold: true },
     text: 'The Dealer slides a card across the table. Its frame glints: rare, or better. "A gift. I\'ll take my due at the next hand."',
     choices: [
       { label: 'ACCEPT', ok: (run) => runPool(run.s.colors).some((c) => rarityOf(c) !== 'common'), need: 'Nothing on offer for your colors.',
@@ -262,7 +264,7 @@ const RUN_EVENTS = [
     ],
   },
   {
-    id: 'rune', title: 'RUNE CIRCLE', art: 'stasisrune',
+    id: 'rune', title: 'RUNE CIRCLE', art: 'stasisrune', screen: 'rune',
     text: 'A rune circle turns slowly in the ground. Pay 3 life and it copies a sigil from one creature in your deck onto another.',
     choices: [
       { label: 'PAY 3 LIFE', transfer: true, cost: 3, ok: (run) => run.s.life > 3 && run.givers().length > 0,
@@ -281,7 +283,7 @@ const RUN_EVENTS = [
     ],
   },
   {
-    id: 'ghost', title: 'LOST SPELLSLINGER', art: 'apprentice',
+    id: 'ghost', title: 'LOST SPELLSLINGER', art: 'apprentice', screen: 'handover', hands: { mode: 'swap' },
     text: 'A spellslinger who never left the table offers a trade: your weakest card for one of theirs.',
     choices: [
       { label: 'TRADE', ok: (run) => run.s.deck.length > 0, need: 'You have no card to trade.',
@@ -310,7 +312,7 @@ const RUN_EVENTS = [
     ],
   },
   {
-    id: 'reliquary', title: 'RELIQUARY', art: 'ri_relic',
+    id: 'reliquary', title: 'RELIQUARY', art: 'ri_relic', screen: 'handover', hands: { mode: 'relic', gold: true },
     text: 'Behind a rusted grate, two cards hum like struck bells. Mythical, both of them. The grate only opens for blood: 6 life buys one.',
     choices: [
       { label: 'PAY 6 LIFE', ok: (run) => run.s.life > 6 && runPool(run.s.colors).some((c) => rarityOf(c) === 'mythical'),
@@ -622,7 +624,7 @@ const Run = {
   /* Apply an outcome, remember it (so a reload can't apply it twice), and show it. */
   /* `cards` are the cards the outcome names, for its SEE CARD button: a card still in the deck is
      shown as it is now, and one that is gone as it was. They are saved with the result. */
-  finishStop(icon, title, text, cards = []) {
+  finishStop(icon, title, text, cards = [], show = true) {
     this.register();
     const see = [];
     for (const c of cards) {
@@ -631,7 +633,8 @@ const Run = {
     }
     Object.assign(this.s.node, { icon, title, result: text, see });
     this.save();
-    this.outcome(icon, title, text, see);
+    if (show) this.outcome(icon, title, text, see);
+    return see;
   },
   /* An act's result as [text, cards]: a plain string, or { text, cards }, plus any cards named here. */
   result(r, cards = []) { return typeof r === 'string' ? [r, cards] : [r.text, [...(r.cards || []), ...cards]]; },
@@ -1120,7 +1123,7 @@ const Run = {
     const skull = `<img src="${iconURL('skull', Palette.cur.accent)}" alt="">`;
     const price = `${SLOT_REROLL} ${ico('arcana', '', Palette.onDarkHi)}`;
     this.screen(ev.art, ev.title,
-      spinning ? 'The reels spin...' : t ? `It pays out. Take it, or pull again for ${SLOT_REROLL} arcana.`
+      spinning ? 'The reels spin...' : t ? `It pays out. Take it, leave it, or pull again for ${SLOT_REROLL} arcana.`
         : 'A one-armed machine rattles in the dark. Every pull pays out.',
       `<div class="slot-mach">
         <div class="slot-cab">${pillar}
@@ -1132,8 +1135,8 @@ const Run = {
         </div>
         <button class="slot-lever${spinning ? ' pulled' : ''}" id="slLever"><img class="slot-bone" src="${spriteURL('slot_bone')}" alt=""></button>
       </div>`,
-      t ? `<button class="btn" id="slTake" ${spinning ? 'disabled' : ''}>TAKE IT</button><button class="btn" id="slPull" ${spinning ? 'disabled' : ''}>REROLL (${price})</button>`
-        : `<button class="btn" id="slPull" ${spinning ? 'disabled' : ''}>PULL THE LEVER</button><button class="btn" id="rnLeave" ${spinning ? 'disabled' : ''}>LEAVE</button>`);
+      t ? `<button class="btn" id="slTake" ${spinning ? 'disabled' : ''}>TAKE IT</button><button class="btn" id="slPull" ${spinning ? 'disabled' : ''}>REROLL (${price})</button><button class="btn" id="rnLeave" ${spinning ? 'disabled' : ''}>LEAVE</button>`
+        :`<button class="btn" id="slPull" ${spinning ? 'disabled' : ''}>PULL THE LEVER</button><button class="btn" id="rnLeave" ${spinning ? 'disabled' : ''}>LEAVE</button>`);
     $('.rn').classList.add('rn-slots');
     this.slotReadout(t, spinning);
     if (spinning) return;
@@ -1150,7 +1153,8 @@ const Run = {
     };
     $('#slPull').onclick = pull;
     $('#slLever').onclick = pull;
-    if (!t) { $('#rnLeave').onclick = () => { sfx('select'); this.leave(); }; return; }
+    $('#rnLeave').onclick = () => { sfx('select'); this.leave(); };
+    if (!t) return;
     $('#slTake').onclick = () => {
       let text, cards = [];
       if (t.k === 'card') { cards = [this.add(t.id)]; text = `${CARDS[t.id].name} joins your deck.`; sfx('place'); }
@@ -1510,13 +1514,19 @@ const Run = {
     this.save();
     RunMap.cleared().then(() => Scene.play({ draw, at, from: 0, to, cues, done }));
   },
-  /* The test benches: Run.sceneTest(id) in the console, or index.html?scenetest=<id> (bowl, draft;
+  /* The test benches: Run.sceneTest(id) in the console, or index.html?scenetest=<id> (bowl, draft, dip, rune, offer, ghost, relic, bones;
      ?bowltest and ?drafttest too). The scene plays as often as you like on a stand-in run: nothing
      is saved (save() checks this.bench) or paid, and DONE puts your run back. this.bench holds the
      bench's own state: the bowling lane's throws, Bone Draft's ante and the colors it deals from. */
   SCENE_BENCHES: {
     bowl: (run) => run.bowl(null, BOWL_STOP),
     draft: (run) => run.draft(null, RUN_EVENTS.find((e) => e.id === 'pack')),
+    dip: (run) => run.dip(null, RUN_EVENTS.find((e) => e.id === 'pool')),
+    rune: (run) => run.rune(null, RUN_EVENTS.find((e) => e.id === 'rune')),
+    offer: (run) => run.handover(null, RUN_EVENTS.find((e) => e.id === 'offer')),
+    ghost: (run) => run.handover(null, RUN_EVENTS.find((e) => e.id === 'ghost')),
+    relic: (run) => run.handover(null, RUN_EVENTS.find((e) => e.id === 'reliquary')),
+    bones: (run) => run.handover(null, RUN_EVENTS.find((e) => e.id === 'bones')),
   },
   sceneTest(id) {
     if (!this.SCENE_BENCHES[id]) return console.warn('No scene bench called', id, '- try', Object.keys(this.SCENE_BENCHES).join(', '));
@@ -1611,6 +1621,245 @@ const Run = {
       return;
     }
     $('#drSell').onclick = () => { if (lk.busy()) return; sfx('select'); this.finishStop(ev.art, ev.title, ...this.result(sell.act(this, null, sell))); };
+  },
+
+  /* ---------- the Molten Pool (a ? event, js/dip.js) ----------
+     You land beside the spring (the entrance, once per stop: node.sp.landed), then choose. DIP A
+     CREATURE asks which one (over the scene), rolls whether it melts and saves that on
+     node.sp.dip before the card goes in; it comes back with Haste or never comes back, and the
+     outcome is applied once the scene has shown it. A reload mid-dip applies the saved roll and
+     shows the outcome. Input does nothing while anything moves. The spires heat up with the ante. */
+  dip(n, ev) {
+    const node = this.s.node, sp = node.sp || (node.sp = {}), test = this.bench;
+    const [dipCh, leaveCh] = ev.choices, ok = test || this.canChoose(dipCh);
+    const finish = (d, melt) => this.finishStop(ev.art, ev.title, ...this.result(dipCh.act(this, d, dipCh, melt), [d]));
+    if (sp.dip && !test) { const d = this.card(sp.dip.rid); if (d) return finish(d, sp.dip.melt); }
+    const ante = test ? test.ante : Math.min(this.s.circuit || 1, RunMap.SPIRE_ANTES.length);
+    const stage = this.sceneScreen(ev.art, ev.title, escapeHTML(ev.text),
+      test ? `<button class="btn" id="spDip">HASTE</button><button class="btn" id="spMelt">MELT</button><button class="btn" id="spAnte">ANTE ${ante}</button><button class="btn" id="rnLeave">DONE</button>`
+        : `<button class="btn" id="spDip" ${ok ? '' : 'disabled'}>${escapeHTML(dipCh.label)}</button><button class="btn" id="rnLeave">${escapeHTML(leaveCh.label)}</button>` +
+          (ok ? '' : `<div class="rn-need">${escapeHTML(dipCh.need)}</div>`));
+    const draw = Dip.mount(stage, RunMap.SPIRE_ANTES[ante - 1].heat), lk = this.sceneLock();
+    const rest = () => { draw(Dip.at(Dip.REST)); lk.unlock(); if (!ok) $('#spDip').disabled = true; };
+    // The dip itself, with the outcome already rolled.
+    const play = (melt, done) => {
+      if (FAST) return done();
+      lk.lock();
+      Scene.play({ draw, at: (t) => Dip.at(t, melt), from: Dip.REST, to: Dip.end(melt), cues: Dip.cues(melt), done });
+    };
+    lk.lock();
+    this.sceneEnter(sp, { draw, at: Dip.at, to: Dip.REST, cues: Dip.ENTER_CUES, done: rest });
+    if (test) {
+      // The bench dips a stand-in card as often as you like, either way.
+      $('#spDip').onclick = () => { if (lk.busy()) return; sfx('select'); play(false, rest); };
+      $('#spMelt').onclick = () => { if (lk.busy()) return; sfx('select'); play(true, rest); };
+      $('#spAnte').onclick = () => { if (lk.busy()) return; sfx('select'); test.ante = test.ante % RunMap.SPIRE_ANTES.length + 1; this.s.node = { sp: { landed: true } }; this.dip(n, ev); };
+      $('#rnLeave').onclick = () => { if (lk.busy()) return; sfx('select'); this.sceneTestEnd(); };
+      return;
+    }
+    // Which creature: picked over the scene; BACK puts the question away.
+    $('#spDip').onclick = () => {
+      if (lk.busy() || !ok) return;
+      sfx('select');
+      const wrap = document.createElement('div');
+      wrap.className = 'rn-deckwrap';
+      wrap.innerHTML = `<div class="rn panel slot-see"><div class="rn-sub">Pick a creature to dip.</div><div class="rn-body" id="spBody"></div>
+        <div class="rn-btns"><button class="btn" id="spBack">BACK</button></div></div>`;
+      $('#screen').appendChild(wrap);
+      const mons = this.creatures().filter(dipCh.pick);
+      this.cardGrid($('#spBody'), mons, (d) => {
+        wrap.remove();
+        const melt = dipCh.melts(this);
+        sp.dip = { rid: d.rid, melt };
+        this.save();
+        play(melt, () => finish(d, melt));
+      }, mons.length > 7);
+      $('#spBack').onclick = () => { sfx('select'); wrap.remove(); };
+    };
+    $('#rnLeave').onclick = () => { if (lk.busy()) return; sfx('select'); this.finishStop(ev.art, ev.title, ...this.result(leaveCh.act(this, null, leaveCh))); };
+  },
+
+  /* ---------- the Rune Circle (a ? event, js/rune.js on the factory of js/factory.js) ----------
+     You land in the circle between two creatures (the entrance, once per stop: node.rn.landed),
+     then choose. PAY 3 LIFE asks, over the scene, whose sigil to copy, which one and who gets it;
+     the last pick saves node.rn.to before the circle spins up and the copy flies across. The
+     life is paid and the sigil given once the scene has shown it; a reload after the last pick
+     applies it straight away. Input does nothing while anything moves. The furnaces heat up with the ante. */
+  rune(n, ev) {
+    const node = this.s.node, rn = node.rn || (node.rn = {}), test = this.bench;
+    const [payCh, leaveCh] = ev.choices, ok = test || this.canChoose(payCh);
+    const finish = () => {
+      const from = this.card(rn.from), d = this.card(rn.to), k = rn.sigil;
+      if (!from || !d) return this.leave();
+      const rc = this.rc(d.rid);
+      rc.sigils.push(k);
+      if (k === 'snipe' || k === 'mend') rc[k] = from[k];
+      this.s.life -= payCh.cost;
+      sfx('spell');
+      this.finishStop(ev.art, ev.title, `${d.name} gained ${sigilName(k, from)}.`, [d]);
+    };
+    if (rn.to != null && !test) return finish();
+    const ante = test ? test.ante : Math.min(this.s.circuit || 1, RunMap.SPIRE_ANTES.length);
+    const stage = this.sceneScreen(ev.art, ev.title, escapeHTML(ev.text),
+      test ? `<button class="btn" id="rcPay">${escapeHTML(payCh.label)}</button><button class="btn" id="rcAnte">ANTE ${ante}</button><button class="btn" id="rnLeave">DONE</button>`
+        : `<button class="btn" id="rcPay" ${ok ? '' : 'disabled'}>${escapeHTML(payCh.label)}</button><button class="btn" id="rnLeave">${escapeHTML(leaveCh.label)}</button>` +
+          (ok ? '' : `<div class="rn-need">${escapeHTML(payCh.need)}</div>`));
+    const draw = Rune.mount(stage, RunMap.SPIRE_ANTES[ante - 1].heat), lk = this.sceneLock();
+    const rest = () => { draw(Rune.at(Rune.REST)); lk.unlock(); if (!ok) $('#rcPay').disabled = true; };
+    const play = (done) => {
+      if (FAST) return done();
+      lk.lock();
+      Scene.play({ draw, at: Rune.at, from: Rune.REST, to: Rune.END, cues: Rune.CUES, done });
+    };
+    lk.lock();
+    this.sceneEnter(rn, { draw, at: Rune.at, to: Rune.REST, cues: Rune.ENTER_CUES, done: rest });
+    if (test) {
+      // The bench copies a stand-in sigil as often as you like.
+      $('#rcPay').onclick = () => { if (lk.busy()) return; sfx('select'); play(rest); };
+      $('#rcAnte').onclick = () => { if (lk.busy()) return; sfx('select'); test.ante = test.ante % RunMap.SPIRE_ANTES.length + 1; this.s.node = { rn: { landed: true } }; this.rune(n, ev); };
+      $('#rnLeave').onclick = () => { if (lk.busy()) return; sfx('select'); this.sceneTestEnd(); };
+      return;
+    }
+    // The three questions, each over the scene; BACK goes up one.
+    const ask = (sub, back) => {
+      const wrap = document.createElement('div');
+      wrap.className = 'rn-deckwrap';
+      wrap.innerHTML = `<div class="rn panel slot-see"><div class="rn-sub">${sub}</div><div class="rn-body" id="rcBody"></div>
+        <div class="rn-btns"><button class="btn" id="rcBack">BACK</button></div></div>`;
+      $('#screen').appendChild(wrap);
+      $('#rcBack').onclick = () => { sfx('select'); wrap.remove(); back(); };
+      return wrap;
+    };
+    const pickFrom = () => {
+      const givers = this.givers(), wrap = ask('Pick a creature whose sigil you want to copy.', () => {});
+      this.cardGrid($('#rcBody'), givers, (d) => { wrap.remove(); rn.from = d.rid; pickSigil(); }, givers.length > 7);
+    };
+    const pickSigil = () => {
+      const from = this.card(rn.from), mons = this.creatures(), ks = from.sigils.filter((k) => mons.some((r) => this.canTake(r, k, from.rid)));
+      const wrap = ask(`Which of ${escapeHTML(from.name)}'s sigils?`, pickFrom);
+      $('#rcBody').innerHTML = `<div class="rn-sigils">${ks.map((k) => `
+        <button class="rn-sig" data-k="${k}">${ico(SIGILS[k].icon)}<span><b>${escapeHTML(sigilName(k, from))}</b>${escapeHTML(SIGILS[k].text(from))}</span></button>`).join('')}</div>`;
+      $$('.rn-sig').forEach((b) => (b.onclick = () => { sfx('select'); wrap.remove(); rn.sigil = b.dataset.k; pickTo(); }));
+    };
+    const pickTo = () => {
+      const from = this.card(rn.from), k = rn.sigil, takers = this.creatures().filter((r) => this.canTake(r, k, from.rid));
+      const wrap = ask(`Which creature receives ${escapeHTML(sigilName(k, from))}? It costs ${payCh.cost} life.`, pickSigil);
+      this.cardGrid($('#rcBody'), takers, (d) => { wrap.remove(); rn.to = d.rid; this.save(); play(finish); }, takers.length > 7);
+    };
+    $('#rcPay').onclick = () => { if (lk.busy() || !ok) return; sfx('select'); pickFrom(); };
+    $('#rnLeave').onclick = () => { if (lk.busy()) return; sfx('select'); this.finishStop(ev.art, ev.title, ...this.result(leaveCh.act(this, null, leaveCh))); };
+  },
+
+  /* ---------- the Pit Boss's hands (four ? events, js/handover.js) ----------
+     The Dealer's Offer, the Lost Spellslinger, the Reliquary and the Bone Pile share one scene (ev.hands
+     picks its mode). You land in the middle and the Pit Boss's hands slide in from either side (the
+     entrance, once per stop: node.ho.landed). Choosing deals the outcome and saves it on the stop
+     (node.result) before the card floats to you, turns over and the real face opens over the scene,
+     so a reload shows the outcome instead of dealing again. The Reliquary instead deals its two
+     cards (node.cards, node.choice) and opens both faces for you to pick one over the scene; the
+     life is only paid when you pick. Input does nothing while anything moves. */
+  handover(n, ev) {
+    const node = this.s.node, ho = node.ho || (node.ho = {}), test = this.bench;
+    const [go, other] = ev.choices, relic = ev.hands.mode === 'relic', H = Handover.make(ev.hands);
+    const ok = test || this.canChoose(go);
+    const ante = test ? test.ante : Math.min(this.s.circuit || 1, RunMap.SPIRE_ANTES.length);
+    const paid = !test && relic && node.choice != null && (node.cards || []).length > 0; // a reload after paying: straight to the pick
+    const leave = '<button class="btn" id="rnLeave">LEAVE</button>';
+    const stage = this.sceneScreen(ev.art, ev.title, escapeHTML(paid ? go.prompt : ev.text),
+      test ? `<button class="btn" id="hoGo">${escapeHTML(go.label)}</button><button class="btn" id="hoAnte">ANTE ${ante}</button><button class="btn" id="rnLeave">DONE</button>`
+        : paid ? leave
+          : `<button class="btn" id="hoGo" ${ok ? '' : 'disabled'}>${escapeHTML(go.label)}</button>` + (go.see && go.see(this) ? '<button class="btn" id="hoSee">SEE CARD</button>' : '') +
+            `<button class="btn" id="hoOther">${escapeHTML(other.label)}</button>` + (ok ? '' : `<div class="rn-need">${escapeHTML(go.need || '')}</div>`));
+    const draw = H.mount(stage, RunMap.SPIRE_ANTES[ante - 1].heat), lk = this.sceneLock();
+    const idle = () => { draw(H.at(H.REST)); lk.unlock(); if (!ok) $('#hoGo').disabled = true; };
+    // The outcome is dealt and saved before anything moves (the stop is finished; its screen is not shown yet).
+    const settle = (r, cards) => {
+      const [text, list] = this.result(r, cards);
+      return { text, see: this.finishStop(ev.art, ev.title, text, list, false) };
+    };
+    // The real card faces open over the scene where the backs turned (.dr-pick), as Bone Draft's do.
+    const faces = (defs, onPick) => {
+      stage.querySelector('.dr-pick')?.remove();
+      const el = document.createElement('div');
+      el.className = 'dr-pick';
+      stage.appendChild(el);
+      this.cardGrid(el, defs, onPick);
+      const [x, y] = draw.toStage(...H.CARDS_AT);
+      el.style.left = Math.round(x - el.offsetWidth / 2) + 'px';
+      el.style.top = Math.max(6, Math.round(y - el.offsetHeight / 2)) + 'px';
+      this.tip(null);
+      return el;
+    };
+    // The stop is done: its outcome shows in the header, and CONTINUE leaves.
+    const finish = (text) => {
+      $('.rn-sub').textContent = text || ev.text;
+      if (test) return lk.unlock(); // the bench keeps the last frame; the next press resets the scene
+      $('.rn-btns').innerHTML = '<button class="btn" id="rnLeave">CONTINUE</button>';
+      $('#rnLeave').onclick = () => { sfx('select'); this.leave(); };
+      lk.unlock();
+    };
+    // Play the timeline from `from` to `to`; `turned` runs once when the faces take over.
+    const play = (from, to, turned, done) => {
+      let shown = false;
+      const watch = (S) => { draw(S); if (S.t >= H.TURNED && !shown) { shown = true; turned(); } };
+      watch.alive = draw.alive;
+      lk.lock();
+      Scene.play({ draw: watch, at: H.at, from, to, cues: H.CUES, done });
+    };
+    // The Reliquary's pick: two real faces over the scene; the one you click is yours and the hands leave.
+    const pick = (defs) => {
+      let taken = false;
+      $('.rn-sub').textContent = go.prompt || 'Pick one.';
+      const el = faces(defs, (c) => {
+        if (taken || lk.busy()) return;
+        taken = true;
+        const text = test ? '' : settle(go.take(this, c), [c]).text;
+        const mid = parseFloat(el.style.left) + el.offsetWidth / 2;
+        [...el.children].forEach((k, i) => { if (defs[i] !== c) k.remove(); });
+        el.style.left = Math.round(mid - el.offsetWidth / 2) + 'px';
+        if (FAST) return test ? lk.unlock() : this.outcome(ev.art, ev.title, text, node.see);
+        play(H.TURNED, H.END, () => {}, () => finish(text));
+      });
+    };
+
+    if (paid) { // reloaded after paying: the faces are open already
+      draw(H.at(H.TURNED));
+      pick(node.cards.map((id) => CARDS[id]).filter(Boolean));
+      $('#rnLeave').onclick = () => { sfx('select'); this.leave(); };
+      return;
+    }
+    // The entrance: the map's slingshot flung you here, so you land in the middle on the tail of that lob.
+    lk.lock();
+    this.sceneEnter(ho, { draw, at: H.at, to: H.REST, cues: H.ENTER_CUES, done: idle });
+    $('#hoGo').onclick = () => {
+      if (lk.busy() || !ok) return;
+      sfx('select');
+      this.tip(null);
+      stage.querySelector('.dr-pick')?.remove();
+      if (test) draw(H.at(H.REST));
+      if (relic) {
+        const defs = test ? runPickN(Math.random, (m => (m.length >= 2 ? m : runPool(test.colors)))(runPool(test.colors).filter((c) => rarityOf(c) === 'mythical')), 2)
+          : (node.cards = go.cards(this), node.choice = 0, this.save(), node.cards.map((id) => CARDS[id]).filter(Boolean));
+        if (!test) { // dealt: there is no paying twice, only picking or leaving
+          $('.rn-btns').innerHTML = leave;
+          $('#rnLeave').onclick = () => { if (lk.busy()) return; sfx('select'); this.leave(); };
+        }
+        if (FAST) { draw(H.at(H.TURNED)); return pick(defs); }
+        return play(H.REST, H.TURNED, () => {}, () => { lk.unlock(); pick(defs); });
+      }
+      // Dealt and saved first; a bench deals a stand-in card that goes nowhere.
+      const got = test ? { text: '', see: [ev.id === 'bones' ? CARDS.skeleton : runOffer(Math.random, test.colors, 1, { least: ev.id === 'offer' ? 'rare' : 'common' })[0]] }
+        : settle(go.act(this, null, go));
+      if (FAST) return this.outcome(ev.art, ev.title, got.text, got.see);
+      play(H.REST, H.END, () => faces([got.see[got.see.length - 1]], null), () => finish(got.text));
+    };
+    if (go.see && !test) $('#hoSee').onclick = () => { sfx('select'); this.seeCard(go.see(this)); };
+    if (test) {
+      $('#hoAnte').onclick = () => { if (lk.busy()) return; sfx('select'); this.tip(null); test.ante = test.ante % RunMap.SPIRE_ANTES.length + 1; this.s.node = { ho: { landed: true } }; this.handover(n, ev); };
+      $('#rnLeave').onclick = () => { if (lk.busy()) return; sfx('select'); this.sceneTestEnd(); };
+      return;
+    }
+    $('#hoOther').onclick = () => { if (lk.busy()) return; sfx('select'); this.finishStop(ev.art, ev.title, ...this.result(other.act(this, null, other))); };
   },
 
   /* ---------- the deck, as seen from the map ---------- */
