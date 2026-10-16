@@ -808,8 +808,10 @@ body[data-crt="off"] .rm-fig img, .rm-fig.hopping img { animation: none; }
 .rn-stat { align-self: flex-start; display: flex; align-items: center; gap: 6px; font-family: var(--pixel); font-size: 15px; }
 .rn-stat .ico { width: 16px; height: 16px; }
 .rn-stat b { font-weight: normal; margin-right: 8px; }
-.rn-body { min-height: 40px; overflow-y: auto; }
-.rn-cards { display: flex; flex-wrap: wrap; justify-content: center; gap: 14px; padding: 8px 4px 12px; }
+/* Only ever scrolls down a long list; a hovered card's pop and tilt never adds a sideways scrollbar. */
+.rn-body { min-height: 40px; overflow-y: auto; overflow-x: hidden; }
+/* Side padding leaves room for that pop (scale 1.12) so edge cards aren't clipped. */
+.rn-cards { display: flex; flex-wrap: wrap; justify-content: center; gap: 14px; padding: 8px 12px 12px; }
 .rn-cards.small { gap: 6px; }
 .rn-cards.small .card { zoom: .74; }
 .rn-cards .card.still { cursor: default; }
