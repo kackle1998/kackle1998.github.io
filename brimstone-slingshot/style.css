@@ -902,9 +902,11 @@ body[data-crt="off"] .rm-fig img, .rm-fig.hopping img { animation: none; }
 .wh-disk.live { cursor: pointer; }
 .wh-pin { position: absolute; left: 50%; top: calc(50% - 180px); margin-left: -18px; border: 18px solid transparent; border-top: 30px solid var(--ink); border-bottom: 0; }
 .wh-pin::after { content: ''; position: absolute; left: -14px; top: -30px; border: 14px solid transparent; border-top: 24px solid var(--accent); border-bottom: 0; }
-/* The bowling lane (a ? stop event, js/bowl.js) also reuses the slot cabinet. The lane is tilted by the run
-   map's camera (.rm-view / .rm-pl); the view is scaled by script so the foul line to the back wall fills the stage. */
-.bw-stage { position: relative; flex: 1; min-height: 0; overflow: hidden; background: var(--dark); border: 3px solid var(--ink); cursor: pointer; }
+/* The bowling lane (a map stop, js/bowl.js) also reuses the slot cabinet. The lane is tilted by the run
+   map's camera (.rm-view / .rm-pl); the view is scaled by script so the orrery sky past the pins,
+   down to just past the figurine, fills the stage. The sky is the run map's (RunMap.skyDrawer). */
+.bw-stage { position: relative; flex: 1; min-height: 0; overflow: hidden; background: var(--bg); border: 3px solid var(--ink); cursor: pointer; }
+.bw-sky { position: absolute; inset: 0; width: 100%; height: 100%; image-rendering: pixelated; }
 .bw-view { position: absolute; left: 0; height: 700px; perspective: 1100px; perspective-origin: 50% 280px; transform-origin: 0 0; }
 .bw-pl {
   position: absolute; left: 50%; top: 50%; width: 1440px; height: 520px; margin: -260px 0 0 -720px;
@@ -915,6 +917,7 @@ body[data-crt="off"] .rm-fig img, .rm-fig.hopping img { animation: none; }
 .bw-st canvas { display: block; width: 100%; height: 100%; image-rendering: pixelated; }
 .bw-st.bob canvas { animation: rmBob 1.2s steps(2) infinite; }
 .bw-hud { position: absolute; left: 50%; bottom: 6px; width: 360px; height: 42px; margin-left: -180px; image-rendering: pixelated; pointer-events: none; }
+.bw-hud.bw-top { top: 6px; bottom: auto; } /* the payout counter, in the sky past the pins */
 .wh-got { width: 21px; height: 21px; margin-right: 12px; vertical-align: -3px; image-rendering: pixelated; }
 .rn-need { width: 100%; text-align: center; font-size: 18px; color: var(--mid); }
 .rn-deckwrap { position: absolute; inset: 0; z-index: 5; display: flex; align-items: center; justify-content: center; background: color-mix(in srgb, var(--bg) 72%, transparent); }

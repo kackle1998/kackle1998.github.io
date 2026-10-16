@@ -1977,5 +1977,5 @@ const RunMap = (() => {
     if (opts.fromDark) curtain($('#rmap'), C, 1, 0, 700);
   }
 
-  return { show, forkArt, pouchArt, ramp, SL, VSB, vsBackdrop }; // the VS splash (ui.js) reuses the slingshot art and the sky
+  return { show, forkArt, pouchArt, ramp, SL, VSB, vsBackdrop, skyDrawer, RUNE }; // the bowling lane (js/bowl.js) reuses the sky and the rune // the VS splash (ui.js) reuses the slingshot art and the sky
 })();

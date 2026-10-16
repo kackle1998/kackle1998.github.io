@@ -8,11 +8,16 @@
    ============================================================ */
 
 const Bowl = (() => {
-  const LW = 720, LH = 260;           // the lane canvas: the middle lane plus its neighbors
+  const LW = 720, LH = 260;           // the lane canvas: the slab in the middle, open sky either side
   const CX = 360;                      // the middle of your lane
   const LANE = 30;                     // half its width (the boards)
   const FOUL = 226, FIG_Y = 234, BALL_Y = 238, PIT = 10;
-  const SLIDE = 22;                    // how far the ball slides either way along the foul line
+  // Where the ball can be set along the foul line (lane px from CX). The figurine stands left of the
+  // ball and is 22 px wide, so the left end stops it at the boards' edge rather than over the gutter;
+  // the right end stops the ball itself at the edge.
+  const SLIDE_L = -9, SLIDE_R = 23;
+  const slideX = (v) => CX + SLIDE_L + v * (SLIDE_R - SLIDE_L);
+  const AIM = 0.2 + 10 * Math.PI / 180; // the aim swings this far either way (radians): about 21 degrees
   const BAY = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
   const cl = (v) => Math.max(0, Math.min(1, v));
   const lvl = (f, x, y) => Math.max(0, Math.min(3, Math.round(f * 3 + BAY[(x & 3) + (y & 3) * 4] / 16 - 0.5)));
@@ -59,16 +64,9 @@ const Bowl = (() => {
     return out;
   }
 
-  /* The masking wall behind the pits: dithered dark panels with an accent band. */
-  function wallRows() {
-    const out = [], w = LW - 2;
-    for (let y = 0; y < 30; y++) {
-      let s = '';
-      for (let x = 0; x < w; x++) s += y === 4 || y === 5 ? 'r' : '0123'[lvl(cl(0.75 - Math.abs(x - w / 2) / w * 0.5 - y / 30 * 0.25), x, y)];
-      out.push(s);
-    }
-    return out;
-  }
+  /* Stone columns standing beside the lane: whole, and broken off at the top (l lit, m mid, s shade). */
+  const COLUMN = ['llllmmss', 'llllmmss', '.llmmms.', ...Array(27).fill('.lmmmms.'), '.llmmms.', 'llllmmss', 'llllmmss'];
+  const BROKEN = ['..l.....', '.llm..s.', '.llmmms.', ...Array(17).fill('.lmmmms.'), '.llmmms.', 'llllmmss', 'llllmmss'];
 
   /* ---------- the ball's path and the roll ---------- */
   /* Where the ball is at t (0 at release, 1 at the pit): it heads off along `aim` (radians, minus is
@@ -87,9 +85,11 @@ const Bowl = (() => {
     };
   }
 
-  /* The steps of the throw animation: the figurine leans for LEAN steps, then the ball takes ROLL steps to the pit. */
-  const LEAN = 2, ROLL = 10;
-  const stepAt = (y) => LEAN + Math.ceil((BALL_Y - y) / (BALL_Y - PIT) * ROLL);
+  /* The steps of the throw animation: the figurine leans for LEAN steps, then the ball takes
+     rollSteps(pow) steps to the pit: 8 on the hardest throw, up to 22 on the softest. */
+  const LEAN = 2;
+  const rollSteps = (pow) => Math.round(8 + (1 - pow) * 14);
+  const stepAt = (y, pow) => LEAN + Math.ceil((BALL_Y - y) / (BALL_Y - PIT) * rollSteps(pow));
 
   /* Roll the throw once: which pins fall, the step each one starts to fall at, and which way.
      The ball knocks over what it touches; each falling pin can take down the pins behind it,
@@ -107,7 +107,7 @@ const Bowl = (() => {
       PINS.forEach((p, j) => {
         if (at[j] >= 0) return;
         const dx = p.x - q.x, dy = p.y - q.y, d = Math.hypot(dx, dy);
-        if (d < 9) { at[j] = stepAt(q.y); const n = Math.hypot(dx, dy - 0.6 * d) || 1; dir[j] = [dx / n, (dy - 0.6 * d) / n]; side[j] = dx < 0 ? -1 : 1; }
+        if (d < 9) { at[j] = stepAt(q.y, pow); const n = Math.hypot(dx, dy - 0.6 * d) || 1; dir[j] = [dx / n, (dy - 0.6 * d) / n]; side[j] = dx < 0 ? -1 : 1; }
       });
     }
     // Falling pins knock the pins behind and beside them, in order.
@@ -131,44 +131,70 @@ const Bowl = (() => {
        side, meter: 0..1 or null, arcana: count or 0 }. */
   function mount(stage) {
     const C = RunMap.ramp(), RGB = C.map(rgb);
-    stage.innerHTML = '<div class="bw-view"><div class="bw-pl"></div></div><canvas class="bw-hud" width="120" height="14"></canvas>';
-    const view = stage.firstChild, pl = view.firstChild, hud = stage.lastChild;
-    // The view is 700 tall like a map screen; it is scaled so the stretch from the back wall to just past
-    // the figurine (view y 110 to 650) fills the stage.
-    const k = stage.clientHeight / 540;
-    Object.assign(view.style, { width: stage.clientWidth / k + 'px', top: -110 * k + 'px', transform: `scale(${k})` });
+    stage.innerHTML = '<canvas class="bw-sky"></canvas><div class="bw-view"><div class="bw-pl"></div></div><canvas class="bw-hud bw-top" width="120" height="14"></canvas><canvas class="bw-hud" width="120" height="14"></canvas>';
+    const skyCv = stage.firstChild, view = skyCv.nextSibling, pl = view.firstChild, top = view.nextSibling, hud = stage.lastChild; // top: the payout; hud: the power bar
+    // The view is 700 tall like a map screen; it is scaled so view y 30 to 630 fills the stage: the
+    // orrery sky above the lintel, down to just past the figurine.
+    const k = stage.clientHeight / 600;
+    Object.assign(view.style, { width: stage.clientWidth / k + 'px', top: -30 * k + 'px', transform: `scale(${k})` });
+
+    // Behind it all, the run map's sky: its orrery in a nebula, turning on its own (about 10 fps).
+    const sky = RunMap.skyDrawer(skyCv, C);
+    sky(performance.now() / 1000);
+    const skyTimer = setInterval(() => { if (!stage.isConnected) return clearInterval(skyTimer); sky(performance.now() / 1000); }, 100);
 
     // The lane: tone sets and light per pixel are worked out once; shadows and aim dots are laid over each step.
+    // One flagstone lane floating in the sky like the Dealer's table: a strip of floor either side where
+    // the columns stand, runes for targets, and past the pins only space.
     const lane = document.createElement('canvas');
     lane.width = LW; lane.height = LH; lane.className = 'bw-lane';
     pl.appendChild(lane);
-    const TONES = [[0, 1, 1, 2], [5, 6, 7, 7], [4, 5, 6, 6], [2, 3, 3, 3], [1, 2, 2, 3], [2, 3, 3, 4], [3, 4, 4, 5]];
-    const set = new Uint8Array(LW * LH), light = new Float32Array(LW * LH), mark = new Uint8Array(LW * LH);
+    // slab edge, slab, slab seam, foul line, gutter, gutter rim, floor slab, floor seam
+    const TONES = [[1, 2, 2, 3], [5, 6, 6, 7], [3, 4, 4, 5], [2, 3, 3, 3], [1, 2, 2, 3], [2, 3, 3, 4], [3, 4, 4, 5], [2, 3, 3, 3]];
+    const VOID = 255, EDGE = 46; // set[] for open sky; the slab's half-width
+    const set = new Uint8Array(LW * LH), light = new Float32Array(LW * LH), mark = new Uint8Array(LW * LH); // mark: a tone + 1
+    const RUNE = RunMap.RUNE, CHEVRON = [[-24, 0], [-12, -5], [0, -10], [12, -5], [24, 0]];
+    // A few short cracks across your lane only, the same every time.
+    const cracks = new Set(), CR = mulberry32(11);
+    for (let n = 0; n < 4; n++) {
+      let x = CX - 26 + CR() * 52, y = 90 + CR() * 120, a = CR() * 6.3;
+      for (let i = 0; i < 6; i++) { a += (CR() - 0.5) * 1.1; x += Math.cos(a); y += Math.sin(a); cracks.add((x | 0) + ',' + (y | 0)); }
+    }
     for (let y = 0; y < LH; y++) for (let x = 0; x < LW; x++) {
-      const o = y * LW + x, lx = ((x - CX + 40) % 80 + 80) % 80; // place across a lane and its gutters: 10..69 boards
-      light[o] = cl(1.1 - (x - CX + 60) / 120 * 0.5 - y / LH * 0.35); // lit from the upper left
-      if (y < PIT) set[o] = 0;
-      else if (lx >= 10 && lx < 70) {
-        const bx = lx - 10;
-        set[o] = y === FOUL ? 3 : y > FOUL || bx % 6 === 5 ? 2 : 1;
-        // Target arrows in a chevron, and a row of dots nearer the foul line (on every lane).
-        if ((bx % 10 === 4 && y === 150 - Math.round(Math.abs(bx - 29.5) / 3)) || (y === 196 && bx % 10 === 7)) mark[o] = 1;
-      } else if (lx >= 4 && lx < 76) set[o] = lx === 4 || lx === 9 || lx === 70 || lx === 75 ? 5 : 4;
-      else set[o] = 6; // the capping between lanes
+      const o = y * LW + x, d = x - CX; // boards at d -30..29, gutters to -36 / 35, floor to the slab's edge
+      light[o] = cl(1.1 - (d + 60) / 120 * 0.5 - y / LH * 0.35); // lit from the upper left
+      if (y < PIT || d < -EDGE || d >= EDGE) set[o] = VOID;
+      else if (y === PIT || d === -EDGE || d === EDGE - 1) set[o] = 0;
+      else if (d >= -30 && d < 30) {
+        const bx = d + 30, row = Math.floor(y / 18);
+        set[o] = y === FOUL ? 3 : (bx + (row % 2) * 10) % 20 === 19 || y % 18 === 17 ? 2 : 1;
+        if (y === FOUL) continue;
+        // Runes in a chevron where the target arrows would be.
+        for (const [dx, dy] of CHEVRON) {
+          const gx = bx - 27 - dx, gy = y - 146 - dy;
+          if (gx >= 0 && gx < 5 && gy >= 0 && gy < 7 && RUNE[gy][gx] === '#') mark[o] = 2 + 1;
+        }
+        if (!mark[o] && cracks.has(x + ',' + y)) mark[o] = 3 + 1;
+      } else if (d >= -36 && d < 36) set[o] = d === -36 || d === -31 || d === 30 || d === 35 ? 5 : 4;
+      else set[o] = x % 14 === 13 || y % 12 === 11 ? 7 : 6; // the flagstone strips where the columns stand
     }
     const g = lane.getContext('2d'), img = g.createImageData(LW, LH), px = img.data;
     const paint = (x, y, i) => { const o = (y * LW + x) * 4, c = RGB[i]; px[o] = c[0]; px[o + 1] = c[1]; px[o + 2] = c[2]; px[o + 3] = 255; };
     const tone = (x, y, dim) => {
       const o = y * LW + x;
-      return mark[o] && !dim ? 3 : TONES[set[o]][lvl(cl(light[o] - dim), x, y)];
+      return mark[o] && !dim ? mark[o] - 1 : TONES[set[o]][lvl(cl(light[o] - dim), x, y)];
     };
-    for (let y = 0; y < LH; y++) for (let x = 0; x < LW; x++) paint(x, y, tone(x, y, 0));
+    // Open sky stays clear (alpha 0), so the orrery shows round the slab and past the pins.
+    for (let y = 0; y < LH; y++) for (let x = 0; x < LW; x++) if (set[y * LW + x] !== VOID) paint(x, y, tone(x, y, 0));
     const base = new Uint8ClampedArray(px);
     g.putImageData(img, 0, 0); // painted now, so the lane is never blank before the first draw
 
     const stand = (el, w, h) => { el.className = 'bw-st'; el.style.width = w + 'px'; el.style.height = h + 'px'; pl.appendChild(el); return el; };
-    const wall = stand(sprite(C, wallRows(), { 0: 1, 1: 2, 2: 2, 3: 3, r: 8 }, null), LW * 2, 64);
-    Object.assign(wall.style, { left: '0px', top: '-64px' });
+    // Three columns on the flagstone strips beside your lane: one whole, two broken off, by turns left and right.
+    [[-40, 60, 1], [40, 125, 0], [-40, 195, 1]].forEach(([dx, y, broken]) => {
+      const cv = sprite(C, broken ? BROKEN : COLUMN, { l: 6, m: 5, s: 3 }, 2), el = stand(cv, cv.width * 3, cv.height * 3); // 3x, so they read as columns
+      Object.assign(el.style, { left: (CX + dx) * 2 - cv.width * 1.5 + 'px', top: y * 2 - cv.height * 3 + 'px' });
+    });
     const pins = PINS.map(() => { const cv = sprite(C, PIN, { l: 7, m: 6, s: 4, r: 8 }, 2); return stand(cv, cv.width * 2, cv.height * 2); });
     // Your figurine, with an ink outline so its pale face doesn't melt into the pale boards.
     // 16 px drawn at 2.5x (40 units), plus the outline's pixel on every side.
@@ -181,10 +207,11 @@ const Bowl = (() => {
     const bg = ball.getContext('2d');
     let spun = null;
 
-    const hg = hud.getContext('2d');
-    const dot = (x, y, i) => { hg.fillStyle = C[i]; hg.fillRect(x, y, 1, 1); };
+    const hg = hud.getContext('2d'), tg = top.getContext('2d');
+    const dot = (x, y, i, ctx = hg) => { ctx.fillStyle = C[i]; ctx.fillRect(x, y, 1, 1); };
     function drawHud(meter, n) {
       hg.clearRect(0, 0, 120, 14);
+      tg.clearRect(0, 0, 120, 14);
       if (meter != null) {
         // The power bar: a wedge that rises to the right, the last stretch in the accent, and a marker with ticks.
         for (let x = 2; x <= 117; x++) for (let y = 3; y <= 10; y++) {
@@ -196,9 +223,9 @@ const Bowl = (() => {
         for (let y = 2; y <= 11; y++) dot(X, y, 1);
         for (const y of [1, 12]) for (const u of [-1, 0, 1]) dot(X + u, y, 1);
       }
-      // The payout, one arcana symbol per arcana won, with a drop shadow.
+      // The payout, along the top in the open sky past the pins: one arcana symbol per arcana won, with a drop shadow.
       const x0 = Math.round((120 - n * 8) / 2);
-      for (let i = 0; i < n; i++) ARCANA.forEach((r, y) => [...r].forEach((ch, x) => { if (ch === '#') { dot(x0 + i * 8 + x + 1, y + 4, 2); dot(x0 + i * 8 + x, y + 3, 8); } }));
+      for (let i = 0; i < n; i++) ARCANA.forEach((r, y) => [...r].forEach((ch, x) => { if (ch === '#') { dot(x0 + i * 8 + x + 1, y + 4, 2, tg); dot(x0 + i * 8 + x, y + 3, 8, tg); } }));
     }
 
     return function draw(st) {
@@ -208,7 +235,7 @@ const Bowl = (() => {
       const shade = (cx, cy, rx, ry) => {
         for (let y = Math.floor(cy - ry); y <= cy + ry; y++) for (let x = Math.floor(cx - rx); x <= cx + rx; x++) {
           const a = (x - cx) / rx, b = (y - cy) / ry;
-          if (a * a + b * b < 1 && x >= 0 && x < LW && y >= 0 && y < LH) paint(x, y, tone(x, y, 0.55));
+          if (a * a + b * b < 1 && x >= 0 && x < LW && y >= 0 && y < LH && set[y * LW + x] !== VOID) paint(x, y, tone(x, y, 0.55));
         }
       };
       PINS.forEach((p, j) => { if (st.pins[j] === 0) shade(p.x + 2, p.y + 1, 5.5, 2.2); });
@@ -217,7 +244,8 @@ const Bowl = (() => {
       if (st.aim != null) for (let s = 12; s < 170; s += 7) {
         const x = Math.round(st.bx + Math.sin(st.aim) * s), y = Math.round(st.by - Math.cos(st.aim) * s);
         if (y < 80) break;
-        for (const [u, v] of [[0, 0], [1, 0], [0, 1], [1, 1]]) paint(x + u, y + v, 1);
+        // A wide aim can run off the slab; the dots stop at its edge rather than hang in the sky.
+        for (const [u, v] of [[0, 0], [1, 0], [0, 1], [1, 1]]) if (set[(y + v) * LW + x + u] !== VOID) paint(x + u, y + v, 1);
       }
       g.putImageData(img, 0, 0);
 
@@ -245,5 +273,5 @@ const Bowl = (() => {
     };
   }
 
-  return { mount, roll, path, stepAt, PINS, CX, SLIDE, BALL_Y, PIT, LEAN, ROLL };
+  return { mount, roll, path, stepAt, rollSteps, slideX, PINS, CX, AIM, BALL_Y, PIT, LEAN };
 })();

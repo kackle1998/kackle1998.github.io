@@ -1346,12 +1346,13 @@ const Run = {
     if (res) {
       // The throw: the figurine leans in, the ball rolls and hooks, pins fall, the sweep clears them,
       // then the arcana count up one at a time.
-      const roll = Bowl.path(bw.bx, bw.aim, bw.pow), at = res.at, last = Math.max(...at);
-      const sweep = Math.max(Bowl.LEAN + Bowl.ROLL, last + 3) + 3, done = sweep + pay + 2;
+      // A soft throw takes more steps to reach the pins (Bowl.rollSteps).
+      const roll = Bowl.path(bw.bx, bw.aim, bw.pow), at = res.at, last = Math.max(...at), steps = Bowl.rollSteps(bw.pow);
+      const sweep = Math.max(Bowl.LEAN + steps, last + 3) + 3, done = sweep + pay + 2;
       const frame = (k) => {
-        const t = Math.max(0, Math.min(1, (k - Bowl.LEAN) / Bowl.ROLL)), b = roll(t);
+        const t = Math.max(0, Math.min(1, (k - Bowl.LEAN) / steps)), b = roll(t);
         draw({
-          fx: bw.bx - 9, bx: b.x, by: b.y, ball: k <= Bowl.LEAN + Bowl.ROLL - 1, spin: Math.max(0, k - Bowl.LEAN) * 1.3,
+          fx: bw.bx - 9, bx: b.x, by: b.y, ball: k <= Bowl.LEAN + steps - 1, spin: Math.max(0, k - Bowl.LEAN) * 13 / steps,
           lean: k < 2 ? 14 * (k + 1) : k < 5 ? 20 - (k - 1) * 5 : 0, bob: k >= 5,
           pins: at.map((a) => (a < 0 ? 0 : k >= sweep ? -1 : k >= a ? Math.min(3, 1 + k - a) : 0)), side: res.side,
           meter: null, arcana: k > sweep ? Math.min(pay, k - sweep) : 0,
@@ -1406,8 +1407,8 @@ const Run = {
     const HZ = [BOWL_SLIDE_HZ, BOWL_AIM_HZ, BOWL_BAR_HZ], STEP = [100, 100, 50];
     const value = (now) => tri(Math.floor((now - t0) / STEP[bw.step]) * STEP[bw.step] / 1000 * HZ[bw.step] + 0.25);
     const show = (now) => {
-      const v = value(now), bx = bw.step ? bw.bx : Bowl.CX + (v * 2 - 1) * Bowl.SLIDE;
-      draw({ fx: bx - 9, bx, by: Bowl.BALL_Y, ball: true, spin: 0, lean: 0, aim: bw.step === 1 ? (v * 2 - 1) * 0.2 : bw.step === 2 ? bw.aim : null,
+      const v = value(now), bx = bw.step ? bw.bx : Bowl.slideX(v);
+      draw({ fx: bx - 9, bx, by: Bowl.BALL_Y, ball: true, spin: 0, lean: 0, aim: bw.step === 1 ? (v * 2 - 1) * Bowl.AIM : bw.step === 2 ? bw.aim : null,
         pins: still, side, meter: bw.step === 2 ? v : null, arcana: 0 });
     };
     const timer = setInterval(() => { if (!stage.isConnected) return clearInterval(timer); show(performance.now()); }, 50);
@@ -1415,8 +1416,8 @@ const Run = {
     const set = () => {
       if (document.activeElement) document.activeElement.blur(); // so Space doesn't also press the button
       const now = performance.now(), v = value(now);
-      if (bw.step === 0) bw.bx = Bowl.CX + (v * 2 - 1) * Bowl.SLIDE;
-      else if (bw.step === 1) bw.aim = (v * 2 - 1) * 0.2;
+      if (bw.step === 0) bw.bx = Bowl.slideX(v);
+      else if (bw.step === 1) bw.aim = (v * 2 - 1) * Bowl.AIM;
       else {
         bw.pow = v;
         bw.res = Bowl.roll(bw.bx, bw.aim, bw.pow);
