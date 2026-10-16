@@ -198,6 +198,82 @@ const CardMaker = (() => {
     if (rest.length) openCard(rest[rest.length - 1].id); else createCard();
   }
 
+  /* ---------- debug: add to game library ----------
+     Sends the open card to the server's game library (db/library.sql), which makes it an
+     official card for every player, then swaps the custom copy (and its deck slots) for it.
+     The button is only shown to the dev account (isDev, js/options.js); the server checks
+     the account again, so nobody else can add cards. */
+  const LIBRARY_ERRORS = {
+    not_allowed: 'Only the developer account can add cards to the game.',
+    id_taken: 'The game already has a card with this name. Rename it and try again.',
+    not_logged_in: 'Your session expired. Please log in again.',
+  };
+
+  /* A plain lowercase id like the built-in cards' (wolf, oldtusk), never one already in use. */
+  function libraryId(name) {
+    const base = String(name).toLowerCase().replace(/[^a-z0-9]/g, '').replace(/^[0-9]+/, '').slice(0, 12) || 'card';
+    let id = base;
+    for (let n = 2; CARDS[id] || SPRITES[id]; n++) id = base + n;
+    return id;
+  }
+
+  function addToLibrary() {
+    saveNow();
+    const r = records().find((x) => x.id === cur.id);
+    if (!r) return;
+    let rarity = 'common';
+    const wrap = document.createElement('div');
+    wrap.className = 'acct-modal';
+    wrap.innerHTML = `<div class="acct-box panel cm-lib">
+      <h2>ADD ${escapeHTML(r.name.toUpperCase())} TO THE GAME</h2>
+      <div class="opt-toggle" id="libRarity">${RARITY_KEYS.map((k) =>
+        `<button class="btn sm" data-k="${k}">${RARITIES[k].name.toUpperCase()}</button>`).join('')}</div>
+      <div class="muted acct-note">It becomes an official card for every player, straight away. Your custom copy is replaced by it, in your decks too. To take it back out, delete its row in Supabase (library_cards).</div>
+      <div class="acct-err" role="alert"></div>
+      <div class="acct-btns">
+        <button class="btn sm" data-a="close">CANCEL</button>
+        <button class="btn sm accent" data-a="add">ADD TO GAME</button>
+      </div></div>`;
+    document.body.appendChild(wrap);
+    const err = wrap.querySelector('.acct-err');
+    const pick = (k) => {
+      rarity = k;
+      wrap.querySelectorAll('#libRarity .btn').forEach((b) => b.classList.toggle('on', b.dataset.k === k));
+    };
+    wrap.querySelectorAll('#libRarity .btn').forEach((b) => (b.onclick = () => { sfx('select'); pick(b.dataset.k); }));
+    pick(rarity);
+    const close = () => wrap.remove();
+    wrap.querySelector('[data-a="close"]').onclick = close;
+    wrap.addEventListener('mousedown', (e) => { if (e.target === wrap) close(); });
+    wrap.addEventListener('keydown', (e) => { if (e.key === 'Escape') close(); });
+    wrap.querySelector('[data-a="add"]').onclick = async () => {
+      const id = libraryId(r.name), { updated, ...data } = r;
+      wrap.querySelectorAll('button').forEach((b) => (b.disabled = true));
+      err.textContent = 'Adding...';
+      try {
+        await Cloud.addToLibrary(id, { ...data, rarity });
+      } catch (e) {
+        err.textContent = LIBRARY_ERRORS[e.message] ||
+          (/could not find the function/i.test(e.message) ? 'The game library isn\'t set up yet: run db/library.sql in Supabase.' : 'Could not reach the server.');
+        wrap.querySelectorAll('button').forEach((b) => (b.disabled = false));
+        return;
+      }
+      if (!CARDS[id]) { err.textContent = 'Added, but the library could not be reloaded. Refresh the page.'; return; }
+      // Swap the custom copy for the official card, in decks (and deck art) too.
+      const art = 'spr_' + r.id;
+      const swap = (list) => Object.fromEntries(Object.entries(list || {}).map(([k, n]) => [k === r.id ? id : k, n]));
+      saveSavedDecks(getSavedDecks().map((d) => (d.list && d.list[r.id]) || d.art === art
+        ? { ...d, list: swap(d.list), ...(d.art === art ? { art: 'spr_' + id } : {}), updated: Date.now() } : d));
+      cur = null;
+      saveCustomRecords(records().filter((x) => x.id !== r.id));
+      close();
+      sfx('select');
+      toast(`${r.name} is now an official ${RARITIES[rarity].name.toLowerCase()} card.`);
+      const rest = records();
+      if (rest.length) openCard(rest[rest.length - 1].id); else createCard();
+    };
+  }
+
   function exportCards() {
     saveNow();
     const blob = new Blob([JSON.stringify(records(), null, 2)], { type: 'application/json' });
@@ -331,6 +407,7 @@ const CardMaker = (() => {
           <div class="cm-actions">
             <button class="btn sm" id="dupBtn">DUPLICATE</button>
             <button class="btn sm" id="delBtn">DELETE</button>
+            ${isDev() ? '<button class="btn sm" id="libBtn">ADD TO GAME LIBRARY</button>' : ''}
           </div>
         </section>
 
@@ -368,6 +445,7 @@ const CardMaker = (() => {
     $('#newBtn').onclick = () => createCard();
     $('#dupBtn').onclick = () => { saveNow(); createCard({ ...cur, name: (cur.name + ' II').slice(0, 16) }); toast('Card duplicated.'); };
     $('#delBtn').onclick = deleteCard;
+    if ($('#libBtn')) $('#libBtn').onclick = addToLibrary;
     $('#exportBtn').onclick = exportCards;
     $('#importBtn').onclick = () => $('#importFile').click();
     $('#importFile').addEventListener('change', importCards);

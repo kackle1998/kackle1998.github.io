@@ -358,9 +358,29 @@ const Cloud = (() => {
 
   if (enabled && session()) { setStatus('synced'); pull(); }
 
+  /* ---------- game library (official cards from the server, for everyone) ---------- */
+  async function pullLibrary() {
+    let list;
+    try {
+      list = (await get('library_cards?select=data&order=created_at.asc')).map((r) => r.data);
+    } catch (e) { return; } // offline, or db/library.sql not run yet: keep the cached copy
+    if (JSON.stringify(list) === JSON.stringify(Store.read(LIBRARY_KEY, []))) return;
+    Store.write(LIBRARY_KEY, list);
+    announce();
+  }
+
+  async function addToLibrary(id, data) {
+    const s = session();
+    if (!s) throw new Error('not_logged_in');
+    await rpc('add_to_library', { p_token: s.token, p_id: id, p_data: data });
+    await pullLibrary();
+  }
+
+  if (enabled) pullLibrary();
+
   return {
     enabled,
-    queue, syncNow, browseCards, mount,
+    queue, syncNow, browseCards, mount, addToLibrary,
     rpc, get, // used by js/netplay.js
     user() { const s = session(); return s ? s.player.username : null; },
     playerId() { const s = session(); return s ? s.player.id : null; },

@@ -67,6 +67,27 @@ function loadCustomCards() {
   return customIds.length;
 }
 
+/* ---------- game library ----------
+   Official cards added with the Card Maker's "Add to game library" button. They live on the
+   server (db/library.sql), not in js/data.js; the last copy fetched is kept here, so they load
+   instantly and still work offline. js/cloud.js refreshes it on every page load. */
+const LIBRARY_KEY = 'cardgrave.library.v1';
+let libraryIds = [];
+
+function loadLibraryCards() {
+  for (const id of libraryIds) { delete CARDS[id]; delete SPRITES['spr_' + id]; }
+  libraryIds = [];
+  for (const d of Store.read(LIBRARY_KEY, [])) {
+    const card = customToCard(d);
+    if (!card || CARDS[card.id]) continue; // never replaces a built-in card
+    delete card.custom;
+    if (RARITIES[d.rarity]) card.rarity = d.rarity;
+    CARDS[card.id] = card;
+    if (card.sprite === 'spr_' + card.id) SPRITES[card.sprite] = d.pixels.map((r) => String(r).replace(/[^.#+\-w]/g, '.'));
+    libraryIds.push(card.id);
+  }
+}
+
 function saveCustomRecords(list) {
   const ok = Store.write(CUSTOM_KEY, list);
   loadCustomCards();
@@ -77,7 +98,8 @@ function saveCustomRecords(list) {
 /* Fires `cb(key)` when another tab changes custom cards, decks or the character. */
 function onSharedChange(cb) {
   window.addEventListener('storage', (e) => {
-    if (e.key === CUSTOM_KEY || e.key === DECKS_KEY || e.key === HERO_KEY || e.key === null) {
+    if (e.key === CUSTOM_KEY || e.key === DECKS_KEY || e.key === HERO_KEY || e.key === LIBRARY_KEY || e.key === null) {
+      loadLibraryCards();
       loadCustomCards();
       loadHero();
       cb(e.key);
@@ -188,5 +210,6 @@ function saveHeroRecord(d) {
   return ok;
 }
 
+loadLibraryCards();
 loadCustomCards();
 loadHero();

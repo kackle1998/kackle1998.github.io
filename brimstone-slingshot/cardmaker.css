@@ -91,7 +91,9 @@
 .cm-meter-fill.bad { background: var(--accent); }
 .cm-meter-mid { position: absolute; left: 50%; top: -4px; bottom: -4px; border-left: 2px dashed var(--ink); }
 .cm-bal-note { font-size: 16px; line-height: 15px; }
-.cm-actions { display: flex; gap: 8px; }
+.cm-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.cm-lib { width: min(440px, 100%); }
+.cm-lib .opt-toggle .btn { width: auto; flex: 1; }
 
 /* art: the pixel editor styles live in style.css (the deck builder uses them too) */
 .cm-preview { align-items: center; }

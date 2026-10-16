@@ -395,6 +395,8 @@ const Run = {
     const s = Store.read(RUN_KEY, null);
     this.s = s && s.map && s.deck ? s : null;
     if (this.s) respaceRunMap(this.s.map);
+    // A game library card taken back out of the library (js/custom.js) leaves the run's deck.
+    if (this.s) this.s.deck = this.s.deck.filter((rc) => CARDS[rc.base]);
     this.register();
     return this.s;
   },
