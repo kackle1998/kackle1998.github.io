@@ -301,8 +301,8 @@ const RUN_EVENTS = [
      SEE CARD button (a picked creature is named for it already). */
   /* A choice with `cards` deals some cards to pick one of (Run.eventCards), and `take` keeps it. */
   {
-    id: 'pack', title: 'SEALED PACK', art: 'ri_pack',
-    text: 'A sealed pack of cards lies in the ash, its foil still bright. Tear it open and keep one card: one of the three is sure to be rare or better.',
+    id: 'pack', title: 'BONE DRAFT', art: 'ri_pack', screen: 'draft', // the giant pack in the ruins (Run.draft, js/draft.js)
+    text: 'A giant pack stands sealed among the brimstone spires, its foil still bright. Tear it open and keep one card: one of the three is sure to be rare or better.',
     choices: [
       { label: 'TEAR IT OPEN', cards: (run) => runOffer(Math.random, run.s.colors, 3, { row: run.row(), least: 'rare' }).map((c) => c.id),
         take: (run, c) => { run.add(c.id); return `${c.name} joins your deck.`; } },
@@ -403,12 +403,17 @@ const BOWL_SLIDE_HZ = 0.35;                              // the ball sliding alo
 const BOWL_AIM_HZ = 0.4;                                 // the aim swinging
 const BOWL_BAR_HZ = 0.8;                                 // the power bar's marker
 const BOWL_STEP_MS = 100;                                // one frame of the throw
+// The entrance flight's tail (lane px across and back, map units high, ms): it starts at the top of the arc.
+const BOWL_LAND = { across: 280, back: 40, high: 200, ms: 700 };
+// Then the ball falls out of the sky to you: how high it starts (map units) and each stepped frame (ms).
+const BOWL_STAR = { high: 240, ms: 140 };
 
 const Run = {
   s: null,           // the saved run, or null
   ids: [],           // CARDS ids registered for the current run
   debugRoll: null,   // console, dev account only: force the 25% death rolls (0 = the bad outcome)
   debugEvent: null,  // console, dev account only: force the next ? stop's event id
+  bench: null,       // a scene test bench's state while one is open (Run.sceneTest), or null
 
   load() {
     const s = Store.read(RUN_KEY, null);
@@ -419,7 +424,7 @@ const Run = {
     this.register();
     return this.s;
   },
-  save() { if (this.s && !this.bwTest) Store.write(RUN_KEY, this.s); }, // the bowling test bench never saves
+  save() { if (this.s && !this.bench) Store.write(RUN_KEY, this.s); }, // the scene test benches never save
   rand(salt) { return mulberry32((this.s.seed + salt * 7919) >>> 0); },
 
   /* ---------- run cards: CARDS['run_<rid>'] built from the base card plus the run's changes ---------- */
@@ -611,7 +616,7 @@ const Run = {
   leave() {
     this.s.node = null;
     this.save();
-    RunMap.show();
+    RunMap.wipe(() => RunMap.show());
   },
 
   /* Apply an outcome, remember it (so a reload can't apply it twice), and show it. */
@@ -1317,7 +1322,7 @@ const Run = {
      saved as it is set, and the throw (node.bw.res) is rolled and saved before the ball rolls,
      so a reload picks up where you were and shows the same pins falling. */
   bowl(n, ev, animate = false) {
-    const node = this.s.node, bw = node.bw || (node.bw = { step: 0 }), test = this.bwTest;
+    const node = this.s.node, bw = node.bw || (node.bw = { step: 0 }), test = this.bench;
     const res = bw.res, down = res ? res.at.filter((a) => a >= 0).length : 0, strike = down === Bowl.PINS.length;
     const pay = down * BOWL_PER_PIN + (strike ? BOWL_STRIKE_BONUS : 0);
     let said = strike ? `STRIKE! +${pay} ARCANA` : down ? `${down} PIN${down > 1 ? 'S' : ''}: +${pay} ARCANA` : 'GUTTER BALL';
@@ -1326,18 +1331,11 @@ const Run = {
       'Pick your line. Click or press Space to set the angle.',
       'Stop the bar to throw. A soft throw hooks more; a hard one carries more pins.'];
     const SETS = ['SET SPOT', 'SET ANGLE', 'THROW'];
-    const pillar = `<div class="slot-pillar">${Array.from({ length: 8 }, (_, i) => `<img src="${iconURL(i % 2 ? 'crossbones' : 'skull', PAL['+'])}" alt="">`).join('')}</div>`;
-    this.screen(ev.art, ev.title, res ? (animate ? 'The ball rolls...' : said) : SUBS[bw.step],
-      `<div class="slot-mach">
-        <div class="slot-cab">${pillar}
-          <div class="slot-main"><div class="bw-stage" id="bwStage"></div></div>${pillar}
-        </div>
-      </div>`,
+    const stage = this.sceneScreen(ev.art, ev.title, res ? (animate ? 'The ball rolls...' : said) : SUBS[bw.step],
       res ? (test ? `<button class="btn" id="bwTake" ${animate ? 'disabled' : ''}>THROW AGAIN</button><button class="btn" id="rnLeave">DONE</button>`
         : `<button class="btn" id="bwTake" ${animate ? 'disabled' : ''}>${pay ? 'TAKE IT' : 'CONTINUE'}</button>`)
         : `<button class="btn" id="bwGo">${SETS[bw.step]}</button>${test ? '<button class="btn" id="rnLeave">DONE</button>' : ''}`); // no walking out before you throw
-    $('.rn').classList.add('rn-slots');
-    const stage = $('#bwStage'), draw = Bowl.mount(stage), P = Bowl.PINS;
+    const draw = Bowl.mount(stage), P = Bowl.PINS;
     const side = P.map((p) => (p.x < Bowl.CX ? -1 : 1)), still = P.map(() => 0);
     const tri = (p) => { p -= Math.floor(p); return p < 0.5 ? p * 2 : 2 - p * 2; };
     if (this.bwKey) document.removeEventListener('keydown', this.bwKey);
@@ -1361,7 +1359,7 @@ const Run = {
       const finish = () => {
         if (test) {
           // The test bench: throw again (button, click or Space), or DONE to go back.
-          const again = () => { sfx('select'); this.s.node = {}; this.bowl(n, ev); };
+          const again = () => { sfx('select'); this.s.node = { bw: { step: 0, landed: true } }; this.bowl(n, ev); }; // you're already on the lane
           $('#bwTake').onclick = again;
           stage.onclick = again;
           this.bwKey = (e) => {
@@ -1369,7 +1367,7 @@ const Run = {
             if (e.code === 'Space' && !e.repeat) { e.preventDefault(); again(); }
           };
           document.addEventListener('keydown', this.bwKey);
-          $('#rnLeave').onclick = () => { sfx('select'); this.bowlTestEnd(); };
+          $('#rnLeave').onclick = () => { sfx('select'); this.sceneTestEnd(); };
           return;
         }
         $('#bwTake').onclick = () => {
@@ -1411,9 +1409,43 @@ const Run = {
       draw({ fx: bx - 9, bx, by: Bowl.BALL_Y, ball: true, spin: 0, lean: 0, aim: bw.step === 1 ? (v * 2 - 1) * Bowl.AIM : bw.step === 2 ? bw.aim : null,
         pins: still, side, meter: bw.step === 2 ? v : null, arcana: 0 });
     };
-    const timer = setInterval(() => { if (!stage.isConnected) return clearInterval(timer); show(performance.now()); }, 50);
-    show(t0);
+    let timer = null;
+    const start = () => {
+      t0 = performance.now();
+      timer = setInterval(() => { if (!stage.isConnected) return clearInterval(timer); show(performance.now()); }, 50);
+      show(t0);
+    };
+    // The entrance: the map's slingshot flung you here, so you come in on the tail of that lob, from
+    // off the left of the screen at the top of the arc, tumbling, and land on the foul line where the
+    // slide starts (Scene.land). Then the ball arrives as a falling star: it drops out of the sky with
+    // a trail (its shadow already on the stone where it will land), hits beside you with a ring of
+    // dust and one bounce, you jump at the impact, then stoop and take it. Stepped frames,
+    // BOWL_STAR.ms each. Once per stop (bw.landed); see "Event entrances" in CLAUDE.md.
+    const tx = Bowl.slideX(0.5) - 9, hx = tx + 9, hy = Bowl.BALL_Y, wx = hx + 6, wy = hy - 6, H = BOWL_STAR.high;
+    const STAR = [
+      { bx: wx, by: wy, bz: H, trail: true }, { bx: wx, by: wy, bz: H * 0.75, trail: true },
+      { bx: wx, by: wy, bz: H * 0.5, trail: true }, { bx: wx, by: wy, bz: H * 0.25, trail: true },
+      { bx: wx, by: wy, bz: 0, dust: 8, fz: 8 }, // impact: you jump
+      { bx: wx, by: wy, bz: 14, dust: 11 },       // one bounce
+      { bx: wx, by: wy, bz: 0 },
+      { bx: wx, by: wy, bz: 0, lean: 15 },        // stoop
+      { bx: hx + 2, by: hy - 2, bz: 6, lean: 8 }, // take it
+      { bx: hx, by: hy, bz: 0 },
+    ];
+    const FLY = BOWL_LAND.ms / 1000, LANDED = FLY + Scene.SQUASH.ms / 1000, STEP_S = BOWL_STAR.ms / 1000, ENTERED = LANDED + STAR.length * STEP_S;
+    const enter = (t) => {
+      const L = Scene.land(Math.min(1, t / FLY), BOWL_LAND.high);
+      const st = { fx: tx - BOWL_LAND.across * L.k, figY: Bowl.FIG_Y - BOWL_LAND.back * L.k, fz: L.z, tumble: L.rot * 90,
+        bx: hx, by: hy, ball: false, spin: 0, lean: 0, aim: null, pins: still, side, meter: null, arcana: 0, bob: false };
+      if (t < FLY) return st;
+      if (t < LANDED) return { ...st, squash: true }; // land with a squash, as on the map
+      return { ...st, ball: true, ...STAR[Math.min(STAR.length - 1, Math.floor((t - LANDED) / STEP_S))] };
+    };
+    let flying = true;
+    this.sceneEnter(bw, { draw, at: enter, to: ENTERED, cues: [[FLY, 'land'], [LANDED + 4 * STEP_S, 'diceLand'], [LANDED + 8 * STEP_S, 'place']],
+      done: () => { flying = false; start(); } });
     const set = () => {
+      if (flying) return;
       if (document.activeElement) document.activeElement.blur(); // so Space doesn't also press the button
       const now = performance.now(), v = value(now);
       if (bw.step === 0) bw.bx = Bowl.slideX(v);
@@ -1441,32 +1473,144 @@ const Run = {
       if (e.code === 'Space' && !e.repeat) { e.preventDefault(); set(); }
     };
     document.addEventListener('keydown', this.bwKey);
-    if (test) $('#rnLeave').onclick = () => { sfx('select'); this.bowlTestEnd(); };
+    if (test) $('#rnLeave').onclick = () => { sfx('select'); this.sceneTestEnd(); };
   },
 
-  /* The bowling test bench: throw as often as you like, with a running tally. Nothing is saved and
-     no arcana are paid; your run (if any) is put back untouched by DONE. Open it with Run.bowlTest()
-     in the console, or index.html?bowltest. Run.bwTest.throws lists every throw's inputs and pins. */
-  bowlTest() {
-    if (!this.bwTest) {
-      if (!this.s) this.load(); // so the header shows your run's life and arcana
-      this.bwTest = { real: this.s, throws: [] };
-    }
-    const r = this.bwTest.real;
-    this.s = { life: r ? r.life : 20, maxLife: r ? r.maxLife : 20, teeth: r ? r.teeth : 0, node: {} };
-    this.bowl(null, BOWL_STOP);
-  },
-  bowlTestEnd() {
-    if (this.bwKey) document.removeEventListener('keydown', this.bwKey);
-    this.bwKey = null;
-    this.s = this.bwTest.real;
-    this.bwTest = null;
-    showTitle();
-  },
   bowlTally() {
-    const t = this.bwTest.throws, n = t.length, sum = t.reduce((a, x) => a + x.down, 0);
+    const t = this.bench.throws, n = t.length, sum = t.reduce((a, x) => a + x.down, 0);
     const strikes = t.filter((x) => x.down === Bowl.PINS.length).length, gutters = t.filter((x) => !x.down).length;
     return `THROW ${n} · AVG ${(sum / n).toFixed(1)} · ${strikes} STRIKE${strikes === 1 ? '' : 'S'} · ${gutters} GUTTER${gutters === 1 ? '' : 'S'}`;
+  },
+
+  /* ---------- event scenes (js/scene.js): what every one of them shares ---------- */
+  /* The cabinet an event scene plays in: the slot machine's skull pillars either side of a stage
+     (sized by CSS). Returns the stage, for the scene's own mount (Bowl.mount, Draft.mount). */
+  sceneScreen(icon, title, sub, btns) {
+    const pillar = `<div class="slot-pillar">${Array.from({ length: 8 }, (_, i) => `<img src="${iconURL(i % 2 ? 'crossbones' : 'skull', PAL['+'])}" alt="">`).join('')}</div>`;
+    this.screen(icon, title, sub,
+      `<div class="slot-mach"><div class="slot-cab">${pillar}<div class="slot-main"><div class="bw-stage" id="scStage"></div></div>${pillar}</div></div>`, btns);
+    $('.rn').classList.add('rn-slots');
+    return $('#scStage');
+  },
+  /* While a scene moves, clicks and keys do nothing: lock() disables the screen's buttons (and
+     busy() is true) until unlock(). */
+  sceneLock() {
+    let busy = false;
+    const set = (on) => { busy = on; $$('.rn-btns .btn').forEach((b) => (b.disabled = on)); };
+    return { busy: () => busy, lock: () => set(true), unlock: () => set(false) };
+  },
+  /* The entrance, once per stop: unless flags.landed (saved on the stop's node) or FAST, hold at
+     the top of the arc until the map's wipe has cleared, then play at() from 0 to `to` with its
+     cues (Scene.play). flags.landed is saved first, so a reload doesn't replay it. done() runs
+     either way, once the scene is ready for you. */
+  sceneEnter(flags, { draw, at, to, cues = [], done }) {
+    if (flags.landed || FAST) return done();
+    draw(at(0));
+    flags.landed = true;
+    this.save();
+    RunMap.cleared().then(() => Scene.play({ draw, at, from: 0, to, cues, done }));
+  },
+  /* The test benches: Run.sceneTest(id) in the console, or index.html?scenetest=<id> (bowl, draft;
+     ?bowltest and ?drafttest too). The scene plays as often as you like on a stand-in run: nothing
+     is saved (save() checks this.bench) or paid, and DONE puts your run back. this.bench holds the
+     bench's own state: the bowling lane's throws, Bone Draft's ante and the colors it deals from. */
+  SCENE_BENCHES: {
+    bowl: (run) => run.bowl(null, BOWL_STOP),
+    draft: (run) => run.draft(null, RUN_EVENTS.find((e) => e.id === 'pack')),
+  },
+  sceneTest(id) {
+    if (!this.SCENE_BENCHES[id]) return console.warn('No scene bench called', id, '- try', Object.keys(this.SCENE_BENCHES).join(', '));
+    if (!this.bench) {
+      if (!this.s) this.load(); // so the header shows your run's life and arcana
+      const r = this.s;
+      this.bench = { id, real: r, throws: [], ante: 1, colors: r && r.colors ? r.colors : Object.keys(COLORS).slice(0, 2) };
+    }
+    const r = this.bench.real;
+    this.s = { life: r ? r.life : 20, maxLife: r ? r.maxLife : 20, teeth: r ? r.teeth : 0, node: {} };
+    this.SCENE_BENCHES[id](this);
+  },
+  sceneTestEnd() {
+    if (this.bwKey) document.removeEventListener('keydown', this.bwKey);
+    this.bwKey = null;
+    this.tip(null);
+    this.s = this.bench.real;
+    this.bench = null;
+    showTitle();
+  },
+  bowlTest() { this.sceneTest('bowl'); },
+  draftTest() { this.sceneTest('draft'); },
+
+  /* ---------- Bone Draft (the giant pack, a ? event, js/draft.js) ----------
+     You land in a slingshot beside the pack (the entrance, once per stop: node.dr.landed), then
+     choose. TEAR IT OPEN deals the cards and saves node.dr.opened before the pack opens; the cards
+     rise out of it and turn face up over the scene, and you take one there. A reload after that
+     shows the open pack with the same cards to pick from. SELL IT takes the arcana instead.
+     Input does nothing while the figurine is moving. The spires heat up with the ante. */
+  draft(n, ev) {
+    const node = this.s.node, dr = node.dr || (node.dr = {}), test = this.bench;
+    const [tear, sell] = ev.choices, prompt = 'Take one card for your deck.';
+    const opened = dr.opened || node.choice != null; // a saved run from before the pack had a scene deals its cards the old way
+    const ante = test ? test.ante : Math.min(this.s.circuit || 1, RunMap.SPIRE_ANTES.length);
+    const leave = '<button class="btn" id="rnLeave">LEAVE</button>';
+    const stage = this.sceneScreen(ev.art, ev.title, escapeHTML(opened ? prompt : ev.text),
+      test ? `<button class="btn" id="drTear">${escapeHTML(tear.label)}</button><button class="btn" id="drAnte">ANTE ${ante}</button><button class="btn" id="rnLeave">DONE</button>`
+        : opened ? leave : `<button class="btn" id="drTear">${escapeHTML(tear.label)}</button><button class="btn" id="drSell">${escapeHTML(sell.label)}</button>`);
+    const draw = Draft.mount(stage, RunMap.SPIRE_ANTES[ante - 1].heat), lk = this.sceneLock();
+    // The risen cards turn face up where they stand over the pack (in a few stepped frames), and
+    // the one you click joins your deck.
+    const pick = (defs) => {
+      draw({ ...Draft.at(Draft.END), cards: -1 });
+      const el = document.createElement('div');
+      el.className = 'dr-pick';
+      stage.appendChild(el);
+      this.cardGrid(el, defs, (c) => {
+        if (test) { el.remove(); return draw(Draft.at(Draft.REST)); } // the bench keeps nothing
+        this.finishStop(ev.art, ev.title, ...this.result(tear.take(this, c), [c]));
+      });
+      const [x, y] = draw.toStage(...Draft.CARDS_AT);
+      el.style.left = Math.round(x - el.offsetWidth / 2) + 'px';
+      el.style.top = Math.max(6, Math.round(y - el.offsetHeight / 2)) + 'px';
+      $('.rn-sub').textContent = prompt;
+    };
+    if (opened) {
+      pick((node.cards || []).map((id) => CARDS[id]).filter(Boolean));
+      $('#rnLeave').onclick = () => { sfx('select'); this.leave(); };
+      return;
+    }
+    // The entrance: the map's slingshot flung you here, so you land in this one on the tail of that lob.
+    lk.lock();
+    this.sceneEnter(dr, { draw, at: Draft.at, to: Draft.REST, cues: Draft.ENTER_CUES, done: () => { draw(Draft.at(Draft.REST)); lk.unlock(); } });
+    $('#drTear').onclick = () => {
+      if (lk.busy()) return;
+      sfx('select');
+      if (test) {
+        // The bench deals three cards that go nowhere, and tears it open as often as you like.
+        lk.lock();
+        stage.querySelector('.dr-pick')?.remove();
+        this.tip(null);
+        draw(Draft.at(Draft.REST));
+        const defs = runOffer(Math.random, test.colors, 3, { least: 'rare' });
+        return Scene.play({ draw, at: Draft.at, from: Draft.PULL, to: Draft.END, cues: Draft.CUES, done: () => { lk.unlock(); pick(defs); } });
+      }
+      node.cards = tear.cards(this);
+      node.choice = 0;
+      dr.opened = true;
+      this.save();
+      const done = () => {
+        $('.rn-btns').innerHTML = leave;
+        $('#rnLeave').onclick = () => { sfx('select'); this.leave(); };
+        pick(node.cards.map((id) => CARDS[id]));
+      };
+      if (FAST) return done();
+      lk.lock();
+      Scene.play({ draw, at: Draft.at, from: Draft.PULL, to: Draft.END, cues: Draft.CUES, done });
+    };
+    if (test) {
+      $('#drAnte').onclick = () => { if (lk.busy()) return; sfx('select'); this.tip(null); test.ante = test.ante % RunMap.SPIRE_ANTES.length + 1; this.s.node = { dr: { landed: true } }; this.draft(n, ev); };
+      $('#rnLeave').onclick = () => { if (lk.busy()) return; sfx('select'); this.sceneTestEnd(); };
+      return;
+    }
+    $('#drSell').onclick = () => { if (lk.busy()) return; sfx('select'); this.finishStop(ev.art, ev.title, ...this.result(sell.act(this, null, sell))); };
   },
 
   /* ---------- the deck, as seen from the map ---------- */

@@ -426,22 +426,7 @@ const RunMap = (() => {
       const glow = (u, v) => { u = Math.round(u); v = Math.round(v); fill(u, v, 1, C[8]); hot.push([u, v]); };
       for (const s of shapes) {
         const { p } = s, u0 = Math.round(s.cx - s.w / 2) - left, top = tall - s.h;
-        const l = lvl(lightAt(p.x, p.y), p.x | 0, p.y | 0), hi = C[l + 1], li = C[Math.max(1, l)], dk = C[Math.max(0, l - 1)];
-        if (p.k === 'strata') { strata(fill, glow, s.cx - left, top, s.w, s.h, s.seed, p.heat, [hi, li, dk, C[Math.min(7, l + 2)]]); continue; }        // Columns across the prop's width: [end fraction, color], as the old gradients were.
-        const tones = p.k === 'spike' ? [[0.14, hi], [0.5, li], [1, dk]]
-          : p.k === 'basalt' ? [[1 / 3, hi], [2 / 3, li], [1, dk]]
-          : p.k === 'crystal' ? [[0.5, C[7]], [1, C[8]]]
-          : [[0.5, C[2]], [1, C[1]]];
-        for (let r = 0; r < s.h; r++) {
-          const f = (r + 0.5) / s.h; // 0 at the top, 1 at the base
-          // The silhouette's half-width at this row, as a fraction of the prop's width.
-          const half = p.k === 'spike' || p.k === 'crystal' ? f / 2
-            : p.k === 'basalt' ? (f < 0.08 ? 0.5 * (f / 0.08) : 0.5)
-            : (f < 0.12 ? 0.5 * (f / 0.12) : 0.5);
-          const a = Math.round(s.w * (0.5 - half)), b = Math.round(s.w * (0.5 + half));
-          let from = a;
-          for (const [end, k] of tones) { const to = Math.min(b, Math.round(s.w * end)); fill(u0 + from, top + r, to - from, k); from = Math.max(from, to); }
-        }
+        propArt(fill, glow, C, lvl(lightAt(p.x, p.y), p.x | 0, p.y | 0), p.k, s.cx - left, top, s.w, s.h, s.seed, p.heat);
         if (p.k === 'obelisk') pix(cv, RUNE, { '#': C[4] }, u0 + 3, top + 14);
       }
       const back = Math.max(...list.map((p) => p.y));
@@ -471,6 +456,31 @@ const RunMap = (() => {
         for (const [u, v] of hot) { g.fillStyle = C[((v + step) % 6 + 6) % 6 < 2 ? 7 : 8]; g.fillRect(u, v, 1, 1); }
       }
     };
+  }
+
+  /* One standing prop, painted row by row in flat palette colors: kind k ('spike', 'basalt',
+     'strata', 'crystal' or 'obelisk'), centered on cx with its top row at `top` (canvas px), w by h.
+     l is the light level at its foot (0..3, see lvl); fill(u, v, n, color) paints a run of pixels
+     and glow(u, v) a hot one (strata seams). Bone Draft's ruins (js/draft.js) stand their spires
+     up with this too. */
+  function propArt(fill, glow, C, l, k, cx, top, w, h, seed, heat) {
+    const hi = C[l + 1], li = C[Math.max(1, l)], dk = C[Math.max(0, l - 1)], u0 = Math.round(cx - w / 2);
+    if (k === 'strata') return strata(fill, glow, cx, top, w, h, seed, heat, [hi, li, dk, C[Math.min(7, l + 2)]]);
+    // Columns across the prop's width: [end fraction, color], as the old gradients were.
+    const tones = k === 'spike' ? [[0.14, hi], [0.5, li], [1, dk]]
+      : k === 'basalt' ? [[1 / 3, hi], [2 / 3, li], [1, dk]]
+      : k === 'crystal' ? [[0.5, C[7]], [1, C[8]]]
+      : [[0.5, C[2]], [1, C[1]]];
+    for (let r = 0; r < h; r++) {
+      const f = (r + 0.5) / h; // 0 at the top, 1 at the base
+      // The silhouette's half-width at this row, as a fraction of the prop's width.
+      const half = k === 'spike' || k === 'crystal' ? f / 2
+        : k === 'basalt' ? (f < 0.08 ? 0.5 * (f / 0.08) : 0.5)
+        : (f < 0.12 ? 0.5 * (f / 0.12) : 0.5);
+      const a = Math.round(w * (0.5 - half)), b = Math.round(w * (0.5 + half));
+      let from = a;
+      for (const [end, c] of tones) { const to = Math.min(b, Math.round(w * end)); fill(u0 + from, top + r, to - from, c); from = Math.max(from, to); }
+    }
   }
 
   /* A strata spire, stepped in five courses that widen down to its base, leaning a little; its
@@ -1255,6 +1265,25 @@ const RunMap = (() => {
     return cv;
   }
 
+  /* Change screens behind a curtain: dither to dark, swap() in the next screen, dither back. The
+     curtain lives in #screenWrap, outside #screen, so showScreen() doesn't sweep it away, and it
+     takes clicks while it's up. cleared() resolves once no wipe is running. */
+  let wiping = null;
+  function wipe(swap) {
+    if (wiping) return;
+    if (FAST) return swap();
+    document.activeElement?.blur();
+    const host = document.createElement('div');
+    host.className = 'wipe';
+    $('#screenWrap').append(host);
+    wiping = new Promise((res) => curtain(host, ramp(), 0, 1, 280, () => setTimeout(() => {
+      host.replaceChildren();
+      swap();
+      curtain(host, ramp(), 1, 0, 280, () => { host.remove(); wiping = null; res(); });
+    }, 80)));
+  }
+  const cleared = () => wiping || Promise.resolve();
+
   /* A 3D strip from p to q ([x, y, z] in its parent's map units): yawed in the board plane,
      then pitched up off it. */
   function strip(el, p, q) {
@@ -1702,7 +1731,10 @@ const RunMap = (() => {
           img.style.transform = 'scale(1.15, .8)';
           img.style.transformOrigin = '50% 100%';
           setTimeout(() => { img.style.transform = ''; fig.classList.remove('hopping'); }, 120);
-          setTimeout(() => { walking = false; Run.go(id); }, 320);
+          // A battle's versus screen is its own transition; every other stop comes in behind a wipe.
+          const go = () => { walking = false; Run.go(id); };
+          if (['battle', 'boss'].includes(nodes[id].t)) setTimeout(go, 320);
+          else setTimeout(() => wipe(go), 200);
         });
       }
     }
@@ -1977,5 +2009,5 @@ const RunMap = (() => {
     if (opts.fromDark) curtain($('#rmap'), C, 1, 0, 700);
   }
 
-  return { show, forkArt, pouchArt, ramp, SL, VSB, vsBackdrop, skyDrawer, RUNE }; // the bowling lane (js/bowl.js) reuses the sky and the rune // the VS splash (ui.js) reuses the slingshot art and the sky
+  return { show, wipe, cleared, forkArt, pouchArt, ramp, SL, POUCH, VSB, vsBackdrop, skyDrawer, RUNE, propArt, SPIRE_ANTES, BAY }; // the bowling lane (js/bowl.js) reuses the sky and the rune // the VS splash (ui.js) reuses the slingshot art and the sky
 })();

@@ -137,6 +137,8 @@ function sfx(name, n = 1) {
     // The bowling lane: the ball rumbling down the boards, and a clatter for each step that pins fall.
     case 'bowlRoll': S.noise(1.0, 0.035); S.tone(70, 1.0, 'triangle', 0.06, 55); break;
     case 'pins': S.noise(0.08 + 0.02 * n, 0.09); S.tone(620 + n * 90, 0.05, 'square', 0.025, 380); break;
+    // Bone Draft: foil tearing, a little more of it the harder the yank (n 1..3).
+    case 'rip': S.noise(0.05 + 0.05 * n, 0.05 + 0.02 * n); S.tone(1800, 0.04 + 0.03 * n, 'square', 0.012, 700); break;
     case 'lose':[392, 330, 262, 196].forEach((f, i) => S.tone(f, 0.32, 'square', 0.05, null, i * 0.22)); break;
   }
 }
@@ -1805,6 +1807,12 @@ showTitle();
 // The old cardmaker.html / charmaker.html addresses redirect here with a hash.
 if (location.hash === '#cardmaker') CardMaker.show();
 else if (location.hash === '#character') CharMaker.show();
-// index.html?bowltest opens the bowling test bench (Run.bowlTest in js/run.js).
-if (new URLSearchParams(location.search).has('bowltest')) Run.bowlTest();
+// index.html?scenetest=<id> opens an event scene's test bench (Run.sceneTest in js/run.js);
+// ?bowltest and ?drafttest are shortcuts for the bowling lane's and Bone Draft's.
+{
+  const q = new URLSearchParams(location.search);
+  if (q.has('scenetest')) Run.sceneTest(q.get('scenetest'));
+  else if (q.has('bowltest')) Run.sceneTest('bowl');
+  else if (q.has('drafttest')) Run.sceneTest('draft');
+}
 if (location.hash) history.replaceState(null, '', location.pathname + location.search);

@@ -242,7 +242,7 @@ section {
 }
 
 .experience-item li:before {
-    content: "▹";
+    content: "▸";
     position: absolute;
     left: 0;
     color: #2d5a5e;
@@ -305,7 +305,7 @@ section {
 }
 
 .skill-card li:before {
-    content: "▹";
+    content: "▸";
     position: absolute;
     left: 0;
     color: #2d5a5e;
@@ -416,7 +416,7 @@ section {
 }
 
 .project-highlights li:before {
-    content: "▹";
+    content: "▸";
     position: absolute;
     left: 0;
     color: #2d5a5e;
@@ -468,8 +468,9 @@ section {
     object-fit: contain;
     background: white;
     border-radius: 10px;
-    border: 1px solid #d4e8e0;
     float: right;
+    position: relative;
+    z-index: 1;
     margin-left: 25px;
     margin-bottom: 15px;
     padding: 5px;

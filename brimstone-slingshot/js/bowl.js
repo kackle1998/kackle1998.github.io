@@ -3,7 +3,8 @@
    BRIMSTONE SLINGSHOT — the bowling lane (a ? stop event, see Run.bowl in js/run.js).
    Drawn like the Dealer's Run map: the lane is a flat pixel canvas tilted by the map's own
    camera, and the pins, the ball and your figurine stand up off it as standees. Every color
-   comes from the palette ramp (RunMap.ramp), so the lane recolors with OPTIONS.
+   comes from the palette ramp (RunMap.ramp), so the lane recolors with OPTIONS. The stage and
+   your figurine come from the scene kit (js/scene.js), as every event scene's do.
    Lane units: the canvas is LW x LH pixels at 1 px = 2 map units.
    ============================================================ */
 
@@ -130,18 +131,11 @@ const Bowl = (() => {
      { fx, bx, by, ball: bool, spin, lean, aim, pins: per pin 0 standing / 1..3 falling / -1 gone,
        side, meter: 0..1 or null, arcana: count or 0 }. */
   function mount(stage) {
-    const C = RunMap.ramp(), RGB = C.map(rgb);
-    stage.innerHTML = '<canvas class="bw-sky"></canvas><div class="bw-view"><div class="bw-pl"></div></div><canvas class="bw-hud bw-top" width="120" height="14"></canvas><canvas class="bw-hud" width="120" height="14"></canvas>';
-    const skyCv = stage.firstChild, view = skyCv.nextSibling, pl = view.firstChild, top = view.nextSibling, hud = stage.lastChild; // top: the payout; hud: the power bar
-    // The view is 700 tall like a map screen; it is scaled so view y 30 to 630 fills the stage: the
-    // orrery sky above the lintel, down to just past the figurine.
-    const k = stage.clientHeight / 600;
-    Object.assign(view.style, { width: stage.clientWidth / k + 'px', top: -30 * k + 'px', transform: `scale(${k})` });
-
-    // Behind it all, the run map's sky: its orrery in a nebula, turning on its own (about 10 fps).
-    const sky = RunMap.skyDrawer(skyCv, C);
-    sky(performance.now() / 1000);
-    const skyTimer = setInterval(() => { if (!stage.isConnected) return clearInterval(skyTimer); sky(performance.now() / 1000); }, 100);
+    // The stage, from the scene kit (js/scene.js): the run map's sky and camera. The view is 700
+    // tall like a map screen, scaled so view y 30 to 630 fills the stage: the orrery sky above the
+    // lintel, down to just past the figurine. Over it, the payout (top) and the power bar (hud).
+    const sc = Scene.mount(stage, { rows: 600, top: -30, extra: '<canvas class="bw-hud bw-top" width="120" height="14"></canvas><canvas class="bw-hud" width="120" height="14"></canvas>' });
+    const { C, RGB, pl } = sc, top = stage.querySelector('.bw-top'), hud = stage.lastChild;
 
     // The lane: tone sets and light per pixel are worked out once; shadows and aim dots are laid over each step.
     // One flagstone lane floating in the sky like the Dealer's table: a strip of floor either side where
@@ -189,7 +183,7 @@ const Bowl = (() => {
     const base = new Uint8ClampedArray(px);
     g.putImageData(img, 0, 0); // painted now, so the lane is never blank before the first draw
 
-    const stand = (el, w, h) => { el.className = 'bw-st'; el.style.width = w + 'px'; el.style.height = h + 'px'; pl.appendChild(el); return el; };
+    const stand = (el, w, h) => sc.stand(el, 0, 0, w, h); // placed as they move, below
     // Three columns on the flagstone strips beside your lane: one whole, two broken off, by turns left and right.
     [[-40, 60, 1], [40, 125, 0], [-40, 195, 1]].forEach(([dx, y, broken]) => {
       const cv = sprite(C, broken ? BROKEN : COLUMN, { l: 6, m: 5, s: 3 }, 2), el = stand(cv, cv.width * 3, cv.height * 3); // 3x, so they read as columns
@@ -197,13 +191,11 @@ const Bowl = (() => {
     });
     const pins = PINS.map(() => { const cv = sprite(C, PIN, { l: 7, m: 6, s: 4, r: 8 }, 2); return stand(cv, cv.width * 2, cv.height * 2); });
     // Your figurine, with an ink outline so its pale face doesn't melt into the pale boards.
-    // 16 px drawn at 2.5x (40 units), plus the outline's pixel on every side.
-    const hero = expandSprite(SPRITES.hero), heroMap = {};
-    for (const ch in PAL) heroMap[ch] = ch;
-    const fig = stand(document.createElement('div'), 45, 45), figCv = sprite({ ...PAL, 1: C[1] }, hero, heroMap, 1);
-    fig.appendChild(figCv);
-    const ball = stand(document.createElement('canvas'), 26, 26);
-    ball.width = 13; ball.height = 13;
+    // 16 px drawn at 2.5x (40 units), plus the outline's pixel on every side (Scene.figure).
+    const fig = Scene.figure(sc, { s: 2.5, hang: 1 }); // standing on its outline's last row
+    // The ball's canvas has room above the ball for the falling star's trail (the entrance, see Run.bowl).
+    const ball = stand(document.createElement('canvas'), 26, 80);
+    ball.width = 13; ball.height = 40;
     const bg = ball.getContext('2d');
     let spun = null;
 
@@ -228,7 +220,7 @@ const Bowl = (() => {
       for (let i = 0; i < n; i++) ARCANA.forEach((r, y) => [...r].forEach((ch, x) => { if (ch === '#') { dot(x0 + i * 8 + x + 1, y + 4, 2, tg); dot(x0 + i * 8 + x, y + 3, 8, tg); } }));
     }
 
-    return function draw(st) {
+    function draw(st) {
       if (!stage.isConnected) return;
       // Contact shadows (down and right of each standee, away from the light) and the aim dots.
       px.set(base);
@@ -239,8 +231,13 @@ const Bowl = (() => {
         }
       };
       PINS.forEach((p, j) => { if (st.pins[j] === 0) shade(p.x + 2, p.y + 1, 5.5, 2.2); });
-      shade(st.fx + 2, FIG_Y + 1, 5, 2);
-      if (st.ball) shade(st.bx + 2, st.by + 1, 6, 2.5);
+      shade(st.fx + 2, (st.figY ?? FIG_Y) + 1, 5, 2); // over open sky (mid-flight) the shadow just isn't drawn
+      if (st.ball) shade(st.bx + 2, st.by + 1, 6, 2.5); // stays on the ground while it falls, showing where it will land
+      // A ring of dust kicked up round the ball where it hits the stone.
+      if (st.dust) for (let k = 0; k < 12; k++) {
+        const a = k / 12 * 6.283, x = Math.round(st.bx + Math.cos(a) * st.dust), y = Math.round(st.by + Math.sin(a) * st.dust * 0.5);
+        if (x >= 0 && x < LW && y >= 0 && y < LH && set[y * LW + x] !== VOID) paint(x, y, 3); // mid tone, to show on the pale stone
+      }
       if (st.aim != null) for (let s = 12; s < 170; s += 7) {
         const x = Math.round(st.bx + Math.sin(st.aim) * s), y = Math.round(st.by - Math.cos(st.aim) * s);
         if (y < 80) break;
@@ -259,19 +256,30 @@ const Bowl = (() => {
         el.style.top = p.y * 2 - el.height * 2 - [0, 2, 5, 8][s] * 2 + 'px';
         el.style.transform = `rotateX(${ax}deg) rotateZ(${az}deg)`;
       });
-      fig.style.left = st.fx * 2 - 22.5 + 'px';
-      fig.style.top = FIG_Y * 2 - 42.5 + 'px'; // the outline's bottom row hangs below the feet
-      fig.style.transform = `rotateX(${-90 + st.lean}deg)`;
-      fig.classList.toggle('bob', !st.lean && st.bob !== false);
+      // In flight (the entrance, see Run.bowl) figY/fz move it about and lift it, tumble turns it in
+      // quarter steps, and squash flattens it for a step as it lands ("Event entrances" in CLAUDE.md).
+      fig.place({ x: st.fx * 2, y: (st.figY ?? FIG_Y) * 2, z: st.fz || 0, rot: (st.tumble || 0) / 90, lean: st.lean,
+        ...(st.squash ? Scene.SQUASH : {}), bob: !st.lean && !st.fz && !st.squash && st.bob !== false });
       ball.style.display = st.ball ? '' : 'none';
       if (st.ball) {
-        if (spun !== st.spin) { spun = st.spin; bg.clearRect(0, 0, 13, 13); bg.drawImage(sprite(C, ballRows(st.spin), { h: 7, a: 8, s: 3, o: 1 }, 1), 0, 0); }
+        const key = st.spin + (st.trail ? 't' : '');
+        if (spun !== key) {
+          spun = key;
+          bg.clearRect(0, 0, 13, 40);
+          bg.drawImage(sprite(C, ballRows(st.spin), { h: 7, a: 8, s: 3, o: 1 }, 1), 0, 27);
+          // The falling star's trail: five stepped blocks up from the ball, white then gold then light,
+          // stepping left and right a pixel so it reads as sparkle without blinking.
+          if (st.trail) [7, 7, 8, 8, 4].forEach((k, i) => { bg.fillStyle = C[k]; bg.fillRect(5 + (i % 2), 23 - i * 5, 2, 3); });
+        }
         ball.style.left = st.bx * 2 - 13 + 'px';
-        ball.style.top = st.by * 2 - 26 + 'px';
+        ball.style.top = st.by * 2 - 80 + 'px';
+        ball.style.transform = `translateZ(${st.bz || 0}px) rotateX(-90deg)`;
       }
       drawHud(st.meter, st.arcana || 0);
-    };
+    }
+    draw.alive = sc.alive; // for Scene.play
+    return draw;
   }
 
-  return { mount, roll, path, stepAt, rollSteps, slideX, PINS, CX, AIM, BALL_Y, PIT, LEAN };
+  return { mount, roll, path, stepAt, rollSteps, slideX, PINS, CX, AIM, BALL_Y, FIG_Y, PIT, LEAN };
 })();

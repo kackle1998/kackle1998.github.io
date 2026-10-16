@@ -778,6 +778,7 @@ body[data-crt="off"] .rm-fig img, .rm-fig.hopping img { animation: none; }
 .rm-em { position: absolute; inset: 0; width: 100%; height: 100%; image-rendering: pixelated; pointer-events: none; }
 .rm-encore canvas { display: block; width: 100%; height: 100%; image-rendering: pixelated; }
 .rm-curtain { position: absolute; inset: 0; z-index: 50; width: 100%; height: 100%; image-rendering: pixelated; }
+.wipe { position: absolute; inset: 0; z-index: 190; } /* RunMap.wipe: over every layer, under the CRT */
 .rhud { position: absolute; left: 16px; top: 16px; width: 236px; padding: 12px; display: flex; flex-direction: column; gap: 6px; }
 .rh-who { display: flex; align-items: center; gap: 8px; border-bottom: 2px solid var(--light); padding-bottom: 8px; margin-bottom: 2px; }
 .rh-who img { width: 48px; height: 48px; background: var(--artbg); border: 2px solid var(--ink); image-rendering: pixelated; }
@@ -920,6 +921,11 @@ body[data-crt="off"] .rm-fig img, .rm-fig.hopping img { animation: none; }
 .bw-st.bob canvas { animation: rmBob 1.2s steps(2) infinite; }
 .bw-hud { position: absolute; left: 50%; bottom: 6px; width: 360px; height: 42px; margin-left: -180px; image-rendering: pixelated; pointer-events: none; }
 .bw-hud.bw-top { top: 6px; bottom: auto; } /* the payout counter, in the sky past the pins */
+/* Bone Draft (js/draft.js) reuses the bowling stage. The opened cards turn face up over the scene
+   where their backs rose out of the pack: the backs narrow in the scene, then the faces open from
+   narrow to full in three stepped frames (jump-none: no frame where nothing shows). */
+.dr-pick { position: absolute; z-index: 2; flex-wrap: nowrap; padding: 0; transform-origin: 50% 50%; animation: drFlip .43s steps(3, jump-none) both; }
+@keyframes drFlip { from { transform: scaleX(.15); } to { transform: none; } }
 .wh-got { width: 21px; height: 21px; margin-right: 12px; vertical-align: -3px; image-rendering: pixelated; }
 .rn-need { width: 100%; text-align: center; font-size: 18px; color: var(--mid); }
 .rn-deckwrap { position: absolute; inset: 0; z-index: 5; display: flex; align-items: center; justify-content: center; background: color-mix(in srgb, var(--bg) 72%, transparent); }
