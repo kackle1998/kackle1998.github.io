@@ -125,7 +125,7 @@ function runOffer(R, colors, n, { row = 1, weight = () => 1, least = 'common', s
 const runPrice = (c) => Math.min(4, Math.max(2, costTotal(c.cost))) + RARITY_MARKUP[rarityOf(c)];
 function getRunRecord() { return { wins: 0, losses: 0, ...Store.read(RUN_RECORD_KEY, {}) }; }
 
-const RUN_BOWL_ODDS = 0.25;                             // chance a map has a bowling lane (js/bowl.js)
+const RUN_BOWL_ODDS = 0.33;                             // chance a map has a bowling lane (js/bowl.js)
 /* Start, 5 rows of 2-3 stops, then the boss. Links run in sorted order, so the map's arcs never cross. */
 function genRunMap(R) {
   const even = (v) => Math.round(v / 2) * 2;
@@ -1335,7 +1335,7 @@ const Run = {
       </div>`,
       res ? (test ? `<button class="btn" id="bwTake" ${animate ? 'disabled' : ''}>THROW AGAIN</button><button class="btn" id="rnLeave">DONE</button>`
         : `<button class="btn" id="bwTake" ${animate ? 'disabled' : ''}>${pay ? 'TAKE IT' : 'CONTINUE'}</button>`)
-        : `<button class="btn" id="bwGo">${SETS[bw.step]}</button><button class="btn" id="rnLeave">${test ? 'DONE' : 'LEAVE'}</button>`);
+        : `<button class="btn" id="bwGo">${SETS[bw.step]}</button>${test ? '<button class="btn" id="rnLeave">DONE</button>' : ''}`); // no walking out before you throw
     $('.rn').classList.add('rn-slots');
     const stage = $('#bwStage'), draw = Bowl.mount(stage), P = Bowl.PINS;
     const side = P.map((p) => (p.x < Bowl.CX ? -1 : 1)), still = P.map(() => 0);
@@ -1440,7 +1440,7 @@ const Run = {
       if (e.code === 'Space' && !e.repeat) { e.preventDefault(); set(); }
     };
     document.addEventListener('keydown', this.bwKey);
-    $('#rnLeave').onclick = () => { sfx('select'); if (test) this.bowlTestEnd(); else this.leave(); };
+    if (test) $('#rnLeave').onclick = () => { sfx('select'); this.bowlTestEnd(); };
   },
 
   /* The bowling test bench: throw as often as you like, with a running tally. Nothing is saved and

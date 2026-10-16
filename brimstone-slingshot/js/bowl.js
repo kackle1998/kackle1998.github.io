@@ -170,8 +170,12 @@ const Bowl = (() => {
     const wall = stand(sprite(C, wallRows(), { 0: 1, 1: 2, 2: 2, 3: 3, r: 8 }, null), LW * 2, 64);
     Object.assign(wall.style, { left: '0px', top: '-64px' });
     const pins = PINS.map(() => { const cv = sprite(C, PIN, { l: 7, m: 6, s: 4, r: 8 }, 2); return stand(cv, cv.width * 2, cv.height * 2); });
-    const fig = stand(document.createElement('div'), 40, 40);
-    fig.innerHTML = `<img src="${spriteURL('hero')}" alt="">`;
+    // Your figurine, with an ink outline so its pale face doesn't melt into the pale boards.
+    // 16 px drawn at 2.5x (40 units), plus the outline's pixel on every side.
+    const hero = expandSprite(SPRITES.hero), heroMap = {};
+    for (const ch in PAL) heroMap[ch] = ch;
+    const fig = stand(document.createElement('div'), 45, 45), figCv = sprite({ ...PAL, 1: C[1] }, hero, heroMap, 1);
+    fig.appendChild(figCv);
     const ball = stand(document.createElement('canvas'), 26, 26);
     ball.width = 13; ball.height = 13;
     const bg = ball.getContext('2d');
@@ -227,8 +231,8 @@ const Bowl = (() => {
         el.style.top = p.y * 2 - el.height * 2 - [0, 2, 5, 8][s] * 2 + 'px';
         el.style.transform = `rotateX(${ax}deg) rotateZ(${az}deg)`;
       });
-      fig.style.left = st.fx * 2 - 20 + 'px';
-      fig.style.top = FIG_Y * 2 - 40 + 'px';
+      fig.style.left = st.fx * 2 - 22.5 + 'px';
+      fig.style.top = FIG_Y * 2 - 42.5 + 'px'; // the outline's bottom row hangs below the feet
       fig.style.transform = `rotateX(${-90 + st.lean}deg)`;
       fig.classList.toggle('bob', !st.lean && st.bob !== false);
       ball.style.display = st.ball ? '' : 'none';

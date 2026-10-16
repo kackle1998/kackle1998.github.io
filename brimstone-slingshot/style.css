@@ -798,7 +798,8 @@ body[data-crt="off"] .rm-fig img, .rm-fig.hopping img { animation: none; }
 }
 
 /* ---------- dealer's run: stops (js/run.js) ---------- */
-.rn { width: 980px; max-height: 680px; box-sizing: border-box; padding: 16px 22px; display: flex; flex-direction: column; gap: 12px; }
+/* Fills the 1280x720 stage, leaving the same 20px margin on every side. */
+.rn { width: 1240px; max-height: 680px; box-sizing: border-box; padding: 16px 22px; display: flex; flex-direction: column; gap: 12px; }
 .rn-head { display: flex; align-items: center; gap: 14px; border-bottom: 2px solid var(--light); padding-bottom: 10px; }
 .rn-icon { width: 64px; height: 64px; flex: none; background: var(--artbg); border: 3px solid var(--ink); image-rendering: pixelated; }
 .rn-headtext { flex: 1; }
@@ -911,8 +912,8 @@ body[data-crt="off"] .rm-fig img, .rm-fig.hopping img { animation: none; }
 }
 .bw-lane { position: absolute; left: 0; top: 0; width: 1440px; height: 520px; image-rendering: pixelated; }
 .bw-st { position: absolute; transform-origin: 50% 100%; transform: rotateX(-90deg); image-rendering: pixelated; pointer-events: none; }
-.bw-st img { display: block; width: 100%; height: 100%; image-rendering: pixelated; }
-.bw-st.bob img { animation: rmBob 1.2s steps(2) infinite; }
+.bw-st canvas { display: block; width: 100%; height: 100%; image-rendering: pixelated; }
+.bw-st.bob canvas { animation: rmBob 1.2s steps(2) infinite; }
 .bw-hud { position: absolute; left: 50%; bottom: 6px; width: 360px; height: 42px; margin-left: -180px; image-rendering: pixelated; pointer-events: none; }
 .wh-got { width: 21px; height: 21px; margin-right: 12px; vertical-align: -3px; image-rendering: pixelated; }
 .rn-need { width: 100%; text-align: center; font-size: 18px; color: var(--mid); }
