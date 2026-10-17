@@ -178,10 +178,10 @@ const LOOKS = {
   factory: { CAM: { rows: 700, top: 178 }, D_ACT: Factory.D_ACT, D_FIG: 290, D_FRONT: 340, pay: true, consume: false,
     build: (sc, heat, o) => Factory.build(sc, heat, { rubble: [[250, 450, 3], [1010, 400, 2]], shards: [[330, 454], [1000, 470]], ...o }) },
   // The Sigil Altar: a graveyard on an ossuary floor before a crypt wall, close in (the Molten Pool's
-  // camera), with graves close to the action, bats and crows, and falling ash. As picked in builder.html.
+  // camera), with graves close to the action, bats, crows and a spider, and falling ash. As picked in builder.html.
   graveyard: { CAM: { rows: 480, top: -110 }, D_ACT: 340, D_FIG: 316, D_FRONT: 360, pay: false, consume: true,
     build: (sc, heat, o) => Scene.setting(sc, 'graveyard', {
-      heat, floor: 'ossuary', backdrop: 'crypt', features: ['graves'], horizon: 'wall', critters: ['bat', 'crow'], effects: ['ash'],
+      heat, floor: 'ossuary', backdrop: 'crypt', features: ['graves'], horizon: 'wall', critters: ['bat', 'crow', 'spider'], effects: ['ash'],
       near: [[-30, 210, 'spike', 80, 22], [3, 170, 'spike', 92, 24], [14, 250, 'basalt', 44, 24], [112, 170, 'spike', 104, 26], [138, 240, 'basalt', 40, 24],
         [180, 200, 'spike', 96, 24], [27, 190, 'strata', 116, 32], [124, 200, 'strata', 124, 36]].map(([sx, d, k, h, w], i) => ({ k, x: Factory.mx(sx), d, h, w, l: 3, seed: 3 + i })),
       ...o }) },

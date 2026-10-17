@@ -155,17 +155,17 @@ const Draft = (() => {
       P(x, v - 2, 1); P(x, v - 1, 7); P(x, v, i % 3 ? 8 : 3); P(x, v + 1, 1);
     }
   }
-  // Three card backs (Scene.cardArt) rising out of the torn top a frame at a time, fanning out, the
-  // rare one in the middle; then they start to turn over (turn 1, 2: narrower), and their faces
-  // open from there. CARDS: where each comes to rest (scene px); CARDS_AT, the middle of them.
+  // Three card backs (Scene.cardArt) rising out of the torn top a frame at a time, fanning out,
+  // each showing its own card's rarity (`rar`, from draw.deal); then they start to turn over
+  // (turn 1, 2: narrower), and their faces open from there (Scene.faces). CARDS: where each
+  // comes to rest (its top left, scene px).
   const CARDS = [[-17, 6], [0, 2], [17, 6]].map(([dx, y]) => [PX0 + PW / 2 + dx - (CARD.W >> 1), y]);
-  const CARDS_AT = [PX0 + PW / 2, (CARDS[1][1] + CARDS[0][1]) / 2 + CARD.H / 2];
-  function cardsArt(p, c, turn = 0) {
+  function cardsArt(p, c, turn = 0, rar = []) {
     if (c < 0) return;
     const f = Math.floor(c * 7), x0 = PX0 + PW / 2 - (CARD.W >> 1), y0 = PT + 10;
     for (const [i, late] of [[0, 1], [2, 2], [1, 0]]) {
       const s = Math.min(f - late, 6), [x, y] = CARDS[i];
-      if (s >= 0) Scene.cardArt(p, Math.round(x0 + (x - x0) * s / 6), Math.round(y0 + (y - y0) * s / 6), i === 1, CARD.TURN[turn]);
+      if (s >= 0) Scene.cardArt(p, Math.round(x0 + (x - x0) * s / 6), Math.round(y0 + (y - y0) * s / 6), rar[i], CARD.TURN[turn]);
     }
   }
 
@@ -209,7 +209,7 @@ const Draft = (() => {
       return packs.get(key);
     };
     const fig = Scene.figure(sc, { s: U });
-    let shadowKey = '';
+    let shadowKey = '', rar = [];
 
     function draw(S) {
       if (!sc.alive()) return;
@@ -226,7 +226,7 @@ const Draft = (() => {
       const step = Math.floor(performance.now() / 125);
       act.clear();
       sling.fork(act, FX, GY);
-      cardsArt(act.p, S.cards, S.turn);
+      cardsArt(act.p, S.cards, S.turn, rar);
       act.art(packImg(S.ox, S.tear), PX0 - 2, PT, U / 2);
       if (S.rib) sagArt(act.p, S.rib.sag, S.rib.hand, S.rib.len);
       // In front of you: the pouch and its bands, the strip falling or draped over you.
@@ -238,6 +238,8 @@ const Draft = (() => {
     }
     draw.alive = sc.alive;
     draw.toStage = (x, y) => Scene.toStage(sc, act, x, y);
+    // The dealt cards, in CARDS' order, so each back shows its own rarity.
+    draw.deal = (defs) => { rar = defs.map(rarityOf); };
     return draw;
   }
 
@@ -245,5 +247,5 @@ const Draft = (() => {
      w, cx (its middle), gy (its ground line), home: { x, depth } (where it stands in this scene),
      draw(pln, t, heat, sc) } in this file's scene px. */
   const PROPS = [{ id: 'pack', name: 'giant booster pack', x0: PX0 - 2, w: PW + 4, cx: PX0 + PW / 2, gy: GY, home: { x: PX0 + PW / 2, depth: D_ACT }, draw: (pln) => packArt(pln.p, 0, 0) }];
-  return { mount, at, LANDED, REST, PULL, END, CARDS_AT, ENTER_CUES, CUES, PROPS };
+  return { mount, at, LANDED, REST, PULL, END, CARDS, ENTER_CUES, CUES, PROPS };
 })();

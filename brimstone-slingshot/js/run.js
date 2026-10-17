@@ -249,7 +249,7 @@ const RUN_EVENTS = [
     ],
   },
   {
-    id: 'offer', title: "THE DEALER'S OFFER", art: 'dealer', screen: 'handover', hands: { mode: 'give', gold: true },
+    id: 'offer', title: "THE DEALER'S OFFER", art: 'dealer', screen: 'handover', hands: { mode: 'give', rarity: 'rare' },
     text: 'The Dealer slides a card across the table. Its frame glints: rare, or better. "A gift. I\'ll take my due at the next hand."',
     choices: [
       { label: 'ACCEPT', ok: (run) => runPool(run.s.colors).some((c) => rarityOf(c) !== 'common'), need: 'Nothing on offer for your colors.',
@@ -312,7 +312,7 @@ const RUN_EVENTS = [
     ],
   },
   {
-    id: 'reliquary', title: 'RELIQUARY', art: 'ri_relic', screen: 'handover', hands: { mode: 'relic', gold: true },
+    id: 'reliquary', title: 'RELIQUARY', art: 'ri_relic', screen: 'handover', hands: { mode: 'relic', rarity: 'mythical' },
     text: 'Behind a rusted grate, two cards hum like struck bells. Mythical, both of them. The grate only opens for blood: 6 life buys one.',
     choices: [
       { label: 'PAY 6 LIFE', ok: (run) => run.s.life > 6 && runPool(run.s.colors).some((c) => rarityOf(c) === 'mythical'),
@@ -710,6 +710,19 @@ const Run = {
       el.appendChild(c);
     }
     if (!defs.length) el.innerHTML = '<span class="muted">Nothing here.</span>';
+  },
+  /* The real faces of `defs` over an event scene, where their backs stood (Scene.faces): each opens
+     at its back's size and grows to the reading size. `rects`: each back's top left in scene px on
+     the plane `to` measures (a draw.toStage). Replaces any faces already up. Returns the faces'
+     holders; done(boxes) once they're full size and take clicks. */
+  sceneFaces(stage, defs, onPick, rects, to, opts = {}) {
+    stage.querySelector('.sc-faces')?.remove();
+    const el = document.createElement('div');
+    el.className = 'sc-faces';
+    stage.appendChild(el);
+    this.cardGrid(el, defs, onPick);
+    this.tip(null);
+    return Scene.faces(el, [...el.querySelectorAll('.card')], rects, to, { now: FAST, ...opts });
   },
 
   /* The card's full text in a panel beside it, like the battle's inspector (null hides it). */
@@ -1580,24 +1593,18 @@ const Run = {
       test ? `<button class="btn" id="drTear">${escapeHTML(tear.label)}</button><button class="btn" id="drAnte">ANTE ${ante}</button><button class="btn" id="rnLeave">DONE</button>`
         : opened ? leave : `<button class="btn" id="drTear">${escapeHTML(tear.label)}</button><button class="btn" id="drSell">${escapeHTML(sell.label)}</button>`);
     const draw = Draft.mount(stage, RunMap.SPIRE_ANTES[ante - 1].heat), lk = this.sceneLock();
-    // The risen cards turn face up where they stand over the pack (in a few stepped frames), and
-    // the one you click joins your deck.
-    const pick = (defs) => {
+    // The risen cards turn face up where they stand over the pack, still fanned, and grow to be
+    // read; the one you click joins your deck.
+    const pick = (defs, now = false) => {
       draw({ ...Draft.at(Draft.END), cards: -1 });
-      const el = document.createElement('div');
-      el.className = 'dr-pick';
-      stage.appendChild(el);
-      this.cardGrid(el, defs, (c) => {
-        if (test) { el.remove(); return draw(Draft.at(Draft.REST)); } // the bench keeps nothing
+      this.sceneFaces(stage, defs, (c) => {
+        if (test) { stage.querySelector('.sc-faces')?.remove(); return draw(Draft.at(Draft.REST)); } // the bench keeps nothing
         this.finishStop(ev.art, ev.title, ...this.result(tear.take(this, c), [c]));
-      });
-      const [x, y] = draw.toStage(...Draft.CARDS_AT);
-      el.style.left = Math.round(x - el.offsetWidth / 2) + 'px';
-      el.style.top = Math.max(6, Math.round(y - el.offsetHeight / 2)) + 'px';
+      }, Draft.CARDS, draw.toStage, { now: now || FAST });
       $('.rn-sub').textContent = prompt;
     };
     if (opened) {
-      pick((node.cards || []).map((id) => CARDS[id]).filter(Boolean));
+      pick((node.cards || []).map((id) => CARDS[id]).filter(Boolean), true);
       $('#rnLeave').onclick = () => { sfx('select'); this.leave(); };
       return;
     }
@@ -1610,16 +1617,18 @@ const Run = {
       if (test) {
         // The bench deals three cards that go nowhere, and tears it open as often as you like.
         lk.lock();
-        stage.querySelector('.dr-pick')?.remove();
+        stage.querySelector('.sc-faces')?.remove();
         this.tip(null);
         draw(Draft.at(Draft.REST));
         const defs = runOffer(Math.random, test.colors, 3, { least: 'rare' });
+        draw.deal(defs);
         return Scene.play({ draw, at: Draft.at, from: Draft.PULL, to: Draft.END, cues: Draft.CUES, done: () => { lk.unlock(); pick(defs); } });
       }
       node.cards = tear.cards(this);
       node.choice = 0;
       dr.opened = true;
       this.save();
+      draw.deal(node.cards.map((id) => CARDS[id]));
       const done = () => {
         $('.rn-btns').innerHTML = leave;
         $('#rnLeave').onclick = () => { sfx('select'); this.leave(); };
@@ -1799,33 +1808,29 @@ const Run = {
           (ok ? '' : `<div class="rn-need">${escapeHTML(payCh.need)}</div>`));
     const draw = Sc.mount(stage, RunMap.SPIRE_ANTES[ante - 1].heat), lk = this.sceneLock();
     const rest = () => { draw(Sc.at(Sc.REST)); lk.unlock(); if (!ok) $('#rcPay').disabled = true; };
-    // Your two real cards, standing on the plinths over the scene (opening in steps), the giver's
-    // first. Returns them, with their top in scene px for the sigil chips.
-    const cards = (defs) => {
-      const els = defs.map((d, i) => {
-        const el = document.createElement('div');
-        el.className = 'rc-real';
-        stage.appendChild(el);
-        this.cardGrid(el, [d], null, true);
-        const [x, y] = draw.toStage(i ? Sc.MID_B : Sc.MID_A, Sc.GY - Sc.PH);
-        el.style.left = Math.round(x - el.offsetWidth / 2) + 'px';
-        el.style.top = Math.round(y - el.offsetHeight) + 'px';
-        return el;
-      });
-      // The scene height the camera puts level with the cards' top, found by halving.
-      let lo = 0, hi = Sc.GY;
-      for (let i = 0; i < 14; i++) { const m = (lo + hi) / 2; if (draw.toStage(Sc.MID_A, m)[1] < els[0].offsetTop) lo = m; else hi = m; }
-      const top = (lo + hi) / 2;
-      draw.cards(top);
-      return { els, top };
+    // Your two real cards, standing on the plinths over the scene, the giver's first: each opens at
+    // a scene card's size and grows to be read, standing on its plinth (Scene.faces). Then
+    // then({ els, top }): their holders, and their top in scene px for the sigil chips.
+    const cards = (defs, then) => {
+      const rects = [Sc.MID_A, Sc.MID_B].map((x) => [x - Scene.CARD.W / 2, Sc.GY - Sc.PH - Scene.CARD.H]);
+      const els = this.sceneFaces(stage, defs, null, rects, draw.toStage, { grow: 'foot', done: (boxes) => {
+        // The scene height the camera puts level with the cards' top, found by halving.
+        let lo = 0, hi = Sc.GY;
+        for (let i = 0; i < 14; i++) { const m = (lo + hi) / 2; if (draw.toStage(Sc.MID_A, m)[1] < boxes[0][1]) lo = m; else hi = m; }
+        const top = (lo + hi) / 2;
+        draw.cards(top);
+        then({ els, top });
+      } });
+      els.forEach((el) => el.classList.add('rc-real'));
     };
     // The copy, played over the real cards: each lights as its part happens.
     const play = (defs, done) => {
-      const { els, top } = cards(defs);
-      if (FAST) return done(els);
       lk.lock();
-      const at = (t) => { const S = Sc.at(t, top); els[0].classList.toggle('rc-lit', S.flashA); els[0].classList.toggle('rc-gone', !!S.gone); els[1].classList.toggle('rc-lit', S.flashB); return S; };
-      Scene.play({ draw, at, from: Sc.REST, to: Sc.END, cues: Sc.CUES, done: () => done(els) });
+      cards(defs, ({ els, top }) => {
+        if (FAST) return done(els);
+        const at = (t) => { const S = Sc.at(t, top); els[0].classList.toggle('rc-lit', S.flashA); els[0].classList.toggle('rc-gone', !!S.gone); els[1].classList.toggle('rc-lit', S.flashB); return S; };
+        Scene.play({ draw, at, from: Sc.REST, to: Sc.END, cues: Sc.CUES, done: () => done(els) });
+      });
     };
     lk.lock();
     this.sceneEnter(rn, { draw, at: Sc.at, to: Sc.REST, cues: Sc.ENTER_CUES, done: rest });
@@ -1964,6 +1969,7 @@ const Run = {
         wrap.remove();
         fg.rid = d.rid;
         this.save();
+        draw.face(d);
         play(() => finish(d));
       }, mons.length > 7);
       $('#fgBack').onclick = () => { sfx('select'); wrap.remove(); };
@@ -1998,19 +2004,8 @@ const Run = {
       const [text, list] = this.result(r, cards);
       return { text, see: this.finishStop(ev.art, ev.title, text, list, false) };
     };
-    // The real card faces open over the scene where the backs turned (.dr-pick), as Bone Draft's do.
-    const faces = (defs, onPick) => {
-      stage.querySelector('.dr-pick')?.remove();
-      const el = document.createElement('div');
-      el.className = 'dr-pick';
-      stage.appendChild(el);
-      this.cardGrid(el, defs, onPick);
-      const [x, y] = draw.toStage(...H.CARDS_AT);
-      el.style.left = Math.round(x - el.offsetWidth / 2) + 'px';
-      el.style.top = Math.max(6, Math.round(y - el.offsetHeight / 2)) + 'px';
-      this.tip(null);
-      return el;
-    };
+    // The real card faces open over the scene where the backs turned over your head, as Bone Draft's do.
+    const faces = (defs, onPick, now = false) => this.sceneFaces(stage, defs, onPick, H.HEADS, draw.toFront, { now: now || FAST });
     // The stop is done: its outcome shows in the header, and CONTINUE leaves.
     const finish = (text) => {
       $('.rn-sub').textContent = text || ev.text;
@@ -2028,24 +2023,24 @@ const Run = {
       Scene.play({ draw: watch, at: H.at, from, to, cues: H.CUES, done });
     };
     // The Reliquary's pick: two real faces over the scene; the one you click is yours and the hands leave.
-    const pick = (defs) => {
+    const pick = (defs, now = false) => {
       let taken = false;
       $('.rn-sub').textContent = go.prompt || 'Pick one.';
-      const el = faces(defs, (c) => {
+      const ws = faces(defs, (c) => {
         if (taken || lk.busy()) return;
         taken = true;
         const text = test ? '' : settle(go.take(this, c), [c]).text;
-        const mid = parseFloat(el.style.left) + el.offsetWidth / 2;
-        [...el.children].forEach((k, i) => { if (defs[i] !== c) k.remove(); });
-        el.style.left = Math.round(mid - el.offsetWidth / 2) + 'px';
+        ws.forEach((w, i) => { if (defs[i] !== c) w.remove(); }); // the one you took stays where it opened
         if (FAST) return test ? lk.unlock() : this.outcome(ev.art, ev.title, text, node.see);
         play(H.TURNED, H.END, () => {}, () => finish(text));
       });
     };
 
     if (paid) { // reloaded after paying: the faces are open already
+      const defs = node.cards.map((id) => CARDS[id]).filter(Boolean);
+      draw.deal(defs);
       draw(H.at(H.TURNED));
-      pick(node.cards.map((id) => CARDS[id]).filter(Boolean));
+      pick(defs, true);
       $('#rnLeave').onclick = () => { sfx('select'); this.leave(); };
       return;
     }
@@ -2056,11 +2051,13 @@ const Run = {
       if (lk.busy() || !ok) return;
       sfx('select');
       this.tip(null);
-      stage.querySelector('.dr-pick')?.remove();
+      stage.querySelector('.sc-faces')?.remove();
+      draw.deal([]);
       if (test) draw(H.at(H.REST));
       if (relic) {
         const defs = test ? runPickN(Math.random, (m => (m.length >= 2 ? m : runPool(test.colors)))(runPool(test.colors).filter((c) => rarityOf(c) === 'mythical')), 2)
           : (node.cards = go.cards(this), node.choice = 0, this.save(), node.cards.map((id) => CARDS[id]).filter(Boolean));
+        draw.deal(defs);
         if (!test) { // dealt: there is no paying twice, only picking or leaving
           $('.rn-btns').innerHTML = leave;
           $('#rnLeave').onclick = () => { if (lk.busy()) return; sfx('select'); this.leave(); };
@@ -2072,7 +2069,9 @@ const Run = {
       const got = test ? { text: '', see: [ev.id === 'bones' ? CARDS.skeleton : runOffer(Math.random, test.colors, 1, { least: ev.id === 'offer' ? 'rare' : 'common' })[0]] }
         : settle(go.act(this, null, go));
       if (FAST) return this.outcome(ev.art, ev.title, got.text, got.see);
-      play(H.REST, H.END, () => faces([got.see[got.see.length - 1]], null), () => finish(got.text));
+      const card = got.see[got.see.length - 1];
+      draw.deal([card]);
+      play(H.REST, H.END, () => faces([card], null), () => finish(got.text));
     };
     if (go.see && !test) $('#hoSee').onclick = () => { sfx('select'); this.seeCard(go.see(this)); };
     if (test) {

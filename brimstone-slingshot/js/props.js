@@ -18,7 +18,7 @@
     { id: 'slingshot', name: 'Brimstone Slingshot', from: 'the kit', x0: 0, w: 36, cx: 18, gy: 103, home: { x: 18, depth: 380 }, // as Bone Draft stands it
       draw(pln, t, heat, sc) { if (!sling.has(sc)) sling.set(sc, Scene.slingshot(sc)); const s = sling.get(sc); s.fork(pln, 18, 103); s.front(pln, 18, 103); } },
     { id: 'card-backs', name: 'three card backs, fanned', from: 'the kit', x0: 0, w: 50, cx: 25, gy: 103, home: { x: 80, depth: 380 }, // over Bone Draft's pack
-      draw: (pln) => { Scene.cardArt(pln.p, 1, 78, false); Scene.cardArt(pln.p, 34, 78, false); Scene.cardArt(pln.p, 17, 74, true); } },
+      draw: (pln) => { Scene.cardArt(pln.p, 1, 78); Scene.cardArt(pln.p, 34, 78); Scene.cardArt(pln.p, 17, 74, 'rare'); } },
   ];
   // Each event file's PROPS, labeled with where they come from (a file that isn't loaded adds none).
   const FROM = [

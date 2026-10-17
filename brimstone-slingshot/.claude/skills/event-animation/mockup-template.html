@@ -1,0 +1,1177 @@
+<!-- Event animation mockup template (see SKILL.md, step 1).
+     Copy all of this into one show_widget call, then fill DESIGNS: one entry per design (A, B, C),
+     each with a short name, one line, and its scene, shaped like a game scene module (js/draft.js):
+       { len, hold, at(t) => state, mount(stage, heat) => draw(state) }
+     len: seconds of timeline; hold: seconds to rest on the last frame before it loops. There are
+     no per-ante variants: the ANTE buttons rebuild every stage at that ante's heat (0..2), so one
+     design is checked at each ante in place. mount builds the scene with Scene.* as the game's
+     mount does (Scene.setting for the place it stands in), and the loop calls draw(at(t)).
+     Start from scene() below: a whole scene in the game's own units (4 map units a scene px, mx()
+     for plane x, depths for plane y) in any setting. Code written here moves into js/<name>.js.
+     The KIT regions are the game's own code (js/scene.js, js/settings.js, js/factory.js, the sky,
+     spire and slingshot art from js/runmap.js, the hero sprite, the Moss palette and the .bw-
+     styles), copied in by tools/mockup-kit.py. Don't edit them; rerun the script instead.
+     Each stage is laid out at the game's size (1082 x 443) and scaled to fit, so the camera
+     frames it as the game does. Click a mockup to see it at full width. -->
+<h2 class="sr-only" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)">Looping pixel mockups of event animation designs, drawn in the game's 3D scene, with an ante switch.</h2>
+<style>
+/* KIT:css */
+.mk-kit{--ink:#1f2418;--dark:#3b4430;--mid:#6e7a52;--light:#a9b47e;--paper:#d9dfb3;--white:#eef1d6;--artbg:#cdd4a4;--accent:#b0953a;--bg:#12160e}
+.bw-stage { position: relative; flex: 1; min-height: 0; overflow: hidden; background: var(--bg); border: 3px solid var(--ink); cursor: pointer; }
+.bw-sky { position: absolute; inset: 0; width: 100%; height: 100%; image-rendering: pixelated; }
+.bw-view { position: absolute; left: 0; height: 700px; perspective: 1100px; perspective-origin: 50% 280px; transform-origin: 0 0; }
+.bw-lane { position: absolute; left: 0; top: 0; width: 1440px; height: 520px; image-rendering: pixelated; }
+.bw-st { position: absolute; transform-origin: 50% 100%; transform: rotateX(-90deg); image-rendering: pixelated; pointer-events: none; }
+.bw-st canvas { display: block; width: 100%; height: 100%; image-rendering: pixelated; }
+.bw-st.bob canvas { animation: rmBob 1.2s steps(2) infinite; }
+.bw-pl {
+  position: absolute; left: 50%; top: 50%; width: 1440px; height: 520px; margin: -260px 0 0 -720px;
+  transform: translateY(60px) translateZ(300px) rotateX(46deg) translate(0, -100px); transform-style: preserve-3d;
+}
+@keyframes rmBob { 50% { transform: translateY(-3px); } }
+/* /KIT:css */
+.mk-bar{display:flex;align-items:center;gap:8px;margin:0 0 12px;font-size:13px;color:var(--text-secondary)}
+.mk-bar button.on{border-color:var(--text-primary);color:var(--text-primary)}
+.mk-g{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:16px}
+.mk-c{cursor:zoom-in}
+.mk-c.big{grid-column:1/-1;cursor:zoom-out}
+.mk-f{position:relative;width:100%;aspect-ratio:1088/449;overflow:hidden;border-radius:4px}
+.mk-st.bw-stage{position:absolute;left:0;top:0;width:1082px;height:443px;flex:none;transform-origin:0 0;cursor:inherit}
+.mk-n{font-size:13px;font-weight:500;color:var(--text-primary);margin:6px 0 0}
+.mk-s{font-size:12px;color:var(--text-secondary);margin:2px 0 0;line-height:1.5}
+</style>
+<div class="mk-bar">Ante <button data-ante="0" class="on">1</button><button data-ante="1">2</button><button data-ante="2">3</button></div>
+<div id="mk" class="mk-g"></div>
+<script>
+/* KIT:js */
+const Palette = { cur: {
+    name: 'MOSS', ink: '#1f2418', dark: '#3b4430', mid: '#6e7a52', light: '#a9b47e', paper: '#d9dfb3', white: '#eef1d6',
+    artbg: '#cdd4a4', accent: '#b0953a', bg: '#12160e',
+    bd: ['#8f9a6c', '#a3ad7f', '#b3bc8a', '#c3cb9b', '#3b4430'], tab: ['#8e9868', '#a6af7f', '#7c8659'],
+  } };
+const SPRITES = { hero: [
+    '........', '....####', '...#wwww', '..#wwwww', '..#wwwww', '.#wwwwww', '.#ww#www', '.#ww#www',
+    '.#wwwwww', '..#wwwww', '..#www##', '...#wwww', '....####', '..##++++', '.#++++++', '.#++++++',
+  ], };
+const PAL = { '#': '#1f2418', '+': '#6e7a52', '-': '#a9b47e', 'w': '#eef1d6' };
+function expandSprite(rows) {
+  const full = rows.some((r) => r.length > 8);
+  return rows.map((r) => {
+    if (full) return r.padEnd(16, '.').slice(0, 16);
+    const h = r.padEnd(8, '.').slice(0, 8);
+    return h + [...h].reverse().join('');
+  });
+}
+function mulberry32(seed) {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6D2B79F5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+const sfx = () => {};
+const RunMap = (() => {
+  const BAY = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
+  const rgb = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+  const luma = (h) => { const [r, g, b] = rgb(h); return r * 0.299 + g * 0.587 + b * 0.114; };
+  function ramp() {
+    const p = Palette.cur;
+    return [p.bg, p.ink, p.dark, p.mid, p.light, p.artbg, p.paper, p.white].sort((a, b) => luma(a) - luma(b)).concat(p.accent);
+  }
+  const noise = (a, b) => { let n = (a * 374761393 + b * 668265263) | 0; n = (n ^ (n >>> 13)) * 1274126177 | 0; return ((n ^ (n >>> 16)) >>> 0) / 4294967296; };
+  const SPIRE_ANTES = [{ strata: 0.03, heat: 0 }, { strata: 0.07, heat: 1 }, { strata: 0.3, heat: 2 }];
+  function propArt(fill, glow, C, l, k, cx, top, w, h, seed, heat) {
+    const hi = C[l + 1], li = C[Math.max(1, l)], dk = C[Math.max(0, l - 1)], u0 = Math.round(cx - w / 2);
+    if (k === 'strata') return strata(fill, glow, cx, top, w, h, seed, heat, [hi, li, dk, C[Math.min(7, l + 2)]]);
+    const tones = k === 'spike' ? [[0.14, hi], [0.5, li], [1, dk]]
+      : k === 'basalt' ? [[1 / 3, hi], [2 / 3, li], [1, dk]]
+      : k === 'crystal' ? [[0.5, C[7]], [1, C[8]]]
+      : [[0.5, C[2]], [1, C[1]]];
+    for (let r = 0; r < h; r++) {
+      const f = (r + 0.5) / h;
+      const half = k === 'spike' || k === 'crystal' ? f / 2
+        : k === 'basalt' ? (f < 0.08 ? 0.5 * (f / 0.08) : 0.5)
+        : (f < 0.12 ? 0.5 * (f / 0.12) : 0.5);
+      const a = Math.round(w * (0.5 - half)), b = Math.round(w * (0.5 + half));
+      let from = a;
+      for (const [end, c] of tones) { const to = Math.min(b, Math.round(w * end)); fill(u0 + from, top + r, to - from, c); from = Math.max(from, to); }
+    }
+  }
+  function strata(fill, glow, cx, top, w, h, seed, heat, T) {
+    const n = 5, lean = (r) => Math.round((1 - (r + 0.5) / h) * (seed % 2 ? 2 : -2));
+    for (let r = 0; r < h; r++) {
+      const f = (r + 0.5) / h, band = Math.ceil(f * n), half = Math.max(0.5, w / 2 * band / n - (noise(seed, band) < 0.5 ? 1 : 0));
+      const a = Math.round(cx - half), b = Math.round(cx + half), y = top + r, ledge = Math.ceil(((r + 1.5) / h) * n) > band;
+      for (let u = a; u <= b; u++) {
+        const q = (u - a) / (b - a + 1);
+        fill(u + lean(r), y, 1, ledge ? (q < 0.6 ? T[3] : T[1]) : q < 0.18 ? T[0] : q < 0.55 ? T[1] : T[2]);
+      }
+      if (ledge && r < h - 1 && (heat === 2 || (heat === 1 && f > 0.5))) {
+        for (let u = a + 1; u <= b - 1; u += 2) glow(u + lean(r + 1), y + 1);
+      }
+    }
+    if (heat === 2) glow(cx + lean(0), top);
+  }
+  const SKY = 3, SKY_FAR = 0.04, SKY_NEAR = 0.07, SKY_PAD = 96;
+  function skyDrawer(cv, C) {
+    const g = cv.getContext('2d');
+    const u32 = (h) => { const [r, gg, b] = rgb(h); return ((255 << 24) | (b << 16) | (gg << 8) | r) >>> 0; };
+    const U = C.map(u32), P = SKY_PAD;
+    let w = 0, h = 0, LW = 0, img, buf, lane, stars, rings, cx, cy, cam0 = null, ex = 0, ey = 0;
+    let cA, sQ, cQ, sR, cR, sP, cP, sS, cS; // the nebula's per-column and per-row sines
+    const fit = () => {
+      const nw = Math.max(1, Math.round(cv.clientWidth / SKY)), nh = Math.max(1, Math.round(cv.clientHeight / SKY));
+      if (nw === w && nh === h) return;
+      w = cv.width = nw; h = cv.height = nh; LW = w + P * 2;
+      img = g.createImageData(w, h); buf = new Uint32Array(img.data.buffer);
+      [cA, sQ, cQ, sR, cR] = Array.from({ length: 5 }, () => new Float64Array(w));
+      [sP, cP, sS, cS] = Array.from({ length: 4 }, () => new Float64Array(h));
+      const s = w / 320;
+      cx = w / 2; cy = h * 0.17;
+      rings = Array.from({ length: 8 }, (_, i) => (50 + i * 36) * s);
+      lane = new Float32Array(LW * (h + P * 2));
+      for (let y = -P; y < h + P; y++) for (let x = -P; x < w + P; x++) {
+        const r = Math.hypot(x - cx, (y - cy) / 0.32);
+        let m = 1e9;
+        for (const R of rings) m = Math.min(m, Math.abs(r - R));
+        m /= s;
+        lane[(y + P) * LW + x + P] = m > 14 ? 2 : Math.min(1, m / 9);
+      }
+      const R = mulberry32(99);
+      stars = Array.from({ length: Math.round(w * h / 510) }, () => ({ x: R() * w | 0, y: R() * h | 0, k: 1 + (R() * 3 | 0) }));
+    };
+    const set = (x, y, k) => { x = Math.round(x); y = Math.round(y); if (x >= 0 && x < w && y >= 0 && y < h) buf[y * w + x] = U[k]; };
+    const box = (x, y, bw, bh, k) => { for (let j = 0; j < bh; j++) for (let i = 0; i < bw; i++) set(x + i, y + j, k); };
+    return (t, camX = 0, camY = 0) => {
+      fit();
+      if (!cam0) cam0 = [camX, camY];
+      ex += (camX - cam0[0] - ex) * 0.3; ey += (camY - cam0[1] - ey) * 0.3;
+      const fx = Math.max(-P, Math.min(P, Math.round(ex * SKY_FAR))), fy = Math.max(-P, Math.min(P, Math.round(ey * SKY_FAR)));
+      const nx = Math.round(ex * SKY_NEAR), ny = Math.round(ey * SKY_NEAR);
+      const d = t * 2, k = 320 / w;
+      for (let x = 0; x < w; x++) {
+        const xs = (x - fx) * k;
+        cA[x] = Math.sin(xs * 0.02 + d * 0.05);
+        sQ[x] = Math.sin(xs * 0.01); cQ[x] = Math.cos(xs * 0.01);
+        sR[x] = Math.sin(xs * 0.013 + 1.7); cR[x] = Math.cos(xs * 0.013 + 1.7);
+      }
+      for (let y = 0; y < h; y++) {
+        const ys = (y - fy) * k;
+        sP[y] = Math.sin(ys * 0.035 + d * 0.03); cP[y] = Math.cos(ys * 0.035 + d * 0.03);
+        sS[y] = Math.sin(ys * 0.013); cS[y] = Math.cos(ys * 0.013);
+      }
+      for (let y = 0; y < h; y++) {
+        const sp = sP[y], cp = cP[y], ss = sS[y], cs = cS[y], row = (y - fy + P) * LW - fx + P, by = (y & 3) * 4;
+        for (let x = 0; x < w; x++) {
+          const n = cA[x] + sp * cQ[x] - cp * sQ[x] + 1.2 * (sR[x] * cs + cR[x] * ss) - 0.4;
+          const l = lane[row + x], c = Math.floor(Math.max(0, n * Math.min(1, l) + (l > 1 ? 0.35 : 0)) * 1.4 + BAY[(x & 3) + by] / 16);
+          buf[y * w + x] = U[c >= 2 ? 2 : c >= 1 ? 1 : 0];
+        }
+      }
+      stars.forEach((st, i) => {
+        const tw = (i * 7 + Math.floor(t * 3)) % 29 === 0;
+        if (st.k > 1 && !tw) return;
+        const sx = ((st.x + nx) % w + w) % w, sy = ((st.y + ny) % h + h) % h;
+        set(sx, sy, tw ? 5 : st.k);
+        if (tw) { set(sx - 1, sy, 3); set(sx + 1, sy, 3); set(sx, sy - 1, 3); set(sx, sy + 1, 3); }
+      });
+      const ox = cx + fx, oy = cy + fy;
+      rings.forEach((rx, i) => {
+        const ry = rx * 0.32;
+        for (let a = 0, j = 0; a < 6.283; a += 1.5 / rx, j++) if (j % 2 === 0) set(ox + Math.cos(a) * rx, oy + Math.sin(a) * ry, i % 2 ? 2 : 3);
+        const a = i * 1.7 + t * (0.6 / (1 + i * 0.6)), px = Math.round(ox + Math.cos(a) * rx), py = Math.round(oy + Math.sin(a) * ry), sz = 2 + (i * 5 % 3);
+        box(px - (sz >> 1) - 1, py - (sz >> 1) - 1, sz + 2, sz + 2, 1);
+        box(px - (sz >> 1), py - (sz >> 1), sz, sz, i === 3 ? 8 : 3 + (i % 2));
+        if (i === 5) set(px + Math.cos(t * 2) * 6, py + Math.sin(t * 2) * 2, 4);
+      });
+      box(ox - 7, oy - 7, 14, 14, 1); box(ox - 6, oy - 6, 12, 12, 4); box(ox - 4, oy - 4, 8, 8, 5);
+      g.putImageData(img, 0, 0);
+    };
+  }
+  function paint(w, h, C, draw) {
+    const cv = document.createElement('canvas');
+    cv.width = w; cv.height = h;
+    const x = cv.getContext('2d');
+    const rect = (u, v, rw, rh, k) => { x.fillStyle = C[k]; x.fillRect(u, v, rw, rh); };
+    draw(rect, (u, v, k) => rect(u, v, 1, 1, k), x);
+    return cv;
+  }
+  const SL = { w: 60, h: 84, tip: { x: 52, z: 160 }, rest: { y: 1, z: 112 }, pull: { y: 41, z: 94 }, maxAim: 55 };
+  const POUCH = { w: 76, h: 12, up: 8 };
+  const forkArt = (C) => paint(SL.w, SL.h, C, (rect, px) => {
+    const c = SL.w / 2;
+    const limb = (x0, y0, x1, y1, r) => {
+      const n = Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0));
+      for (const pass of [0, 1]) for (let i = 0; i <= n; i++) {
+        const x = Math.round(x0 + (x1 - x0) * i / n), y = Math.round(y0 + (y1 - y0) * i / n);
+        if (!pass) rect(x - r - 1, y - 1, r * 2 + 2, 3, 1);
+        else { rect(x - r, y, r, 1, 5); rect(x, y, r, 1, 3); px(x - r, y, 6); }
+      }
+    };
+    limb(c, SL.h - 1, c, 46, 4);
+    limb(c, 50, c - 26, 5, 3); limb(c, 50, c + 26, 5, 3);
+    for (const s of [-1, 1]) { rect(c + s * 26 - 4, 1, 8, 5, 1); rect(c + s * 26 - 3, 2, 6, 3, 7); }
+    for (const v of [50, 56, 62]) { rect(c - 6, v, 12, 3, 1); rect(c - 5, v, 10, 1, 8); }
+    rect(c - 8, SL.h - 4, 16, 4, 1); rect(c - 7, SL.h - 4, 14, 1, 3);
+  });
+  const pouchArt = (C) => paint(POUCH.w / 2, POUCH.h / 2, C, (rect) => {
+    const w = POUCH.w / 2;
+    rect(3, 1, w - 6, 5, 1); rect(4, 2, w - 8, 2, 2); rect(5, 2, w - 10, 1, 3); rect(8, 4, w - 16, 1, 2);
+    for (const u of [0, w - 4]) { rect(u, 0, 4, 5, 1); rect(u + 1, 1, 2, 3, 4); }
+  });
+  return { BAY, ramp, SPIRE_ANTES, propArt, skyDrawer, forkArt, pouchArt, SL, POUCH };
+})();
+const Scene = (() => {
+  const BAY = RunMap.BAY;
+  const bay = (x, y) => BAY[(x & 3) + ((y & 3) << 2)];
+  const cl = (v, a = 0, b = 1) => Math.max(a, Math.min(b, v));
+  const lvl = (f, x, y) => Math.max(0, Math.min(3, Math.round(f * 3 + bay(x, y) / 16 - 0.5)));
+  const rgb = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+  const pen = (g, C, x0 = 0, y0 = 0, s = 1) => ({
+    P: (x, y, k) => { g.fillStyle = C[k]; g.fillRect((Math.round(x) - x0) * s, (Math.round(y) - y0) * s, s, s); },
+    R: (x, y, w, h, k) => { g.fillStyle = C[k]; g.fillRect((Math.round(x) - x0) * s, (Math.round(y) - y0) * s, w * s, h * s); },
+  });
+  function mount(stage, { rows = 600, top = -30, extra = '' } = {}) {
+    const C = RunMap.ramp(), RGB = C.map(rgb);
+    stage.innerHTML = '<canvas class="bw-sky"></canvas><div class="bw-view"><div class="bw-pl"></div></div>' + extra;
+    const skyCv = stage.firstChild, view = skyCv.nextSibling, pl = view.firstChild;
+    const k = stage.clientHeight / rows;
+    Object.assign(view.style, { width: stage.clientWidth / k + 'px', top: top * k + 'px', transform: `scale(${k})` });
+    const alive = () => stage.isConnected;
+    const every = (ms, fn) => { const id = setInterval(() => (alive() ? fn() : clearInterval(id)), ms); };
+    const sky = RunMap.skyDrawer(skyCv, C);
+    sky(performance.now() / 1000);
+    every(100, () => sky(performance.now() / 1000));
+    const stand = (el, x, depth, w, h) => {
+      el.className = 'bw-st';
+      Object.assign(el.style, { left: x + 'px', top: depth - h + 'px', width: w + 'px', height: h + 'px' });
+      pl.appendChild(el);
+      return el;
+    };
+    return { stage, C, RGB, pl, alive, every, stand };
+  }
+  function figure(sc, { s, hang = 0 }) {
+    const hero = expandSprite(SPRITES.hero), cv = document.createElement('canvas'), w = 18 * s;
+    cv.width = 18; cv.height = 18;
+    const g = cv.getContext('2d'), at = (x, y) => y >= 0 && y < hero.length && x >= 0 && x < 16 && PAL[hero[y][x]] != null;
+    for (let y = -1; y <= hero.length; y++) for (let x = -1; x <= 16; x++) {
+      const c = at(x, y) ? PAL[hero[y][x]] : at(x - 1, y) || at(x + 1, y) || at(x, y - 1) || at(x, y + 1) ? sc.C[1] : null;
+      if (c) { g.fillStyle = c; g.fillRect(x + 1, y + 1, 1, 1); }
+    }
+    const el = sc.stand(document.createElement('div'), 0, 0, w, w);
+    el.appendChild(cv);
+    const place = ({ x, y, z = 0, rot = 0, sx = 1, sy = 1, lean = 0, bob = false }) => {
+      el.style.left = x - w / 2 + 'px';
+      el.style.top = y + hang * s - w + 'px';
+      el.style.transform = `translateZ(${Math.round(z / 4) * 4}px) rotateX(${-90 + lean}deg)`;
+      const squash = sx !== 1 || sy !== 1;
+      cv.style.transformOrigin = squash ? '50% 100%' : '50% 50%';
+      cv.style.transform = squash ? `scale(${sx}, ${sy})` : rot ? `rotate(${rot * 90}deg)` : '';
+      el.classList.toggle('bob', bob);
+    };
+    return { el, cv, place };
+  }
+  const land = (u, high) => ({ k: 1 - u, z: Math.round(high * (1 - u * u) / 4) * 4, rot: u < 1 ? Math.floor(u * 4) % 4 : 0 });
+  const SQUASH = { sx: 1.15, sy: 0.8, ms: 120 };
+  function play({ draw, at, from = 0, to, cues = [], done = () => {} }) {
+    const t0 = performance.now();
+    let last = from - 1e-6;
+    (function step(now) {
+      if (!draw.alive()) return;
+      const t = Math.min(to, from + (now - t0) / 1000);
+      for (const [c, name, n] of cues) if (c > last && c <= t) sfx(name, n);
+      last = t;
+      draw(at(t));
+      if (t < to) requestAnimationFrame(step);
+      else done();
+    })(t0);
+  }
+  function ground(sc, { x0, y0, w, h, light, tones = [3, 4, 5, 6], seed = 23, grit = 3000, rubble = [], shards = [], shadows = [], over, pattern }) {
+    const { C, RGB, pl } = sc, R0 = mulberry32(seed), lit = new Float32Array(w * h), mark = new Int8Array(w * h).fill(-1);
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) lit[y * w + x] = cl(light(x0 + x * 2, y0 + y * 2));
+    if (pattern) for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) mark[y * w + x] = pattern(x0 + x * 2, y0 + y * 2);
+    for (let i = 0; i < grit; i++) mark[Math.floor(R0() * h) * w + Math.floor(R0() * w)] = R0() < 0.7 ? 3 : 4;
+    const gx = (X) => Math.round((X - x0) / 2), gy = (Y) => Math.round((Y - y0) / 2);
+    const blob = (X, Y, r, ks) => {
+      const cx = gx(X), cy = gy(Y);
+      for (let v = -r; v <= r; v++) for (let u = -r * 2; u <= r * 2; u++) { const d = Math.hypot(u / 2, v) / r; if (d <= 1) mark[(cy + v) * w + cx + u] = d > 0.75 ? ks[0] : v < 0 && u < 0 ? ks[2] : ks[1]; }
+    };
+    for (const [X, Y, r] of rubble) blob(X, Y, r, [2, 4, 6]);
+    for (const [X, Y] of shards) blob(X, Y, 2, [3, 8, 7]);
+    const tone = (x, y, dim) => { const o = y * w + x; return mark[o] >= 0 && !dim ? mark[o] : tones[lvl(cl(lit[o] - dim), x, y)]; };
+    const cv = document.createElement('canvas');
+    cv.width = w; cv.height = h; cv.className = 'bw-lane';
+    Object.assign(cv.style, { left: x0 + 'px', top: y0 + 'px', width: w * 2 + 'px', height: h * 2 + 'px' });
+    pl.appendChild(cv);
+    const g = cv.getContext('2d'), img = g.createImageData(w, h), px = img.data;
+    const put = (x, y, k) => { const o = (y * w + x) * 4, c = RGB[k]; px[o] = c[0]; px[o + 1] = c[1]; px[o + 2] = c[2]; px[o + 3] = 255; };
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) put(x, y, tone(x, y, 0));
+    for (const [X0, Y0, X1, Y1] of shadows) for (let y = gy(Y0); y < gy(Y1); y++) for (let x = gx(X0); x < gx(X1); x++) put(x, y, tone(x, y, 0.55));
+    g.putImageData(img, 0, 0);
+    const ov = document.createElement('canvas');
+    ov.width = over.w; ov.height = over.h;
+    Object.assign(ov.style, { position: 'absolute', left: over.x0 + 'px', top: over.y0 + 'px', width: over.w * 2 + 'px', height: over.h * 2 + 'px', transform: 'translateZ(1px)', imageRendering: 'pixelated', pointerEvents: 'none' });
+    pl.appendChild(ov);
+    const og = ov.getContext('2d'), ou = (over.x0 - x0) / 2, ovv = (over.y0 - y0) / 2;
+    const dot = (x, y, k) => { if (x >= 0 && x < over.w && y >= 0 && y < over.h) { og.fillStyle = C[k]; og.fillRect(x, y, 1, 1); } };
+    return {
+      clear: () => og.clearRect(0, 0, over.w, over.h),
+      shade(X, Y, rx, ry) {
+        const cx = (X - over.x0) / 2, cy = (Y - over.y0) / 2;
+        if (!Number.isFinite(cx + cy + rx + ry)) return;
+        for (let y = Math.floor(cy - ry); y <= cy + ry; y++) for (let x = Math.floor(cx - rx); x <= cx + rx; x++) {
+          const a = (x - cx) / rx, b = (y - cy) / ry;
+          if (a * a + b * b < 1) dot(x, y, tone(Math.round(x + ou), Math.round(y + ovv), 0.55));
+        }
+      },
+      patch(X, Y, pw, ph, f) {
+        const x1 = Math.round((X - over.x0) / 2), y1 = Math.round((Y - over.y0) / 2);
+        for (let i = 0; i < pw; i++) for (let j = 0; j < ph; j++) dot(x1 + i, y1 + j, f(i, j));
+      },
+    };
+  }
+  function ruins(sc, { area, clear, near = [], heat = 0, count = 380, seed = 5, wall = 1, draw = RunMap.propArt, kinds = {}, size = {} }) {
+    const { C, stand, every } = sc, RS = mulberry32(seed), hot = [];
+    const art = (x, p, cx, top) => {
+      const fill = (u, v, n, c) => { if (n > 0) { x.fillStyle = c; x.fillRect(u, v, n, 1); } }, mine = [];
+      const glow = (u, v) => { u = Math.round(u); v = Math.round(v); fill(u, v, 1, C[8]); mine.push([u, v]); };
+      draw(fill, glow, C, p.l, p.k, cx, top, Math.round(p.w), Math.round(p.h), p.seed || 0, heat);
+      if (mine.length) hot.push({ x, px: mine });
+    };
+    const field = [];
+    for (let t = 0; t < count * 10 + 200 && field.length < count; t++) {
+      const x = area.x0 + RS() * (area.x1 - area.x0), d = area.y0 + 40 + RS() * (area.y1 - area.y0);
+      if (d > clear.y && x > clear.x0 && x < clear.x1) continue;
+      if (field.some((p) => Math.abs(p.x - x) < 22 && Math.abs(p.d - d) < 16)) continue;
+      const big = RS(), far = cl(-d / 600);
+      let h = 30 + big * big * big * 220 + RS() * 30 + far * RS() * 140;
+      if (d < area.y0 + 160) h += (160 + RS() * 160) * wall;
+      let w = Math.min(8 + h * 0.2 * (0.7 + RS() * 0.6), 8 + h * 0.3), k = 'spike';
+      if (RS() < 0.2) { k = 'basalt'; h *= 0.6; w *= 1.3; }
+      k = kinds[k] || k;
+      const [sh, sw] = size[k] || [1, 1];
+      field.push({ k, x, d, h: Math.max(8, Math.round(h * sh / 2)), w: Math.max(4, Math.round(w * sw / 2)), l: d < -650 ? 1 : d < -200 ? 2 : 3 });
+    }
+    const bands = new Map();
+    for (const p of field) { const b = Math.floor(p.d / 32); if (!bands.has(b)) bands.set(b, []); bands.get(b).push(p); }
+    for (const list of bands.values()) {
+      const left = Math.floor(Math.min(...list.map((p) => p.x / 2 - p.w))) - 2, right = Math.ceil(Math.max(...list.map((p) => p.x / 2 + p.w))) + 2;
+      const tall = Math.max(...list.map((p) => p.h)), back = Math.max(...list.map((p) => p.d)), cv = document.createElement('canvas');
+      cv.width = right - left; cv.height = tall;
+      const x = cv.getContext('2d');
+      for (const p of list.sort((a, b) => a.d - b.d)) art(x, p, p.x / 2 - left, tall - p.h);
+      stand(cv, left * 2, back, cv.width * 2, tall * 2);
+    }
+    for (const q of near) {
+      const p = { ...q, k: kinds[q.k] || q.k }, cw = p.w + 6, cv = document.createElement('canvas');
+      cv.width = cw; cv.height = p.h;
+      art(cv.getContext('2d'), p, cw / 2, 0);
+      stand(cv, p.x - cw, p.d, cw * 2, p.h * 2);
+    }
+    if (hot.length) {
+      let last = -1;
+      every(50, () => {
+        const st = Math.floor(performance.now() / 250);
+        if (st === last) return;
+        last = st;
+        for (const { x, px } of hot) for (const [u, v] of px) { x.fillStyle = C[((v + st) % 6 + 6) % 6 < 2 ? 7 : 8]; x.fillRect(u, v, 1, 1); }
+      });
+    }
+  }
+  function span(sc, depth, z = 0) {
+    const el = document.createElement('div');
+    sc.stand(el, -4000, depth, 9000, 2);
+    el.style.transform = `translateZ(${z}px) rotateX(-90deg)`;
+    const r = el.getBoundingClientRect(), s = sc.stage.getBoundingClientRect(), k = 9000 / r.width;
+    el.remove();
+    return [-4000 + (s.left - r.left) * k, -4000 + (s.right - r.left) * k];
+  }
+  function plane(sc, { left, x0 = 0, depth, w, h, u = 4 }) {
+    const cv = document.createElement('canvas'), s = u / 2;
+    cv.width = w * s; cv.height = h * s;
+    sc.stand(cv, left, depth, w * u, h * u);
+    const g = cv.getContext('2d');
+    g.imageSmoothingEnabled = false;
+    return {
+      cv, g, x0, w, h, left, depth, u, p: pen(g, sc.C, x0, 0, s),
+      clear: () => g.clearRect(0, 0, cv.width, cv.height),
+      art: (img, x, y, k = 1) => g.drawImage(img, (x - x0) * s, y * s, img.width * k, img.height * k),
+    };
+  }
+  function toStage(sc, pln, x, y) {
+    const { stage } = sc, m = sc.stand(document.createElement('div'), pln.left + (x - pln.x0) * pln.u, pln.depth, 1, 1);
+    m.style.transform = `translateZ(${(pln.h - y) * pln.u}px) rotateX(-90deg)`;
+    const s = stage.getBoundingClientRect(), r = m.getBoundingClientRect(), z = s.width / stage.offsetWidth;
+    m.remove();
+    return [(r.left + r.width / 2 - s.left) / z - stage.clientLeft, (r.top + r.height / 2 - s.top) / z - stage.clientTop];
+  }
+  function slingshot(sc) {
+    const forkCv = RunMap.forkArt(sc.C), pouchCv = RunMap.pouchArt(sc.C);
+    const TIP = 13, TIP_UP = 41, TIE = 9, REST_UP = 28;
+    const band = ({ R }, x0, y0, x1, y1) => {
+      const n = Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0), 1);
+      for (let i = 0; i <= n; i++) R(Math.round(x0 + (x1 - x0) * i / n) - 1, y0 + (y1 - y0) * i / n, 2, 1, 1);
+    };
+    return {
+      rest: (gy) => gy - REST_UP,
+      fork: (pln, fx, gy) => pln.art(forkCv, fx - 15, gy - 42),
+      front(pln, fx, gy, dx = 0, dy = 0) {
+        const ux = fx + dx, uy = gy - REST_UP + 1 + dy;
+        pln.art(pouchCv, ux - 9.5, uy - 1);
+        for (const s of [-1, 1]) band(pln.p, fx + s * TIP, gy - TIP_UP, ux + s * TIE, uy);
+      },
+    };
+  }
+  const CARD = { W: 15, H: 22, TURN: [15, 9, 3] };
+  const gilt = (rarity) => (rarity === 'mythical' ? 2 : rarity === 'rare' ? 1 : 0);
+  function cardArt({ R }, x, y, rarity = 'common', w = CARD.W) {
+    const { W, H } = CARD, g = gilt(rarity);
+    x += (W - w) >> 1;
+    R(x, y, w, H, 1);
+    if (w > 2) R(x + 1, y + 1, w - 2, H - 2, g > 1 ? 8 : 6);
+    if (w > 4) R(x + 2, y + 2, w - 4, H - 4, 3);
+    if (w < W) return;
+    R(x + 1, y + 1, 1, H - 2, 7);
+    const k = g ? 8 : 7;
+    R(x + 6, y + 8, 3, 6, k); R(x + 5, y + 9, 5, 4, k); R(x + 7, y + 7, 1, 8, k);
+  }
+  function spriteArt(name) {
+    const src = SPRITES[name];
+    if (!src) return null;
+    const rows = expandSprite(src), cv = document.createElement('canvas'), g = cv.getContext('2d');
+    cv.width = 16; cv.height = rows.length;
+    rows.forEach((r, y) => [...r].forEach((ch, x) => { if (PAL[ch]) { g.fillStyle = PAL[ch]; g.fillRect(x, y, 1, 1); } }));
+    return cv;
+  }
+  function cardFace({ P, R }, x, y, w = CARD.W, { art = null, pl = null, rarity = 'common' } = {}) {
+    const { W, H } = CARD;
+    x += (W - w) >> 1;
+    R(x, y, w, H, 1);
+    if (w > 2) R(x + 1, y + 1, w - 2, H - 2, 6);
+    if (w > 2 && gilt(rarity) > 1) { R(x + 1, y + 1, w - 2, 1, 8); R(x + 1, y + H - 2, w - 2, 1, 8); R(x + w - 2, y + 1, 1, H - 2, 8); }
+    if (w < W) { if (w > 4) R(x + 2, y + 2, w - 4, 9, 5); return; }
+    R(x + 1, y + 1, 1, H - 2, 7);
+    R(x + 2, y + 2, 11, 9, 5); R(x + 2, y + 2, 11, 1, 4);
+    if (art && pl) pl.art(art, x + 3.5, y + 2.5);
+    else { R(x + 4, y + 6, 6, 3, 3); R(x + 8, y + 4, 3, 3, 3); R(x + 3, y + 5, 1, 2, 3); R(x + 5, y + 9, 1, 2, 2); R(x + 9, y + 9, 1, 2, 2); P(x + 9, y + 5, 7); }
+    R(x + 2, y + 12, 11, 2, 4);
+    R(x + 2, y + 18, 3, 2, 1); R(x + 10, y + 18, 3, 2, 1); P(x + 3, y + 18, 7); P(x + 11, y + 18, 7);
+  }
+  const FACE = { READ: 0.74, OPEN: [0.2, 0.6, 1], GROW: 3, FPS: 7, PAD: 6 };
+  function faces(host, cards, rects, to, { grow = 'group', now = false, done = () => {} } = {}) {
+    const stage = host.parentElement;
+    const ws = cards.map((c) => { const w = document.createElement('div'); w.className = 'sc-face'; c.replaceWith(w); w.appendChild(c); return w; });
+    const fw = cards[0]?.offsetWidth || 1, fh = cards[0]?.offsetHeight || 1, s1 = FACE.READ;
+    const from = rects.map(([x, y]) => {
+      const [[ax], [bx], [cx, cy], [dx, dy]] = [to(x, y), to(x + CARD.W, y), to(x, y + CARD.H), to(x + CARD.W, y + CARD.H)];
+      const s = (bx - ax + dx - cx) / 2 / fw, foot = (cy + dy) / 2;
+      return { x: (ax + bx + cx + dx) / 4, y: foot - fh * s / 2, s };
+    });
+    const n = from.length || 1, gx = from.reduce((a, f) => a + f.x, 0) / n, gy = from.reduce((a, f) => a + f.y + fh * f.s / 2, 0) / n;
+    const end = from.map((f) => (grow === 'foot'
+      ? { x: f.x, y: f.y + fh * (f.s - s1) / 2, s: s1 }
+      : { x: gx + (f.x - gx) * s1 / f.s, y: gy + (f.y - gy) * s1 / f.s, s: s1 }));
+    const box = (e) => [e.x - fw * e.s / 2, e.y - fh * e.s / 2, fw * e.s, fh * e.s];
+    const bs = end.map(box), W = stage.clientWidth, H = stage.clientHeight, P = FACE.PAD;
+    const L = Math.min(...bs.map((b) => b[0])), R = Math.max(...bs.map((b) => b[0] + b[2]));
+    const T = Math.min(...bs.map((b) => b[1])), B = Math.max(...bs.map((b) => b[1] + b[3]));
+    const dx = L < P ? P - L : R > W - P ? W - P - R : 0, dy = T < P ? P - T : B > H - P ? H - P - B : 0;
+    for (const e of end) { e.x += dx; e.y += dy; }
+    const put = (w, { x, y, s }, sx = 1) => {
+      w.style.transform = `translate(${Math.round(x - fw * s * sx / 2)}px, ${Math.round(y - fh * s / 2)}px) scale(${s * sx}, ${s})`;
+    };
+    const frames = FACE.OPEN.length + FACE.GROW;
+    let f = now ? frames - 1 : 0;
+    const step = () => {
+      if (!ws.every((w) => w.isConnected)) return;
+      ws.forEach((w, i) => {
+        if (f < FACE.OPEN.length) return put(w, from[i], FACE.OPEN[f]);
+        const k = (f - FACE.OPEN.length + 1) / FACE.GROW, a = from[i], b = end[i];
+        put(w, { x: a.x + (b.x - a.x) * k, y: a.y + (b.y - a.y) * k, s: a.s + (b.s - a.s) * k });
+      });
+      if (++f < frames) return setTimeout(step, 1000 / FACE.FPS);
+      ws.forEach((w) => w.classList.add('sc-ready'));
+      done(end.map(box));
+    };
+    step();
+    return ws;
+  }
+  return { mount, figure, land, SQUASH, play, ground, ruins, span, plane, toStage, slingshot, CARD, FACE, cardArt, cardFace, spriteArt, faces, pen, bay, lvl, cl, rgb };
+})();
+(() => {
+  const { bay, cl } = Scene;
+  const AREA = { x0: -1170, x1: 2610, y0: -1000, y1: 300 }, CLEAR = { x0: 330, x1: 1110, y: -60 };
+  const LIGHT = (X, Y) => 1.2 - Math.hypot((X - 620) / 1300, (Y - 380) / 900);
+  const pmod = (a, n) => ((a % n) + n) % n;
+  function motes(sc, { x0 = -1200, x1 = 2400, depth = -300, h = 140, n = 30, dir = -1, ks = [8, 7], fps = 6, seed = 9 }) {
+    const R = mulberry32(seed), w = Math.round((x1 - x0) / 2), cv = document.createElement('canvas');
+    cv.width = w; cv.height = h;
+    sc.stand(cv, x0, depth, w * 2, h * 2);
+    const g = cv.getContext('2d'), m = Array.from({ length: n }, () => ({ x: R() * w | 0, y: R() * h | 0, v: 1 + (R() * 2 | 0), k: ks[R() * ks.length | 0], p: R() * 4 | 0 }));
+    let last = -1;
+    sc.every(40, () => {
+      const st = Math.floor(performance.now() * fps / 1000);
+      if (st === last) return;
+      last = st;
+      g.clearRect(0, 0, w, h);
+      for (const q of m) {
+        const y = pmod(q.y + dir * Math.floor(st * q.v / 2), h), x = q.x + [0, 1, 0, -1][(st + q.p) % 4];
+        g.fillStyle = sc.C[q.k]; g.fillRect(x, y, 1, 1);
+      }
+    });
+  }
+  function crosser(sc, { depth = -300, x0 = -400, x1 = 1900, w = 12, h = 8, lift = 0, period = 9, frames = 2, fps = 6, draw }) {
+    const cv = document.createElement('canvas'), H = h + lift;
+    cv.width = w; cv.height = H;
+    const el = sc.stand(cv, x0, depth, w * 2, H * 2), g = cv.getContext('2d'), p = Scene.pen(g, sc.C);
+    let lf = -1;
+    sc.every(40, () => {
+      const t = performance.now() / 1000, f = Math.floor(t * fps) % frames;
+      el.style.left = Math.round(x0 + (x1 - x0) * ((t / period) % 1)) + 'px';
+      if (f !== lf) { lf = f; g.clearRect(0, 0, w, H); draw(p, f); }
+    });
+  }
+  function body(fill, cx, top, w, h, half, tones, lean = () => 0) {
+    const u0 = Math.round(cx - w / 2);
+    for (let r = 0; r < h; r++) {
+      const f = (r + 0.5) / h, hf = half(f);
+      if (hf <= 0) continue;
+      const a = Math.round(w * (0.5 - hf)), b = Math.round(w * (0.5 + hf));
+      let from = a;
+      for (const [end, c] of tones) { const to = Math.min(b, Math.round(w * end)); if (to > from) fill(u0 + from + lean(r), top + r, to - from, c); from = Math.max(from, to); }
+    }
+  }
+  const T3 = (C, l) => [[1 / 3, C[l + 1]], [2 / 3, C[Math.max(1, l)]], [1, C[Math.max(0, l - 1)]]];
+  const dk = (C, l) => C[Math.max(0, l - 1)];
+  const seams = (glow, x, top, h, heat) => { if (heat) for (let v = Math.round(h * (heat === 2 ? 0 : 0.5)); v < h - 1; v += 2) glow(x, top + v); };
+  const ART = {
+    casino(fill, glow, C, l, k, cx, top, w, h, seed, heat) {
+      if (k === 'slot') {
+        body(fill, cx, top, w, h, (f) => (f < 0.06 ? 0.4 : 0.5), T3(C, l));
+        const sx = Math.round(cx - w * 0.3), sw = Math.round(w * 0.6), sy = top + Math.round(h * 0.22), sh = Math.round(h * 0.2);
+        for (let v = 0; v < sh; v++) { fill(sx, sy + v, sw, C[7]); for (let i = 1; i < 3; i++) fill(sx + Math.round(sw * i / 3), sy + v, 1, dk(C, l)); }
+        fill(Math.round(cx - w * 0.4), top, Math.round(w * 0.8), C[8]);
+        if (heat) for (let u = Math.round(cx - w * 0.4); u < cx + w * 0.4; u += 2) glow(u, top);
+        return;
+      }
+      if (k === 'chips') {
+        const u0 = Math.round(cx - w * 0.45), cw = Math.round(w * 0.9);
+        for (let r = 0; r < h; r++) { const s = r % 6 < 3; fill(u0, top + r, Math.round(cw / 3), s ? C[8] : C[l + 1]); fill(u0 + Math.round(cw / 3), top + r, Math.round(cw / 3), C[Math.max(1, l)]); fill(u0 + Math.round(cw * 2 / 3), top + r, cw - Math.round(cw * 2 / 3), dk(C, l)); }
+        return;
+      }
+      body(fill, cx, top, w, h, (f) => f / 2, T3(C, l));
+      for (let c = 1; c < 4; c++) {
+        const v = Math.round(h * c / 4), hw = Math.round(w * c / 8);
+        fill(Math.round(cx - hw), top + v, hw * 2, dk(C, l));
+        if (heat === 2 || (heat === 1 && c > 1)) for (let u = Math.round(cx - hw) + 1; u < cx + hw; u += 2) glow(u, top + v + 1);
+      }
+      if (heat === 2) glow(cx, top);
+    },
+    lava(fill, glow, C, l, k, cx, top, w, h, seed, heat) {
+      if (k !== 'vent') return RunMap.propArt(fill, glow, C, l, k, cx, top, w, h, seed, heat);
+      body(fill, cx, top, w, h, (f) => (f < 0.15 ? 0.22 + f : 0.37 + 0.13 * (f - 0.15) / 0.85), T3(C, l));
+      const hw = Math.round(w * 0.2);
+      for (let u = -hw + 1; u < hw; u++) glow(cx + u, top);
+      seams(glow, cx - 1, top + 1, h, heat);
+      if (heat === 2) seams(glow, cx + Math.round(w * 0.2), top + 3, h, 2);
+    },
+    graveyard(fill, glow, C, l, k, cx, top, w, h, seed, heat) {
+      if (k === 'tree') {
+        const bark = [[0.5, C[Math.max(1, l)]], [1, dk(C, l)]];
+        body(fill, cx, top, w, h, (f) => (f < 0.3 ? 0 : f > 0.9 ? 0.12 : 0.07), bark);
+        for (let i = 0; i < 4; i++) {
+          const s = (i + seed) % 2 ? 1 : -1, y0 = top + Math.round(h * (0.32 + i * 0.13)), len = Math.round(w * (0.45 - i * 0.08));
+          for (let j = 0; j <= len; j++) fill(Math.round(cx + s * j), y0 - Math.round(j * (0.9 - i * 0.1)), 1, dk(C, l));
+        }
+        return;
+      }
+      if (k === 'stone') {
+        const lean = (r) => Math.round((1 - (r + 0.5) / h) * (seed % 3 - 1) * 2);
+        body(fill, cx, top, w, h, (f) => (f < 0.2 ? 0.5 * Math.sqrt(f / 0.2) : 0.5), T3(C, l), lean);
+        for (const f of [0.38, 0.52]) fill(Math.round(cx - w * 0.2) + lean(Math.round(h * f)), top + Math.round(h * f), Math.round(w * 0.4), dk(C, l));
+        return;
+      }
+      body(fill, cx, top, w, h, (f) => (f > 0.18 && f < 0.28 ? 0.38 : 0.09), T3(C, l));
+      if (heat) { glow(cx - 1, top + Math.round(h * 0.23)); glow(cx + 1, top + Math.round(h * 0.23)); }
+      if (heat === 2) seams(glow, cx, top + Math.round(h * 0.3), Math.round(h * 0.7), 2);
+    },
+  };
+  const D_WALL = -130, WX = -1100, WW = 1800, WH = 230;
+  function hs(a, b) { let n = (a * 374761393 + b * 668265263) | 0; n = (n ^ (n >>> 13)) * 1274126177 | 0; return ((n ^ (n >>> 16)) >>> 0) / 4294967296; }
+  const ARCHES = [...Array(6)].map((_, i) => ({ cx: 150 + i * 300, r: 40, sag: 5 + Math.round(hs(i, 3) * 7), kind: i % 3 }));
+  function stoneAt(x, y, H, s) {
+    const cs = y % 10, course = Math.floor(y / 10), bx = x + (course % 2) * 13 + Math.floor(hs(course, s) * 9), bi = Math.floor(bx / 26), cx = pmod(bx, 26);
+    if (cs === 9 || cx === 25) return 3;
+    const dark = hs(bi, course + s) < 0.22;
+    let k = dark ? 4 : 5;
+    if (cs === 0 || cx === 0) k = dark ? 5 : 6; else if (cs === 8 || cx === 24) k -= 1;
+    const d = (y - (H - 80)) / 80;
+    if (d > 0 && bay(x, y) < d * 13) k = Math.max(3, k - 1);
+    if (hs(Math.floor(x / 6), 77 + s) > 0.86 && y > H - 120 && bay(x, y) < 7) k = Math.max(3, k - 1);
+    return k;
+  }
+  const curve = (dx, sy, rx, ry, sag) => { const q = cl(1 - (dx / rx) ** 2); return sy - ry * Math.sqrt(q) + sag * q; };
+  function ringTone(x, y, cx, sy, rx, ry, sag, th) {
+    const dx = x - cx;
+    if (Math.abs(dx) >= rx + th || y > sy) return -1;
+    const yo = curve(dx, sy, rx + th, ry + th, sag);
+    if (y < yo) return -1;
+    if (Math.abs(dx) < rx && y >= curve(dx, sy, rx, ry, sag)) return -2;
+    const a = Math.atan2(sy - y, dx * ry / rx), seg = a / (Math.PI / 13);
+    if (seg - Math.floor(seg) < 0.07) return 3;
+    if (Math.abs(dx) < rx && y >= curve(dx, sy, rx, ry, sag) - 1.5) return 3;
+    if (y < yo + 1.5) return 4;
+    return Math.abs(a - Math.PI / 2) < 0.12 ? 7 : dx < 0 ? 6 : 5;
+  }
+  function wallArt(C) {
+    const cv = document.createElement('canvas');
+    cv.width = WW; cv.height = WH;
+    const g = cv.getContext('2d'), img = g.createImageData(WW, WH), px = img.data, RGB = C.map(Scene.rgb);
+    const put = (x, y, k) => { if (x < 0 || y < 0 || x >= WW || y >= WH) return; const o = (y * WW + x) * 4, c = RGB[k]; px[o] = c[0]; px[o + 1] = c[1]; px[o + 2] = c[2]; px[o + 3] = 255; };
+    const R = mulberry32(5), sy = WH - 88;
+    for (let y = 0; y < WH; y++) for (let x = 0; x < WW; x++) {
+      let k = stoneAt(x, y, WH, 0);
+      for (const a of ARCHES) {
+        const t = ringTone(x, y, a.cx, sy, a.r, a.r, a.sag, 9), dx = x - a.cx, ad = Math.abs(dx);
+        if (t >= 0) k = t;
+        if (y > sy && ad < a.r + 7 && ad >= a.r) k = ad < a.r + 1 ? 3 : dx < 0 ? (ad > a.r + 5 ? 4 : 6) : (ad > a.r + 5 ? 3 : 5);
+        if (t !== -2 && !(y > sy && ad < a.r)) continue;
+        const top = curve(dx, sy, a.r, a.r, a.sag);
+        if (a.kind === 1) { const st = stoneAt(x * 2, y * 2, WH * 2, 4); k = st === 3 ? 1 : st >= 6 ? 3 : 2; }
+        else { k = dx > a.r - 5 ? 3 : y - top < 3 || bay(x, y) < 3 ? 1 : 0; if (y > WH - 4) k = 1; }
+        if (a.kind === 2) { const hh = WH - 26 + Math.round(ad * 0.45 + hs(x >> 2, 1) * 4); if (y > hh) { const st = stoneAt(x * 3, y * 3, WH * 3, 9); k = st === 3 ? 2 : st - 1; } }
+      }
+      put(x, y, k);
+    }
+    const crack = (x, y, len) => { for (let i = 0; i < len; i++) { put(x, y, 2); put(x - 1, y, 6); y += 1; x += R() < 0.4 ? (R() < 0.5 ? -1 : 1) : 0; } };
+    for (const a of ARCHES) crack(a.cx + 2, sy - a.r - a.sag - 6, 28 + Math.round(R() * 20));
+    for (let i = 0; i < 34; i++) crack(Math.floor(R() * WW), Math.floor(R() * WH * 0.7), 10 + Math.floor(R() * 28));
+    for (const a of ARCHES) if (a.kind === 2) for (let j = 0; j < 14; j++) { const x = a.cx + a.r + 4 + Math.floor(R() * 40), y = WH - 1 - Math.floor(R() * 10); put(x, y, 3); put(x + 1, y, 5); put(x, y - 1, 6); }
+    g.putImageData(img, 0, 0);
+    return cv;
+  }
+  const CANDLES = (() => {
+    const R = mulberry32(12), out = [];
+    ARCHES.forEach((a) => {
+      for (const side of [-1, 1]) {
+        if (a.kind === 2 && side > 0) continue;
+        const bx = a.cx + side * (a.r + 18);
+        for (let j = 0; j < 3 + Math.floor(R() * 3); j++) out.push({ x: bx + Math.round((R() - 0.5) * 16), y: WH - 1 - Math.floor(R() * 3), h: 4 + Math.floor(R() * 7), id: out.length });
+      }
+      for (const [dx, h] of [[-8, 5], [-3, 8], [3, 6]]) out.push({ x: a.cx + 150 + dx, y: WH - 60, h, id: out.length });
+    });
+    return out;
+  })();
+  const candleArt = ({ P }, c) => { for (let v = 0; v < c.h; v++) { P(c.x, c.y - v, v === c.h - 1 ? 6 : 7); P(c.x + 1, c.y - v, 5); } P(c.x + 2, c.y - Math.floor(c.h / 2), 6); P(c.x - 1, c.y, 3); P(c.x + 2, c.y, 3); };
+  const flameArt = ({ R }, c, st, tall) => { const f = (st + c.id) % 3, h = [3, 4, 3][f] + tall; R(c.x, c.y - c.h - h + 1, 2, h - 1, 8); R(c.x + [0, 0, 1][f], c.y - c.h - h, 1, 2, 7); R(c.x + (c.id % 2), c.y - c.h, 1, 1, 1); };
+  const lit = (heat, c) => hs(c.id, 7) < [0.35, 0.75, 1][heat];
+  function cryptWall(sc, heat) {
+    const { C } = sc;
+    sc.stage.firstChild.remove();
+    const wall = wallArt(C);
+    sc.stand(wall, WX, D_WALL, WW * 2, WH * 2);
+    const wp = Scene.pen(wall.getContext('2d'), C);
+    for (const c of CANDLES) candleArt(wp, c);
+    const hot = document.createElement('canvas');
+    hot.width = WW; hot.height = WH;
+    sc.stand(hot, WX, D_WALL + 1, WW * 2, WH * 2);
+    const hg = hot.getContext('2d'), hp = Scene.pen(hg, C);
+    const floor = [[180, 250], [1250, 230], [330, 120], [1120, 90]].map(([x, d], i) => {
+      const cv = document.createElement('canvas');
+      cv.width = 26; cv.height = 22;
+      sc.stand(cv, x, d, 52, 44);
+      const g = cv.getContext('2d'), p = Scene.pen(g, C), cs = [0, 1, 2, 3].map((j) => ({ x: 3 + j * 5 + (j % 2), y: 21 - (j % 2), h: 5 + ((i + j) * 3) % 7, id: 100 + i * 4 + j }));
+      cs.forEach((c) => candleArt(p, c));
+      return { g, p, cs };
+    });
+    let last = -1;
+    sc.every(50, () => {
+      const st = Math.floor(performance.now() / 160);
+      if (st === last) return;
+      last = st;
+      hg.clearRect(0, 0, WW, WH);
+      for (const c of CANDLES) if (lit(heat, c)) flameArt(hp, c, st, heat === 2 ? 1 : 0);
+      if (heat === 2) ARCHES.forEach((a, i) => {
+        if (a.kind) return;
+        const dx = [-12, -9, -6, -3, 0, -3, -6, -9][Math.floor(st / 3 + i) % 8];
+        hp.R(a.cx + dx, WH - 58, 2, 1, 8); hp.R(a.cx + dx + 6, WH - 58, 2, 1, 8);
+      });
+      for (const f of floor) {
+        f.g.clearRect(0, 0, 26, 22);
+        for (const c of f.cs) { candleArt(f.p, c); if (heat && lit(heat, c)) flameArt(f.p, c, st, 0); }
+      }
+    });
+  }
+  const BAT = ({ R }, f) => { R(5, 2, 3, 3, 1); if (f) { R(0, 3, 5, 1, 1); R(8, 3, 5, 1, 1); } else { R(1, 0, 4, 2, 1); R(8, 0, 4, 2, 1); R(4, 1, 1, 1, 1); R(8, 1, 1, 1, 1); } };
+  const CROW = ({ R }, f) => { R(4, 2, 4, 2, 1); R(8, 1, 2, 1, 1); if (f) R(0, 3, 4, 1, 1); else { R(1, 0, 3, 2, 1); R(4, 1, 1, 1, 1); } };
+  const CHIP = ({ R }, f) => { R(1, 0, 6, 8, 1); R(0, 1, 8, 6, 1); R(1, 1, 6, 6, 8); R(1 + [0, 2, 4, 2][f], 1, 2, 6, 7); };
+  const SPIDER = ({ R, P }, f) => {
+    const line = (x0, y0, x1, y1, k) => { const n = Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0)); for (let i = 0; i <= n; i++) P(Math.round(x0 + (x1 - x0) * i / n), Math.round(y0 + (y1 - y0) * i / n), k); };
+    const by = f % 2;
+    [[8, 3, 2], [11, 7, 8], [14, 12, 15], [16, 17, 22]].forEach(([hx, kx, fx], i) => {
+      const up = (i + f) % 2, sw = [0, 1, 0, -1][(f + i) % 4];
+      line(hx, 9 + by, kx + sw, 3 + up, 1); line(kx + sw, 3 + up, fx + sw, 15 - up, 1);
+      line(hx + 1, 9 + by, kx + sw + 1, 3 + up, 1); // legs 2 px thick, so the scanlines don't break them
+    });
+    R(3, 4 + by, 8, 7, 1); R(2, 5 + by, 10, 5, 1); R(4, 3 + by, 6, 1, 1);
+    R(4, 4 + by, 3, 2, 3); R(4, 6 + by, 1, 1, 3);
+    R(12, 7 + by, 5, 4, 1); R(13, 6 + by, 3, 1, 1); R(13, 7 + by, 2, 1, 3);
+    P(16, 8 + by, 8); P(15, 8 + by, 8);
+  };
+  const CRITTERS = {
+    spider: (sc, heat, o = {}) => crosser(sc, { depth: 300, w: 24, h: 17, period: 16, frames: 4, fps: 6, draw: SPIDER, ...o }),
+    bat: (sc, heat, o = {}) => crosser(sc, { depth: -260, w: 13, h: 6, lift: 70, period: 7, draw: BAT, ...o }),
+    crow: (sc, heat, o = {}) => crosser(sc, { depth: -380, w: 11, h: 5, lift: 90, period: 11, draw: CROW, ...o }),
+    chip: (sc, heat, o = {}) => crosser(sc, { depth: 120, w: 8, h: 8, period: 6, frames: 4, fps: 8, draw: CHIP, ...o }),
+  };
+  const EFFECTS = {
+    embers: (sc, heat, o = {}) => motes(sc, { n: 15 + 20 * heat, ...o }),
+    ash: (sc, heat, o = {}) => motes(sc, { n: 25, dir: 1, ks: [4], fps: 4, ...o }),
+    dust: (sc, heat, o = {}) => motes(sc, { n: 24, dir: 1, ks: [6], fps: 3, depth: -100, h: 200, ...o }),
+    glints: (sc, heat, o = {}) => motes(sc, { n: 12 + 10 * heat, ks: [8, 7], fps: 3, ...o }),
+    cinders: (sc, heat, o = {}) => (heat ? motes(sc, { n: 15 + 25 * heat, ...o }) : motes(sc, { n: 20, dir: 1, ks: [5], fps: 4, ...o })),
+    sparks: (sc, heat, o = {}) => motes(sc, { n: 10 + 10 * heat, depth: 60, h: 80, seed: 3, ...o }),
+  };
+  const flagstones = (X, Y) => { const r = Math.floor(Y / 28); return pmod(Y, 28) < 2 || pmod(X + (r % 2) * 24, 48) < 2 ? 3 : -1; };
+  const fh = (i, j, s) => { const a = Math.sin(i * 127.1 + j * 311.7 + s * 74.7) * 43758.5453; return a - Math.floor(a); };
+  const S3 = Math.sqrt(3);
+  const cells = (make) => { const m = new Map(); return (i, j) => { const k = i * 65536 + j; let v = m.get(k); if (v === undefined) m.set(k, v = make(i, j)); return v; }; };
+  const cobbles = (heat) => {
+    const S = 22, stone = cells((i, j) => ({ sx: (i + 0.2 + 0.6 * fh(i, j, 1)) * S, sy: (j + 0.2 + 0.6 * fh(i, j, 2)) * S, id: fh(i, j, 3) }));
+    return (X, Y) => {
+    const ci = Math.floor(X / S), cj = Math.floor(Y / S);
+    let d1 = 1e9, d2 = 1e9, px = 0, py = 0, id = 0;
+    for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) {
+      const c = stone(ci + a, cj + b), d = Math.hypot(X - c.sx, Y - c.sy);
+      if (d < d1) { d2 = d1; d1 = d; px = c.sx; py = c.sy; id = c.id; } else if (d < d2) d2 = d;
+    }
+    const e = d2 - d1;
+    if (e < 3) return heat === 2 && id > 0.55 ? 8 : 2;
+    if (e < 6) return X - px + (Y - py) < 0 ? 7 : 3;
+    if (heat >= 1 && id < 0.3 && Math.abs((X - px) * 0.7 - (Y - py)) < 1.2 && d1 < S * 0.4) return heat === 2 ? 8 : 3;
+    return -1;
+    };
+  };
+  const planks = (heat) => (X, Y) => {
+    const B = 24, L = 88, row = Math.floor(Y / B), y = pmod(Y, B), off = fh(row, 0, 5) * L, u = X + off, col = Math.floor(u / L), x = pmod(u, L), id = fh(row, col, 6);
+    if (y < 2 || x < 2) return 2;
+    if (heat === 2 && id < 0.25) { const d = Math.hypot((x - L / 2) / 16, (y - B / 2) / 6); if (d < 1) return d > 0.75 ? 8 : 1; }
+    if (y < 4) return 7;
+    if (x < 4) return 6;
+    if (y >= B - 2) return 3;
+    if ((x >= 7 && x < 9 || x >= L - 9 && x < L - 7) && (y >= 6 && y < 8 || y >= B - 8 && y < B - 6)) return 2;
+    if (heat >= 1 && id < 0.45 && bay(X >> 1, Y >> 1) < 8) return 3;
+    const g = Y + Math.sin(u * 0.05 + row) * 3, gf = g / 6 - Math.floor(g / 6);
+    return gf < 0.17 && fh(Math.floor(u / 12), row, 7) > 0.4 ? 4 : -1;
+  };
+  const checker = (heat) => (X, Y) => {
+    const T = 40, x = pmod(X, T), y = pmod(Y, T), dk = (Math.floor(X / T) + Math.floor(Y / T)) & 1;
+    if (heat >= 1 && Math.abs(Math.sin(X * 0.03 + Math.sin(Y * 0.05) * 2) + Math.sin(Y * 0.04 + X * 0.011)) < 0.045) return heat === 2 ? 8 : 2;
+    if (x < 2 || y < 2) return 3;
+    if (x < 4 || y < 4) return 7;
+    if (x >= T - 2 || y >= T - 2) return dk ? 3 : 4;
+    return dk ? (bay(X >> 1, Y >> 1) < 5 ? 3 : 4) : -1;
+  };
+  const dunes = (heat) => (X, Y) => {
+    const S = 30, i = Math.floor(X / S), j = Math.floor(Y / S), q = fh(i, j, 8), cx = (i + 0.3 + 0.4 * fh(i, j, 9)) * S, cy = (j + 0.3 + 0.4 * fh(i, j, 10)) * S, d = Math.hypot((X - cx) / 1.4, Y - cy);
+    if (q < [0.18, 0.3, 0.5][heat] && d < 4.5) {
+      const br = q < [0, 0.2, 0.4][heat];
+      if (d > 3.2) return X - cx + (Y - cy) > 0 ? 2 : br ? 7 : 6;
+      return br ? 8 : 4;
+    }
+    const w = (Y + Math.sin(X * 0.035) * 7 + Math.sin(X * 0.011 + Y * 0.006) * 16) / 20, f = w - Math.floor(w);
+    return f < 0.1 ? 3 : f < 0.18 ? 7 : -1;
+  };
+  const columns = (heat) => (X, Y) => {
+    const s = 15, x = (S3 / 3 * X - Y / 3) / s, z = (2 / 3 * Y) / s, y = -x - z;
+    let rx = Math.round(x), ry = Math.round(y), rz = Math.round(z);
+    const ex = Math.abs(rx - x), ey = Math.abs(ry - y), ez = Math.abs(rz - z);
+    if (ex > ey && ex > ez) rx = -ry - rz; else if (ey > ez) ry = -rx - rz; else rz = -rx - ry;
+    const dx = X - s * S3 * (rx + rz / 2), dy = Y - s * 1.5 * rz, id = fh(rx, rz, 11);
+    const e = s * S3 / 2 - Math.max(Math.abs(dx), Math.abs(dx) * 0.5 + Math.abs(dy) * S3 / 2);
+    if (e < 1.8) return heat === 2 && id > 0.5 ? 8 : 2;
+    if (e < 4) return dx + dy < 0 ? 7 : 3;
+    return id < [0.15, 0.3, 0.3][heat] ? (bay(X >> 1, Y >> 1) < 9 ? 3 : 4) : -1;
+  };
+  const ossuary = (heat) => {
+    const S = 34, at = cells((i, j) => {
+      if (fh(i, j, 12) < 0.55) return null;
+      const an = fh(i, j, 15) * Math.PI;
+      return { bx: (i + 0.5) * S + (fh(i, j, 13) - 0.5) * 8, by: (j + 0.5) * S + (fh(i, j, 14) - 0.5) * 8, ux: Math.cos(an), uy: Math.sin(an), L: 7 + fh(i, j, 16) * 5 };
+    });
+    const bone = (X, Y) => {
+      const ci = Math.floor(X / S), cj = Math.floor(Y / S);
+      for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) {
+        const c = at(ci + a, cj + b);
+        if (!c) continue;
+        const { ux, uy, L } = c, rx = X - c.bx, ry = Y - c.by;
+        if (Math.abs(rx) > L + 5 || Math.abs(ry) > L + 5) continue;
+        if (Math.abs(rx * ux + ry * uy) <= L && Math.abs(-rx * uy + ry * ux) < 2.2) return true;
+        for (const e of [-L, L]) for (const k of [-2, 2]) if (Math.hypot(rx - (e * ux - k * uy), ry - (e * uy + k * ux)) < 2.8) return true;
+      }
+      return false;
+    };
+    return (X, Y) => {
+      if (bone(X, Y)) return bone(X + 2, Y + 2) ? (heat ? 6 : 7) : heat ? 3 : 4;
+      if (bone(X - 2, Y - 2)) return 3;
+      return heat === 2 && fh(Math.floor(X / 10), Math.floor(Y / 10), 17) < 0.08 && pmod(X, 10) < 4 && pmod(Y, 10) < 2 ? 8 : -1;
+    };
+  };
+  const FLOORS = {
+    ash: () => ({}),
+    flagstones: () => ({ seed: 31, grit: 1500, pattern: flagstones, light: (X, Y) => 1.15 - Math.hypot((X - 640) / 1300, (Y - 300) / 700) }),
+    felt: () => ({ seed: 17, grit: 1200, pattern: (X, Y) => (pmod(X + Y, 64) < 2 || pmod(X - Y, 64) < 2 ? 4 : -1) }),
+    cracks: (heat) => ({ tones: [2, 3, 4, 5], seed: 7, pattern: (X, Y) => { const n = Math.abs(Math.sin(X * 0.013 + Math.sin(Y * 0.021) * 2) + Math.sin(Y * 0.017 + X * 0.004)); return n < 0.035 ? (heat ? 8 : 1) : n < 0.07 ? 2 : -1; } }),
+    path: () => ({ seed: 29, pattern: (X, Y) => (Math.abs(X - 720 - (Y - 400) * 0.35) < 70 && bay(Math.round(X / 2), Math.round(Y / 2)) < 9 ? 6 : -1) }),
+    grate: { build: (sc, heat, o) => Factory.floor(sc, heat, o) },
+    cobbles: (heat) => ({ seed: 37, grit: 1200, pattern: cobbles(heat) }),
+    planks: (heat) => ({ seed: 41, grit: 800, pattern: planks(heat) }),
+    checker: (heat) => ({ seed: 43, grit: 800, pattern: checker(heat) }),
+    dunes: (heat) => ({ seed: 47, grit: 2000, pattern: dunes(heat) }),
+    columns: (heat) => ({ seed: 53, grit: 1000, pattern: columns(heat) }),
+    ossuary: (heat) => ({ seed: 59, grit: 1200, pattern: ossuary(heat) }),
+  };
+  const BACKDROPS = {
+    sky: {},
+    crypt: { front: D_WALL, open: D_WALL + 30, wall: cryptWall }, // past the shade at the wall's foot
+    forge: { front: -130, open: 170, wall: (sc, heat) => Factory.backdrop(sc, heat) },
+  };
+  const FEATURES = {
+    spires: {},
+    slots: { draw: ART.casino, kinds: { spike: 'slot', basalt: 'chips', strata: 'tower' }, size: { slot: [0.45, 1.3], chips: [0.5, 0.6], tower: [0.6, 1.2] } },
+    vents: { draw: ART.lava, kinds: { strata: 'vent' }, size: { vent: [0.6, 1.4] } },
+    graves: { draw: ART.graveyard, kinds: { spike: 'tree', basalt: 'stone', strata: 'cross' }, size: { tree: [0.6, 1.6], stone: [0.45, 0.9], cross: [0.55, 0.8] } },
+  };
+  const SETTINGS = {
+    ruins: { floor: 'ash', backdrop: 'sky', features: ['spires'], critters: [], effects: ['cinders'] },
+    crypt: { floor: 'flagstones', backdrop: 'crypt', features: [], critters: [], effects: ['dust'] },
+    casino: { floor: 'felt', backdrop: 'sky', features: ['slots'], critters: ['chip'], effects: ['glints'] },
+    lava: { floor: 'cracks', backdrop: 'sky', features: ['vents'], critters: [], effects: ['embers', 'sparks'] },
+    graveyard: { floor: 'path', backdrop: 'sky', features: ['graves'], critters: ['crow'], effects: ['ash'] },
+    forge: { floor: 'grate', backdrop: 'forge', features: [], critters: [], effects: [] },
+  };
+  const HORIZONS = {
+    wall: { far: -1000 },
+    low: { far: -380, ruins: { wall: 0.3, count: 150 } },
+    open: { far: -380, ruins: { wall: 0, count: 110 }, clearMiddle: true },
+  };
+  function setting(sc, name, { heat = 0, floor, backdrop, features, critters, effects, life = true, horizon = 'wall', area = AREA, clear = CLEAR, near = [], light = LIGHT, rubble = [], shards = [], shadows = [], over, ...more } = {}) {
+    const P = SETTINGS[name];
+    if (!P) throw new Error('No scene setting called ' + name + ' - try ' + Object.keys(SETTINGS).join(', '));
+    const fs = [].concat(features || P.features).filter((k) => k !== 'none'), F = FLOORS[floor || P.floor], B = BACKDROPS[backdrop || P.backdrop];
+    const cs = critters || (life ? P.critters : []), es = effects || (life ? P.effects : []);
+    const bad = [!F && 'floor ' + floor, !B && 'backdrop ' + backdrop, ...fs.filter((k) => !FEATURES[k]).map((k) => 'features ' + k),
+      ...cs.filter((k) => !CRITTERS[k]).map((k) => 'critter ' + k), ...es.filter((k) => !EFFECTS[k]).map((k) => 'effect ' + k)].filter(Boolean);
+    if (bad.length) throw new Error('Unknown part: ' + bad.join(', '));
+    const H = B.wall ? { far: B.front, from: B.open, ruins: { wall: 0, count: 140 } } : HORIZONS[horizon] || HORIZONS.wall, far = H.far, from = H.from || far;
+    if (B.wall) B.wall(sc, heat);
+    const count = Math.round((H.ruins && H.ruins.count || 380) / Math.max(1, fs.length)), y0 = H.from ? from - 40 : far;
+    fs.forEach((k, i) => Scene.ruins(sc, { area: { ...area, y0 }, clear: H.clearMiddle ? { ...clear, y: far } : clear, near: i ? [] : near, heat, ...FEATURES[k], ...H.ruins, count, seed: 5 + i * 7 }));
+    const gnd = F.build ? F.build(sc, heat, { rubble, shards, shadows, over, y0: far })
+      : Scene.ground(sc, { x0: -1200, y0: far, w: 1920, h: Math.round((820 - far) / 2), light, rubble, shards, shadows: B.wall ? [[-1200, far, 2640, far + 18], ...shadows] : shadows, over, ...F(heat), ...more }); // a wall's foot in shade
+    for (const k of cs) CRITTERS[k](sc, heat);
+    for (const k of es) EFFECTS[k](sc, heat);
+    return gnd;
+  }
+  Object.assign(Scene, {
+    setting, motes, crosser, CRITTERS, EFFECTS,
+    SETTINGS: Object.keys(SETTINGS), PRESETS: SETTINGS,
+    HORIZONS: Object.keys(HORIZONS),
+    PARTS: { floors: Object.keys(FLOORS), backdrops: Object.keys(BACKDROPS), features: Object.keys(FEATURES), walls: Object.keys(BACKDROPS).filter((k) => BACKDROPS[k].wall) },
+  });
+})();
+const Factory = (() => {
+  const { bay, cl } = Scene, U = 4;
+  const mx = (x) => 720 + (x - 75) * U;
+  const GY = 103, D_ACT = 320;
+  const HX0 = -1100, HW = 1800, HH = 230, D_HALL = -130;
+  const MX0 = -280, MW = 1000, MH = 170, D_MACH = 150;
+  const RES = 500;                                          // the reservoir's middle, in middle-layer px
+  const pat = new Map();
+  function dfill(g, C, x, y, w, h, a, b, L) {
+    L = Math.round(cl(L, 0, 16));
+    if (L === 0) g.fillStyle = C[a]; else if (L === 16) g.fillStyle = C[b];
+    else {
+      const key = C[a] + C[b] + L;
+      if (!pat.has(key)) {
+        const t = document.createElement('canvas'); t.width = t.height = 4;
+        const tg = t.getContext('2d');
+        for (let j = 0; j < 4; j++) for (let i = 0; i < 4; i++) { tg.fillStyle = C[bay(i, j) < L ? b : a]; tg.fillRect(i, j, 1, 1); }
+        pat.set(key, g.createPattern(t, 'repeat'));
+      }
+      g.fillStyle = pat.get(key);
+    }
+    g.fillRect(x, y, w, h);
+  }
+  const line = (R, x0, y0, x1, y1, w, k) => {
+    const n = Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0), 1);
+    for (let i = 0; i <= n; i++) R(Math.round(x0 + (x1 - x0) * i / n) - (w >> 1), Math.round(y0 + (y1 - y0) * i / n) - (w >> 1), w, w, k);
+  };
+  const disc = (R, cx, cy, rx, ry, k) => {
+    for (let y = -ry; y <= ry; y++) { const half = Math.round(rx * Math.sqrt(1 - (y / ry) ** 2)); R(cx - half, cy + y, half * 2 + 1, 1, k); }
+  };
+  const layer = (sc, left, depth, w, h) => {
+    const cv = document.createElement('canvas');
+    cv.width = w; cv.height = h;
+    sc.stand(cv, left, depth, w * 2, h * 2);
+    return cv;
+  };
+  const flat = (sc, x0, y0, w, h, z = 0.5) => {
+    const cv = document.createElement('canvas');
+    cv.width = w; cv.height = h; cv.className = 'bw-lane';
+    Object.assign(cv.style, { left: x0 + 'px', top: y0 + 'px', width: w * 2 + 'px', height: h * 2 + 'px', transform: `translateZ(${z}px)` });
+    sc.pl.appendChild(cv);
+    return cv;
+  };
+  const DRUMS = [[250, HH - 78, 56], [770, HH - 70, 46], [1330, HH - 80, 60], [1690, HH - 66, 42]];
+  function hallStatic(cv, C) {
+    const g = cv.getContext('2d'), { R } = Scene.pen(g, C), W = cv.width, H = cv.height, rnd = mulberry32(11);
+    for (let i = 0; i < 16; i++) { const y0 = Math.floor(H * i / 16), y1 = Math.floor(H * (i + 1) / 16); dfill(g, C, 0, y0, W, y1 - y0, i < 8 ? 0 : 1, i < 8 ? 1 : 2, (i % 8) * 2); }
+    for (let x = 20; x < W; x += 140 + Math.floor(rnd() * 80)) {
+      const w = 14 + Math.floor(rnd() * 8);
+      R(x - 1, 0, w + 2, H, 1); R(x, 0, w, H, 2); R(x, 0, 3, H, 3); R(x + w - 3, 0, 3, H, 1);
+      for (const y of [HH - 170, HH - 100, HH - 40]) { R(x - 4, y, w + 8, 7, 1); R(x - 3, y + 1, w + 6, 4, 2); R(x - 3, y + 1, w + 6, 1, 4); }
+    }
+    for (let x = 0; x < W; x += 36 + Math.floor(rnd() * 70)) {
+      const len = 40 + Math.floor(rnd() * 90);
+      R(x, 0, 2, len, 1);
+      for (let y = 2; y < len; y += 4) R(x, y, 2, 2, 3);
+    }
+    R(0, HH - 36, W, 8, 1); R(0, HH - 35, W, 6, 2); R(0, HH - 35, W, 1, 4);
+    R(0, HH - 52, W, 2, 1);
+    for (let x = 0; x < W; x += 14) R(x, HH - 50, 2, 14, 1);
+    for (const [cx, cy, r] of DRUMS) {
+      R(cx - 24, cy + r - 6, 48, 60, 1); R(cx - 23, cy + r - 6, 46, 60, 2); R(cx - 23, cy + r - 6, 4, 60, 3);
+      disc(R, cx, cy, r + 2, r + 2, 1); disc(R, cx, cy, r, r, 2);
+      disc(R, cx - 2, cy - 2, r - 3, r - 3, 3); disc(R, cx + 3, cy + 3, r - 6, r - 6, 2);
+      disc(R, cx, cy, Math.floor(r * 0.68), Math.floor(r * 0.8), 1);
+      for (const a of [-0.9, 0.9]) for (let y = -r; y <= r; y += 2) { const half = Math.round(r * Math.sqrt(1 - (y / r) ** 2)); R(cx + Math.round(a * half) - 1, cy + y, 2, 2, 1); }
+    }
+    R(0, H - 6, W, 6, 1); R(0, H - 5, W, 1, 3);
+  }
+  function hallHot(cv, C, heat, st) {
+    const g = cv.getContext('2d'), { R } = Scene.pen(g, C), W = cv.width, H = cv.height;
+    g.clearRect(0, 0, W, H);
+    const lit = [0.45, 0.72, 1.01][heat];
+    for (const [cx, cy, r] of DRUMS) {
+      const rx = Math.floor(r * 0.68), ry = Math.floor(r * 0.8);
+      for (let y = cy - ry + 2; y < cy + ry - 3; y += 6) {
+        const half = Math.round(rx * Math.sqrt(1 - ((y + 1 - cy) / ry) ** 2)) - 1, on = Math.abs(y + 1 - cy) / ry < lit;
+        R(cx - half, y, half * 2, 3, on ? 8 : 3);
+        if (on) for (let x = -half; x < half; x += 9) if ((Math.floor(x / 9) + y / 6 + st) % 3 === 0) R(cx + x, y + 1, 5, 1, 7);
+      }
+    }
+  }
+  function mach(cv, C) {
+    const g = cv.getContext('2d'), { R } = Scene.pen(g, C), W = cv.width, H = cv.height;
+    for (let x = 0; x < W; x += 110) { R(x, 22, 6, 18, 1); R(x + 1, 23, 4, 16, 3); }
+    R(0, 24, W, 12, 1); R(0, 25, W, 9, 2); R(0, 25, W, 2, 4);
+    for (const x of [64, 210, 790, 930]) { R(x, 36, 14, H - 36, 1); R(x + 1, 36, 12, H - 36, 2); R(x + 1, 36, 3, H - 36, 4); for (let y = 56; y < H; y += 40) R(x - 2, y, 18, 5, 1); }
+    const spire = (cx, top, h, w) => {
+      for (let r = 0; r < h; r++) {
+        const half = Math.round(w / 2 * (r / h)) + 1, y = top + r;
+        R(cx - half - 1, y, 1, 1, 1); R(cx + half, y, 1, 1, 1); R(cx - half, y, half * 2, 1, 2); R(cx - half, y, Math.min(3, half), 1, 3);
+      }
+    };
+    spire(30, 40, H - 40, 40); spire(W - 30, 30, H - 30, 44); spire(150, 90, H - 90, 24); spire(W - 160, 84, H - 84, 28);
+    const tier = (w, y, h) => {
+      R(RES - w / 2, y, w, h, 1); R(RES - w / 2 + 1, y + 1, w - 2, h - 2, 2); R(RES - w / 2 + 1, y + 1, w - 2, 2, 4); R(RES - w / 2 + 1, y + 1, 3, h - 2, 4); R(RES + w / 2 - 4, y + 1, 3, h - 2, 1);
+      for (let x = RES - w / 2 + 8; x < RES + w / 2 - 8; x += 16) R(x, y + 5, 2, h - 8, 1);
+    };
+    tier(250, MH - 14, 14); tier(190, MH - 38, 24); tier(130, MH - 56, 18);
+    R(RES - 7, 56, 14, 60, 1); R(RES - 6, 56, 12, 60, 2); R(RES - 6, 56, 3, 60, 4);
+    for (const s of [-1, 1]) for (const [dx, dy] of [[22, 34], [46, 22], [70, 8]]) { // the crown's spikes
+      line(R, RES + s * 6, 84, RES + s * dx, 84 - dy, 4, 1); line(R, RES + s * 6, 84, RES + s * dx, 84 - dy, 2, 2);
+      R(RES + s * dx - 2, 84 - dy - 3, 4, 4, 1); R(RES + s * dx - 1, 84 - dy - 2, 2, 2, 8);
+    }
+  }
+  function machHot(cv, C, heat, st) {
+    const g = cv.getContext('2d'), { R } = Scene.pen(g, C), W = cv.width, H = cv.height;
+    g.clearRect(0, 0, W, H);
+    for (const [x0, x1, y] of [[RES - 110, RES + 110, MH - 7], [RES - 80, RES + 80, MH - 30], [RES - 52, RES + 52, MH - 50]]) R(x0, y, x1 - x0, 2, 8);
+    disc(R, RES, 44, 13, 13, 1); disc(R, RES, 44, 11, 11, 8); disc(R, RES, 44, 5 + st % 2, 5 + st % 2, 7);
+  }
+  function stack(cv, C, hot) {
+    const g = cv.getContext('2d'), { R } = Scene.pen(g, C), W = cv.width, H = cv.height;
+    R(0, 0, W, H, 1); R(1, 0, W - 2, H, 2); R(1, 0, 4, H, 4); R(W - 5, 0, 4, H, 1);
+    for (let y = 18; y < H; y += 44) { R(0, y, W, 5, 1); R(1, y + 1, W - 2, 2, 4); }
+    for (let y = 36; y < H - 10; y += 44) { R(6, y, W - 12, 6, 1); R(7, y + 1, W - 14, 4, hot ? 8 : 3); }
+    R(-0, 0, W, 6, 1); R(2, 1, W - 4, 3, 4);
+  }
+  function backdrop(sc, heat) {
+    sc.stage.firstChild.remove(); // the nebula sky; the factory's own dark takes its place
+    const { C } = sc;
+    const hall = layer(sc, HX0, D_HALL, HW, HH), hot1 = layer(sc, HX0, D_HALL, HW, HH);
+    hallStatic(hall, C);
+    const m = layer(sc, MX0, D_MACH, MW, MH), hot2 = layer(sc, MX0, D_MACH, MW, MH);
+    mach(m, C);
+    const near = [[-78, 250, 40, 150], [-44, 190, 30, 110], [172, 200, 32, 120], [206, 260, 40, 160]];
+    near.forEach(([sx, d, w, h], i) => { const cv = layer(sc, mx(sx), d, w, h); stack(cv, C, heat > 0 && i % 2 === 0); });
+    const river = flat(sc, -1200, -90, 1920, 50, 0.75), rg = river.getContext('2d'), rp = Scene.pen(rg, C), crust = [0.5, 0.2, 0][heat]; // over any floor's grate
+    const paintRiver = (st) => {
+      rg.clearRect(0, 0, 1920, 50);
+      rp.R(0, 0, 1920, 50, 1); rp.R(0, 3, 1920, 44, 8);
+      for (let r = 6; r < 44; r += 5) for (let x = 0; x < 1920; x += 20) if ((Math.floor(x / 20) + r + st * 2) % 7 < 2) rp.R(x, r, 18, 2, 7);
+      for (let x = 0; x < 1920; x += 14) for (let r = 4; r < 46; r += 7) if (noise(x + r, 3) < crust) rp.R(x, r, 10, 5, 2);
+    };
+    const noise = (a, b) => { let n = (a * 374761393 + b * 668265263) | 0; n = (n ^ (n >>> 13)) * 1274126177 | 0; return ((n ^ (n >>> 16)) >>> 0) / 4294967296; };
+    let last = -1;
+    const tick = () => {
+      const st = Math.floor(performance.now() / 250);
+      if (st === last) return;
+      last = st;
+      hallHot(hot1, C, heat, st); machHot(hot2, C, heat, st); paintRiver(st);
+    };
+    tick();
+    sc.every(60, tick);
+  }
+  function floor(sc, heat, { rubble = [], shards = [], shadows = [], over, y0 = -1000 }) {
+    const { C } = sc, h = Math.round((800 - y0) / 2);
+    const gnd = Scene.ground(sc, {
+      x0: -1200, y0, w: 1920, h, tones: [2, 3, 4, 5], seed: 41, grit: 2600,
+      light: (X, Y) => 1.25 - Math.hypot((X - 720) / 1300, (Y - 300) / 900),
+      rubble, shards, shadows, over,
+    });
+    const grate = flat(sc, -1200, y0, 1920, h), gg = grate.getContext('2d'), gp = Scene.pen(gg, C);
+    for (let x = 0; x < 1920; x += 48) { gp.R(x, 0, 2, h, 1); gp.R(x + 2, 0, 1, h, 5); }
+    for (let y = pmod(-1000 - y0, 48); y < h; y += 48) { gp.R(0, y, 1920, 2, 1); gp.R(0, y + 2, 1920, 1, 5); }
+    for (let x = 0; x < 1920; x += 48) for (let y = pmod(-1000 - y0, 48); y < h; y += 48) { gp.R(x - 2, y - 2, 6, 6, 1); gp.R(x - 1, y - 1, 2, 2, 4); }
+    return gnd;
+  }
+  const pmod = (a, n) => ((a % n) + n) % n;
+  function build(sc, heat, opts) {
+    backdrop(sc, heat);
+    return floor(sc, heat, opts);
+  }
+  function imp({ R }, x, gy, o = {}) {
+    const y = gy - 18, f = o.flash, body = f ? 7 : o.tone || 4, shade = f ? 6 : 2, mid = f ? 6 : 3;
+    if (o.wing) for (const s of [-1, 1]) {
+      const n = o.wing, L = 3 + 3 * n, H = 2 + 2 * n, ax = s < 0 ? x + 2 : x + 11, ay = y + 9;
+      for (let i = 1; i <= L; i++) {
+        const top = ay - Math.round(H * (i / L) * (o.up ? 1 : 0.3)), bot = ay + 3 + Math.round(H * 0.4 * (1 - i / L)) - (i % 4 >= 2 ? 1 : 0), xx = ax + s * i;
+        R(xx, top - 1, 1, 1, 1);
+        R(xx, top, 1, bot - top, i % 4 === 0 ? 1 : i % 4 === 1 ? 7 : 6);
+        R(xx, bot, 1, 1, 1);
+      }
+      R(ax + s * (L + 1), ay - Math.round(H * (o.up ? 1 : 0.3)), 1, 3, 1);
+    }
+    R(x + 3, y + 14, 3, 4, 1); R(x + 8, y + 14, 3, 4, 1); R(x + 4, y + 14, 1, 3, mid); R(x + 9, y + 14, 1, 3, mid);
+    R(x + 2, y + 7, 10, 8, 1); R(x + 3, y + 8, 8, 6, mid); R(x + 3, y + 8, 3, 6, body); R(x + 9, y + 8, 2, 6, shade);
+    R(x + 5, y + 10, 4, 2, f ? 8 : 1);
+    R(x, y + 8, 3, 4, 1); R(x + 1, y + 9, 1, 2, mid); R(x + 11, y + 8, 3, 4, 1); R(x + 12, y + 9, 1, 2, shade);
+    R(x + 2, y + 1, 10, 7, 1); R(x + 3, y + 2, 8, 5, body); R(x + 3, y + 2, 3, 5, f ? 7 : 5); R(x + 9, y + 2, 2, 5, mid);
+    R(x + 4, y + 4, 2, 2, 8); R(x + 8, y + 4, 2, 2, 8); R(x + 5, y + 5, 1, 1, 1); R(x + 9, y + 5, 1, 1, 1);
+    const hh = o.big ? 5 : 3;
+    R(x + 1, y + 2 - hh, 2, hh + 1, 1); R(x + 11, y + 2 - hh, 2, hh + 1, 1); R(x + 2, y + 3 - hh, 1, hh - 1, f ? 7 : 4);
+  }
+  function chip({ R }, cx, y, w) {
+    const x = cx - (w >> 1);
+    R(x, y, w, 9, 1);
+    if (w > 2) R(x + 1, y + 1, w - 2, 7, 6);
+    if (w > 4) R(cx, y + 2, 1, 5, 8);
+    if (w > 7) { R(cx - 2, y + 3, 1, 1, 8); R(cx + 2, y + 3, 1, 1, 8); R(cx - 1, y + 2, 1, 1, 8); R(cx + 1, y + 2, 1, 1, 8); R(cx - 1, y + 6, 3, 1, 8); }
+    if (w > 4) R(x + 1, y + 1, 1, 7, 7);
+  }
+  const PROPS = [
+    { id: 'card-b', name: 'card', x0: 60, w: 30, cx: 75, gy: GY, home: { x: 121, depth: D_ACT }, // the Rune Circle's second card (js/rune.js)
+      draw: (pln) => Scene.cardFace(pln.p, 68, GY - Scene.CARD.H) },
+    { id: 'card-a', name: 'card with a sigil', x0: 60, w: 30, cx: 75, gy: GY, home: { x: 33, depth: D_ACT },
+      draw: (pln) => Scene.cardFace(pln.p, 68, GY - Scene.CARD.H) },
+    { id: 'sigil-chip', name: 'sigil chip', x0: 66, w: 18, cx: 75, gy: GY, home: { x: 33, depth: D_ACT },
+      draw: (pln, t) => chip(pln.p, 75, GY - Scene.CARD.H - 11 - Math.floor(t * 3) % 2, 9) },
+  ];
+  return { build, backdrop, floor, PROPS, mx, GY, D_ACT, dfill, line, disc, flat, layer, imp, chip };
+})();
+/* /KIT:js */
+
+/* ---------- an example scene, to copy from (replace it) ---------- */
+/* Lands on the tail of the map's lob beside a chest in the given setting, then the lid lifts in steps. */
+const scene = (where) => {
+  const U = 4, GY = 103;                  // map units a scene px; the ground's scene y
+  const mx = (x) => 720 + (x - 75) * U;  // a scene x as a plane x (map units): scene x 75 is the middle
+  const D_ACT = 380, D_FIG = 396;         // depths (plane y): the props, you
+  const AX0 = -12, AW = 174, FX = 58, CX = 82; // the upright plane's left edge and width; where you land; the chest's left edge
+  const LAND = { across: 80, back: 10, high: 40, ms: 700 };
+  const LANDED = LAND.ms / 1000 + Scene.SQUASH.ms / 1000, END = LANDED + 1.2;
+  function at(t) {
+    const S = { fx: FX, feet: GY, depth: D_FIG, rot: 0, sx: 1, sy: 1, lid: 0 };
+    if (t < LANDED) {
+      const L = Scene.land(Scene.cl(t * 1000 / LAND.ms), LAND.high * U);
+      S.fx = FX - LAND.across * L.k; S.depth = D_FIG - LAND.back * U * L.k; S.feet = GY - L.z / U; S.rot = L.rot;
+      if (!L.k) { S.sx = Scene.SQUASH.sx; S.sy = Scene.SQUASH.sy; }
+    } else S.lid = Scene.cl(Math.floor((t - LANDED - 0.4) * 6), 0, 3); // 6 steps a second
+    return S;
+  }
+  // A chest, 22 scene px wide, standing on gy: ink edge, lit from the upper left, a gold lock.
+  function chestArt({ R }, x, gy, lid) {
+    const w = 22, y = gy - 12, ly = y - 6 - lid * 2;
+    R(x, y, w, 12, 1); R(x + 1, y + 1, w - 2, 10, 4); R(x + 1, y + 1, 2, 10, 6); R(x + w - 4, y + 1, 3, 10, 3);
+    if (lid) { R(x, ly + 5, w, y - ly - 4, 1); R(x + 2, ly + 6, w - 4, y - ly - 6, 8); R(x + 3, ly + 6, 2, 1, 7); }
+    R(x, ly, w, 6, 1); R(x + 1, ly + 1, w - 2, 4, 5); R(x + 1, ly + 1, 2, 4, 7); R(x + w - 4, ly + 1, 3, 4, 3);
+    R(x + 9, y + 2, 4, 4, 1); R(x + 10, y + 3, 2, 2, 8);
+  }
+  function mount(stage, heat) {
+    const sc = Scene.mount(stage, { rows: 700, top: 90 });
+    // The place: ground, props to the horizon and its background life. near props use the spire
+    // kinds (spike tall, basalt low, strata shows the heat); the setting turns them into its own.
+    const near = [[-30, 210, 'spike', 80, 22], [3, 170, 'spike', 92, 24], [14, 250, 'basalt', 44, 24], [112, 170, 'spike', 104, 26], [138, 240, 'basalt', 40, 24], [180, 200, 'spike', 96, 24], [27, 190, 'strata', 116, 32], [124, 200, 'strata', 124, 36]]
+      .map(([sx, d, k, h, w], i) => ({ k, x: mx(sx), d, h, w, l: 3, seed: 3 + i }));
+    const gnd = Scene.setting(sc, where, {
+      heat, near,
+      shadows: [[mx(CX) + 8, D_ACT - 6, mx(CX + 22) + 24, D_ACT + 12]],
+      over: { x0: 260, y0: 280, w: 460, h: 130 },
+    });
+    const act = Scene.plane(sc, { left: mx(AX0), x0: AX0, depth: D_ACT, w: AW, h: GY }), fig = Scene.figure(sc, { s: U });
+    function draw(S) {
+      if (!sc.alive()) return;
+      const z = (GY - S.feet) * U, r = Math.max(2.5, 6 - z / 80);
+      gnd.clear(); gnd.shade(mx(S.fx) + 4, S.depth + 2, r * 1.3, r * 0.5);
+      act.clear(); chestArt(act.p, CX, GY, S.lid);
+      fig.place({ x: mx(S.fx), y: S.depth, z, rot: S.rot, sx: S.sx, sy: S.sy });
+    }
+    draw.alive = sc.alive;
+    return draw;
+  }
+  return { at, mount, len: END, hold: 1 };
+};
+
+/* ---------- fill this in: one entry per design ---------- */
+const DESIGNS = [
+  { name: 'A · Design name', desc: 'One line on what happens.', scene: scene('ruins') },
+  { name: 'B · Design name', desc: 'One line on how this one differs.', scene: scene('crypt') },
+];
+
+/* ---------- the loop ---------- */
+// One stage per design, built at the game's size and scaled to fit its cell. The ante buttons
+// rebuild every stage (a fresh element, so the old one's timers stop) at that heat.
+const SW = 1082, root = document.getElementById('mk');
+const fit = new ResizeObserver((es) => { for (const e of es) if (e.target.firstChild) e.target.firstChild.style.transform = `scale(${e.target.clientWidth / (SW + 6)})`; });
+const live = DESIGNS.map((d) => {
+  root.insertAdjacentHTML('beforeend', `<div class="mk-c"><div class="mk-f"></div><p class="mk-n">${d.name}</p><p class="mk-s">${d.desc}</p></div>`);
+  const cell = root.lastChild, f = cell.firstChild;
+  cell.onclick = () => cell.classList.toggle('big');
+  fit.observe(f);
+  return { hold: 0, ...d.scene, f, draw: null };
+});
+function build(heat) {
+  for (const s of live) {
+    s.f.innerHTML = '<div class="mk-kit bw-stage mk-st"></div>';
+    s.f.firstChild.style.transform = `scale(${s.f.clientWidth / (SW + 6)})`;
+    s.draw = s.mount(s.f.firstChild, heat);
+  }
+}
+document.querySelectorAll('[data-ante]').forEach((b) => b.onclick = () => {
+  document.querySelectorAll('[data-ante]').forEach((o) => o.classList.toggle('on', o === b));
+  build(+b.dataset.ante);
+});
+build(0);
+const T0 = performance.now();
+(function frame(now) {
+  const T = (now - T0) / 1000;
+  for (const s of live) s.draw(s.at(Math.min(s.len, T % (s.len + s.hold))));
+  requestAnimationFrame(frame);
+})(T0);
+</script>

@@ -213,25 +213,11 @@ const Factory = (() => {
      draw(pln, t, heat, sc) } in this file's scene px. */
   const PROPS = [
     { id: 'card-b', name: 'card', x0: 60, w: 30, cx: 75, gy: GY, home: { x: 121, depth: D_ACT }, // the Rune Circle's second card (js/rune.js)
-      draw: (pln) => cardFace(pln.p, 68, GY - Scene.CARD.H) },
+      draw: (pln) => Scene.cardFace(pln.p, 68, GY - Scene.CARD.H) },
     { id: 'card-a', name: 'card with a sigil', x0: 60, w: 30, cx: 75, gy: GY, home: { x: 33, depth: D_ACT }, // and its first
-      draw: (pln) => cardFace(pln.p, 68, GY - Scene.CARD.H) },
+      draw: (pln) => Scene.cardFace(pln.p, 68, GY - Scene.CARD.H) },
     { id: 'sigil-chip', name: 'sigil chip', x0: 66, w: 18, cx: 75, gy: GY, home: { x: 33, depth: D_ACT }, // over the first card
       draw: (pln, t) => chip(pln.p, 75, GY - Scene.CARD.H - 11 - Math.floor(t * 3) % 2, 9) },
   ];
-  // A card face, Scene.CARD sized, narrowed about its middle to width w while it opens: a beast in
-  // its frame, a text band, its stats. lit: a gold frame.
-  function cardFace({ P, R }, x, y, w = Scene.CARD.W, lit = false) {
-    const { W, H } = Scene.CARD;
-    x += (W - w) >> 1;
-    R(x, y, w, H, 1);
-    if (w > 2) R(x + 1, y + 1, w - 2, 20, lit ? 8 : 6);
-    if (w < W) { if (w > 4) R(x + 2, y + 2, w - 4, 9, 5); return; }
-    R(x + 1, y + 1, 1, 20, 7);
-    R(x + 2, y + 2, 11, 9, 5); R(x + 2, y + 2, 11, 1, 4);
-    R(x + 4, y + 6, 6, 3, 3); R(x + 8, y + 4, 3, 3, 3); R(x + 3, y + 5, 1, 2, 3); R(x + 5, y + 9, 1, 2, 2); R(x + 9, y + 9, 1, 2, 2); P(x + 9, y + 5, 7);
-    R(x + 2, y + 12, 11, 2, 4);
-    R(x + 2, y + 18, 3, 2, 1); R(x + 10, y + 18, 3, 2, 1); P(x + 3, y + 18, 7); P(x + 11, y + 18, 7);
-  }
-  return { build, backdrop, floor, PROPS, mx, GY, D_ACT, dfill, line, disc, flat, layer, imp, chip, cardFace };
+  return { build, backdrop, floor, PROPS, mx, GY, D_ACT, dfill, line, disc, flat, layer, imp, chip };
 })();

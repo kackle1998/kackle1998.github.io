@@ -921,16 +921,17 @@ body[data-crt="off"] .rm-fig img, .rm-fig.hopping img { animation: none; }
 .bw-st.bob canvas { animation: rmBob 1.2s steps(2) infinite; }
 .bw-hud { position: absolute; left: 50%; bottom: 6px; width: 360px; height: 42px; margin-left: -180px; image-rendering: pixelated; pointer-events: none; }
 .bw-hud.bw-top { top: 6px; bottom: auto; } /* the payout counter, in the sky past the pins */
-/* Bone Draft (js/draft.js) reuses the bowling stage. The opened cards turn face up over the scene
-   where their backs rose out of the pack: the backs narrow in the scene, then the faces open from
-   narrow to full in three stepped frames (jump-none: no frame where nothing shows). */
-.dr-pick { position: absolute; z-index: 2; flex-wrap: nowrap; padding: 0; transform-origin: 50% 50%; animation: drFlip .43s steps(3, jump-none) both; }
+/* The real card faces over an event scene (Scene.faces, Run.sceneFaces): each in its own holder,
+   moved and scaled in stepped frames from its back's size to the reading size. They're part of
+   the scene, so no drop shadow; they take clicks once full size (sc-ready). */
+.sc-faces { position: absolute; left: 0; top: 0; width: 0; height: 0; padding: 0; z-index: 2; }
+.sc-face { position: absolute; left: 0; top: 0; transform-origin: 0 0; pointer-events: none; }
+.sc-face.sc-ready { pointer-events: auto; }
+.sc-face .card { margin: 0; box-shadow: none; }
 /* The Rune Circle's two real cards on their plinths (Run.rune); rc-lit while the circle copies from or onto one. */
-.rc-real { position: absolute; z-index: 2; flex-wrap: nowrap; padding: 0; transform-origin: 50% 50%; animation: drFlip .43s steps(3, jump-none) both; }
 .rc-real.rc-lit .card { outline: 3px solid var(--accent); outline-offset: -3px; }
-.rc-real.rc-gone { animation: rcGone .43s steps(3, jump-none) both; } /* the Sigil Altar's sacrifice narrows away */
-@keyframes rcGone { from { transform: none; } to { transform: scaleX(.15); visibility: hidden; } }
-@keyframes drFlip { from { transform: scaleX(.15); } to { transform: none; } }
+.rc-real.rc-gone .card { animation: rcGone .43s steps(3, jump-none) both; } /* the Sigil Altar's sacrifice narrows away */
+@keyframes rcGone { from { scale: 1 1; } to { scale: .15 1; visibility: hidden; } }
 .wh-got { width: 21px; height: 21px; margin-right: 12px; vertical-align: -3px; image-rendering: pixelated; }
 .rn-need { width: 100%; text-align: center; font-size: 18px; color: var(--mid); }
 .rn-deckwrap { position: absolute; inset: 0; z-index: 5; display: flex; align-items: center; justify-content: center; background: color-mix(in srgb, var(--bg) 72%, transparent); }

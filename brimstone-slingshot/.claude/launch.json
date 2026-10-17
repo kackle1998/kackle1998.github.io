@@ -1,0 +1,24 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "cardgrave",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["serve.py"],
+      "autoPort": true,
+      "port": 8765
+    },
+    {
+      "name": "cardgrave-alt",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["serve.py", "8766"],
+      "port": 8766
+    },
+    {
+      "name": "cardgrave-3",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["serve.py", "8767"],
+      "port": 8767
+    }
+  ]
+}

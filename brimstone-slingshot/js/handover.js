@@ -10,7 +10,7 @@
      relic   a card in each hand behind a portcullis; you pay 6 life (hearts), both gates rise and
              both cards float to you to choose from
      pile    (Bone Pile) heaps of bones lie on the ground under the hovering hands
-   The card backs turn in the scene, then the real faces open over it (.dr-pick, as Bone Draft).
+   The card backs turn in the scene, then the real faces open over it (Scene.faces, as Bone Draft).
    Built on the scene kit (js/scene.js): only the hands' timeline, the eyes, the heaps and the
    portcullis are its own.
    Scene px: the action is laid out on upright planes in scene pixels of 4 map units, x across
@@ -32,7 +32,7 @@ const Handover = (() => {
 
   const Y = GY - 50, LX = 15, RX = 135;   // a hand's anchor height (floating well off the ground); where the hands rest (scene x)
   const HEAD = { x: CX - 7, y: GY - 42 }; // the card over your head (its top left)
-  const CARDS_AT = [CX, 56];              // where the real faces open, over your head (Run.handover places them)
+  const HEADS = { give: [[HEAD.x, HEAD.y]], swap: [[HEAD.x, HEAD.y]], relic: [[HEAD.x - 10, HEAD.y], [HEAD.x + 10, HEAD.y]] }; // where the backs come to rest over your head: the real faces open there (Run.handover)
   const LANDED = LAND.ms / 1000 + Scene.SQUASH.ms / 1000, ARRIVE = 1.4, REST = 2.5; // the hands slide in over 1 s from ARRIVE; you wait at REST
   const EYES = { w: 100, h: 90, u: 14, y: 79 }; // the eyes' far-off plane (scene px of 8 map units) and where their middle is on it
   const GATE = { l: 47, r: 91, h: 70 };   // the portcullises' left edges and height
@@ -49,15 +49,15 @@ const Handover = (() => {
   };
   for (const T of Object.values(TL)) { T.turned = T.turn + TURN_S; T.end = T.turned + 1.2; }
 
-  /* make({ mode: 'give' | 'swap' | 'relic', pile, gold }) builds one event's scene: `pile` lays
-     heaps of bones under the hands, `gold` frames the card backs in gold (rare or better). Returns
-     { at, mount, REST, TURNED, END, ENTER_CUES, CUES, CARDS_AT }.
+  /* make({ mode: 'give' | 'swap' | 'relic', pile, rarity }) builds one event's scene: `pile` lays
+     heaps of bones under the hands, `rarity` is the least the dealt cards can be (their backs show it until draw.deal says what they are). Returns
+     { at, mount, REST, TURNED, END, ENTER_CUES, CUES, HEADS }.
      at(t) is the scene's whole state at t seconds, with no DOM:
        { t, hero: { fx, feet, depth, rot, sx, sy }, eyes: { open, lx, ly }, bob (the hands hover),
          hands: [{ side (-1 left, 1 right), x, y: the anchor, a: 0 gone .. 1 arrived }],
-         cards: [{ on: 'L' | 'R' } held in that hand, or { x, y, f: turn frame 0..2, gold, head } free],
+         cards: [{ on: 'L' | 'R' } held in that hand, or { x, y, f: turn frame 0..2, head } free; each with r: its rarity and k: which dealt card it is],
          hearts: [[x, y]], gates: [left, right] raised 0..1 or null } */
-  function make({ mode, pile = false, gold = false }) {
+  function make({ mode, pile = false, rarity = 'common' }) {
     const T = TL[mode], { turned: TURNED, end: END } = T;
     // The stage's edges in scene x, measured by mount (Scene.span): l, r for the hands, fig for your lob. Until then, the old fixed offsets.
     const off = { l: Infinity, r: -Infinity, fig: Infinity };
@@ -82,31 +82,31 @@ const Handover = (() => {
       const stoop = (t0, t1) => { if (t >= t0 && t < t1) { S.hero.sx = 1.05; S.hero.sy = 0.88; } };
       const hop = (t0) => { const i = Math.floor((t - t0) * 7); if (i >= 0 && i < 4) S.hero.feet = GY - [0, 3, 4, 2][i]; };
       const turn = (t0) => (t < t0 ? 0 : Math.min(2, Math.floor((t - t0) * 7)));
-      const head = (c, f) => S.cards.push({ x: c.x, y: c.y, f, gold, head: true });
+      const head = (c, f, k) => S.cards.push({ x: c.x, y: c.y, f, r: rarity, k, head: true });
       if (mode === 'give') {
         stoop(T.take - 0.15, T.take); hop(T.turn);
-        if (t < T.take) S.cards.push({ on: 'R', gold });
-        else head(fly(ease(cl((t - T.take) / T.fly)), 10, FROM.R, HEAD), turn(T.turn));
+        if (t < T.take) S.cards.push({ on: 'R', r: rarity, k: 0 });
+        else head(fly(ease(cl((t - T.take) / T.fly)), 10, FROM.R, HEAD), turn(T.turn), 0);
       } else if (mode === 'swap') {
         // Your weakest card (a plain back) rises over your head, goes to the left hand; the right hand's card comes to you.
         stoop(T.a - 0.15, T.a); hop(T.turn);
         const uA = ease(cl((t - T.aTake) / T.fly));
-        if (t >= T.a && t < T.aTake) S.cards.push({ x: HEAD.x, y: HEAD.y + (1 - Math.floor(cl((t - T.a) / 0.5) * 3) / 3) * 14, f: 0, gold: false });
-        else if (t >= T.aTake && uA < 1) S.cards.push({ ...fly(uA, -9, HEAD, FROM.L), f: 0, gold: false });
-        else if (t >= T.aTake) S.cards.push({ on: 'L', gold: false });
-        if (t < T.take) S.cards.push({ on: 'R', gold: false });
-        else S.cards.push({ ...fly(ease(cl((t - T.take) / T.fly)), 10, FROM.R, HEAD), f: turn(T.turn), gold: false, head: true });
+        if (t >= T.a && t < T.aTake) S.cards.push({ x: HEAD.x, y: HEAD.y + (1 - Math.floor(cl((t - T.a) / 0.5) * 3) / 3) * 14, f: 0, r: 'common' });
+        else if (t >= T.aTake && uA < 1) S.cards.push({ ...fly(uA, -9, HEAD, FROM.L), f: 0, r: 'common' });
+        else if (t >= T.aTake) S.cards.push({ on: 'L', r: 'common' });
+        if (t < T.take) S.cards.push({ on: 'R', r: rarity, k: 0 });
+        else S.cards.push({ ...fly(ease(cl((t - T.take) / T.fly)), 10, FROM.R, HEAD), f: turn(T.turn), r: rarity, k: 0, head: true });
       } else {
         // Pay (hearts leave you), both gates rise, both cards float to you.
         stoop(T.hearts, T.hearts + 0.15); hop(T.turn);
         if (t >= T.hearts && t < T.hearts + 0.6) { const st = Math.floor((t - T.hearts) * 7); for (let i = 0; i < 3; i++) S.hearts.push([CX - 5 + [-7, 0, 7][i], GY - 24 - st * 5 - (i % 2) * 3]); }
         const g = Math.floor(cl((t - T.gate) / 0.5) * 3) / 3;
         S.gates = [g, g];
-        if (t < T.take) S.cards.push({ on: 'L', gold }, { on: 'R', gold });
+        if (t < T.take) S.cards.push({ on: 'L', r: rarity, k: 0 }, { on: 'R', r: rarity, k: 1 });
         else {
           const u = ease(cl((t - T.take) / T.fly)), f = turn(T.turn);
-          head(fly(u, 10, FROM.L, { x: HEAD.x - 10, y: HEAD.y }), f);
-          head(fly(u, 10, FROM.R, { x: HEAD.x + 10, y: HEAD.y }), f);
+          head(fly(u, 10, FROM.L, { x: HEAD.x - 10, y: HEAD.y }), f, 0);
+          head(fly(u, 10, FROM.R, { x: HEAD.x + 10, y: HEAD.y }), f, 1);
         }
       }
       if (t >= TURNED) S.cards = S.cards.filter((c) => !c.head); // the real faces are open over the scene now
@@ -117,7 +117,7 @@ const Handover = (() => {
     const CUES = (mode === 'give' ? [[T.take, 'twang'], [T.take + T.fly, 'place']]
       : mode === 'swap' ? [[T.aTake, 'place'], [T.take, 'place']]
         : [[T.hearts, 'hit'], [T.gate, 'lever'], [T.take, 'twang']]).concat([[T.turn, 'place'], [TURNED, 'tally']]);
-    return { at, mount: (stage, heat) => mount(stage, heat, { mode, pile, off }), REST, TURNED, END, ENTER_CUES, CUES, CARDS_AT };
+    return { at, mount: (stage, heat) => mount(stage, heat, { mode, pile, off }), REST, TURNED, END, ENTER_CUES, CUES, HEADS: HEADS[mode] };
   }
 
   /* ---------- the art (scene px) ---------- */
@@ -211,7 +211,8 @@ const Handover = (() => {
     const watch = Scene.plane(sc, { left: mx(CX) - EYES.w * EYES.u / 2, x0: CX - EYES.w / 2, depth: FAR - 20, w: EYES.w, h: EYES.h, u: EYES.u });
     const hands = { 1: document.createElement('canvas'), '-1': document.createElement('canvas') };
     for (const [side, cv] of Object.entries(hands)) { cv.width = HAND.w; cv.height = HAND.h; handArt(cv, sc.C, 'open', side < 0); }
-    let shadowKey = '', last = null;
+    let shadowKey = '', last = null, dealt = [];
+    const rar = (c) => (c.k != null && dealt[c.k]) || c.r; // a dealt card shows its own rarity once it's known
 
     function draw(S) {
       if (!sc.alive()) return;
@@ -234,17 +235,20 @@ const Handover = (() => {
       const p = act.p, g = act.g, held = (c) => { const h = hs[c.on === 'L' ? 0 : 1]; return { x: c.on === 'L' ? h.x + 30 : h.x - 45, y: h.y - 10 }; };
       eyes(watch.p, CX, EYES.y, S.eyes.open, S.eyes.lx, S.eyes.ly);
       if (pile) { heap(p, LX + 10); heap(p, RX - 10); } // the bones lie on the ground; the hands float over them
-      for (const c of S.cards) if (c.on) { const at = held(c); Scene.cardArt(p, Math.round(at.x), Math.round(at.y), c.gold); }
+      for (const c of S.cards) if (c.on) { const at = held(c); Scene.cardArt(p, Math.round(at.x), Math.round(at.y), rar(c)); }
       for (const h of hs) act.art(hands[h.side], Math.round(h.x - HAND.ax), Math.round(h.y - HAND.ay), U / 2);
       if (S.gates) { gate(p, GATE.l, S.gates[0]); gate(p, GATE.r, S.gates[1]); }
       // In front of you: the cards over your head, the hearts leaving you.
-      for (const c of S.cards) if (!c.on) Scene.cardArt(front.p, Math.round(c.x), Math.round(c.y), c.gold, CARD.TURN[c.f]);
+      for (const c of S.cards) if (!c.on) Scene.cardArt(front.p, Math.round(c.x), Math.round(c.y), rar(c), CARD.TURN[c.f]);
       for (const [x, y] of S.hearts) heart(front.p, x, y);
       fig.place({ x: mx(S.hero.fx), y: S.hero.depth, z, rot: S.hero.rot, sx: S.hero.sx, sy: S.hero.sy });
     }
     sc.every(400, () => { if (last) draw(last); });
     draw.alive = sc.alive;
     draw.toStage = (x, y) => Scene.toStage(sc, act, x, y);
+    draw.toFront = (x, y) => Scene.toStage(sc, front, x, y); // where the cards over your head are drawn
+    // The dealt cards, in hand order (the left hand's first), so their backs show what they are.
+    draw.deal = (defs) => { dealt = defs.map(rarityOf); if (last) draw(last); };
     return draw;
   }
 
@@ -262,5 +266,5 @@ const Handover = (() => {
         pln.art(handCv.get(key), 75 - HAND.ax, Y - HAND.ay + Math.floor(t * 2.5) % 2, U / 2);
       } },
   ];
-  return { make, CARDS_AT, LAND, PROPS };
+  return { make, HEADS, LAND, PROPS };
 })();

@@ -17,7 +17,7 @@ const Shrine = (() => {
   const D_ACT = 380, D_FIG = 396, D_FRONT = 404; // depths (plane y): the altar, you, what's in front of you
   const AX0 = -12, AW = 174;              // the upright planes' left edge and width (scene px); they run from the sky (y 0) to GY
   const FX = 36;                          // where you stand (scene x)
-  const CW = 17, CH = 25;                // the offered card, in scene px (the real card face, scaled to fit)
+  const CW = Scene.CARD.W;               // the offered card, in scene px (the real card face, scaled to a scene card)
   const LOB = 30;                         // the card's lob apex above its straight line to the slab (scene px)
   const SLAB_TOP = 43, SLAB_MID = 100.5; // the slab's top edge (its horns) and middle: where the card rests
   // The entrance, in scene px (x 4 for map units): the tail of the map's lob, as Run.bowl's BOWL_LAND.
@@ -147,7 +147,7 @@ const Shrine = (() => {
       face = document.createElement('div');
       face.className = `card ${def.type}${def.token ? ' token' : ''} still`;
       face.innerHTML = cardInnerHTML(def);
-      Object.assign(face.style, { position: 'absolute', left: '0', top: '0', margin: '0', transformOrigin: '0 0', pointerEvents: 'none', zIndex: '3' });
+      Object.assign(face.style, { position: 'absolute', left: '0', top: '0', margin: '0', transformOrigin: '0 0', pointerEvents: 'none', zIndex: '3', boxShadow: 'none' });
       face.style.transformOrigin = '50% 50%';
       stage.appendChild(face);
       fw = face.offsetWidth || 1; fh = face.offsetHeight || 1; // its natural size, measured while it shows

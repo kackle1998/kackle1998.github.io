@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(curl -s -w '  [%{http_code}]\\\\n' 'https://lxepqtlqsrhkbrzdzedq.supabase.co/rest/v1/cards?select=id&limit=1' -H 'apikey: sb_publishable_V4JRk408ncTVj1Zg6IFv7A_qzgHV4CS' -H 'Authorization: Bearer sb_publishable_V4JRk408ncTVj1Zg6IFv7A_qzgHV4CS')",
+      "Bash(curl -s -w '  [%{http_code}]\\\\n' -X POST https://lxepqtlqsrhkbrzdzedq.supabase.co/rest/v1/rpc/login -H 'apikey: sb_publishable_V4JRk408ncTVj1Zg6IFv7A_qzgHV4CS' -H 'Authorization: Bearer sb_publishable_V4JRk408ncTVj1Zg6IFv7A_qzgHV4CS' -H 'Content-Type: application/json' -d '{\"p_username\":\"nobody_xyz\",\"p_pin\":\"0000\"}')",
+      "Bash(node -e ' *)",
+      "Bash(python -)",
+      "mcp__visualize__read_me",
+      "mcp__visualize__show_widget",
+      "PowerShell($s = \"C:\\\\Users\\\\Kyle\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\C--Users-Kyle-Documents-GameTest\\\\afad513b-6abc-4daa-9126-b4058f5ead34\\\\scratchpad\\\\sim.js\"; $d = \"C:\\\\Users\\\\Kyle\\\\Documents\\\\GameTest\"; $jobs = 'oldrules','oldai','new' | ForEach-Object { $m = $_; Start-Job { param\\($s,$d,$m\\) node $s $d 400 $m } -ArgumentList $s,$d,$m }; $jobs | Wait-Job | Receive-Job)",
+      "PowerShell(node \"C:\\\\Users\\\\Kyle\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\C--Users-Kyle-Documents-GameTest\\\\afad513b-6abc-4daa-9126-b4058f5ead34\\\\scratchpad\\\\sim.js\" \"C:\\\\Users\\\\Kyle\\\\Documents\\\\GameTest\" 300 duel)",
+      "PowerShell($s = \"C:\\\\Users\\\\Kyle\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\C--Users-Kyle-Documents-GameTest\\\\afad513b-6abc-4daa-9126-b4058f5ead34\\\\scratchpad\\\\sim.js\"; $d = \"C:\\\\Users\\\\Kyle\\\\Documents\\\\GameTest\"; $jobs = '0','0.4','1.5','2.5' | ForEach-Object { $k = $_; Start-Job { param\\($s,$d,$k\\) \"k=$k \" + \\(node $s $d 300 duel $k\\) } -ArgumentList $s,$d,$k }; $jobs | Wait-Job | Receive-Job)",
+      "PowerShell($s = \"C:\\\\Users\\\\Kyle\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\C--Users-Kyle-Documents-GameTest\\\\afad513b-6abc-4daa-9126-b4058f5ead34\\\\scratchpad\\\\sim.js\"; $d = \"C:\\\\Users\\\\Kyle\\\\Documents\\\\GameTest\"; $jobs = 'oldrules','new' | ForEach-Object { $m = $_; Start-Job { param\\($s,$d,$m\\) node $s $d 1000 $m } -ArgumentList $s,$d,$m }; $jobs | Wait-Job | Receive-Job)",
+      "PowerShell(node \"C:\\\\Users\\\\Kyle\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\C--Users-Kyle-Documents-GameTest\\\\afad513b-6abc-4daa-9126-b4058f5ead34\\\\scratchpad\\\\sim.js\" \"C:\\\\Users\\\\Kyle\\\\Documents\\\\GameTest\" 300 new)"
+    ]
+  }
+}

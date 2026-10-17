@@ -262,7 +262,23 @@
   const BAT = ({ R }, f) => { R(5, 2, 3, 3, 1); if (f) { R(0, 3, 5, 1, 1); R(8, 3, 5, 1, 1); } else { R(1, 0, 4, 2, 1); R(8, 0, 4, 2, 1); R(4, 1, 1, 1, 1); R(8, 1, 1, 1, 1); } };
   const CROW = ({ R }, f) => { R(4, 2, 4, 2, 1); R(8, 1, 2, 1, 1); if (f) R(0, 3, 4, 1, 1); else { R(1, 0, 3, 2, 1); R(4, 1, 1, 1, 1); } };
   const CHIP = ({ R }, f) => { R(1, 0, 6, 8, 1); R(0, 1, 8, 6, 1); R(1, 1, 6, 6, 8); R(1 + [0, 2, 4, 2][f], 1, 2, 6, 7); };
+  // A spider crawling right, side on, about half the figurine's height: a round abdomen behind, the
+  // head in front, four legs a side bent high at the knee. Frames step the gait, alternate legs lifted.
+  const SPIDER = ({ R, P }, f) => {
+    const line = (x0, y0, x1, y1, k) => { const n = Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0)); for (let i = 0; i <= n; i++) P(Math.round(x0 + (x1 - x0) * i / n), Math.round(y0 + (y1 - y0) * i / n), k); };
+    const by = f % 2; // the body dips a pixel on each step
+    [[8, 3, 2], [11, 7, 8], [14, 12, 15], [16, 17, 22]].forEach(([hx, kx, fx], i) => {
+      const up = (i + f) % 2, sw = [0, 1, 0, -1][(f + i) % 4];
+      line(hx, 9 + by, kx + sw, 3 + up, 1); line(kx + sw, 3 + up, fx + sw, 15 - up, 1);
+      line(hx + 1, 9 + by, kx + sw + 1, 3 + up, 1); // legs 2 px thick, so the scanlines don't break them
+    });
+    R(3, 4 + by, 8, 7, 1); R(2, 5 + by, 10, 5, 1); R(4, 3 + by, 6, 1, 1); // the abdomen
+    R(4, 4 + by, 3, 2, 3); R(4, 6 + by, 1, 1, 3); // lit from the upper left
+    R(12, 7 + by, 5, 4, 1); R(13, 6 + by, 3, 1, 1); R(13, 7 + by, 2, 1, 3); // the head
+    P(16, 8 + by, 8); P(15, 8 + by, 8); // eyes
+  };
   const CRITTERS = {
+    spider: (sc, heat, o = {}) => crosser(sc, { depth: 300, w: 24, h: 17, period: 16, frames: 4, fps: 6, draw: SPIDER, ...o }),
     bat: (sc, heat, o = {}) => crosser(sc, { depth: -260, w: 13, h: 6, lift: 70, period: 7, draw: BAT, ...o }),
     crow: (sc, heat, o = {}) => crosser(sc, { depth: -380, w: 11, h: 5, lift: 90, period: 11, draw: CROW, ...o }),
     chip: (sc, heat, o = {}) => crosser(sc, { depth: 120, w: 8, h: 8, period: 6, frames: 4, fps: 8, draw: CHIP, ...o }),

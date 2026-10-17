@@ -108,6 +108,17 @@ const Forge = (() => {
     const D = [[[-4, -2], [4, -2], [-2, -4], [2, -4]], [[-7, -4], [7, -4], [-3, -7], [3, -7]], [[-9, -1], [9, -1], [-4, -5], [4, -5]]][Math.floor(dt * 7)];
     for (const [dx, dy] of D) { P(CW / 2 + dx, LIP + dy, 7); P(CW / 2 + dx, LIP + dy + 1, 8); }
   }
+  // A lit card's heat: lava clinging to the lower part of its border, dithered thicker toward its
+  // foot (its own look, so it isn't mistaken for a rare card's gold). x, y: the card's top left, w its width.
+  function glow({ P }, x, y, w) {
+    const { W, H } = Scene.CARD;
+    x += (W - w) >> 1;
+    if (w < 3) return;
+    for (let v = H - 9; v < H - 1; v++) for (let u = 1; u < w - 1; u++) {
+      if (u > 1 && u < w - 2 && v < H - 2) continue; // the border only
+      if (Scene.bay(x + u, y + v) < (v - (H - 9)) * 2 + 2) P(x + u, y + v, 8);
+    }
+  }
   // Steam rising off a lit card, and lava dripping from it, in steps.
   function steam({ P }, x, feet, t) {
     const st = Math.floor(t * 7);
@@ -125,21 +136,25 @@ const Forge = (() => {
       shadows: [[mx(CXC - 11), D_ACT - 6, mx(CXC + 11), D_ACT + 12]], over: { x0: 260, y0: 280, w: 460, h: 130 },
     });
     const act = Scene.plane(sc, { left: mx(AX0), x0: AX0, depth: D_ACT, w: AW, h: GY });
-    // The card: a standee that moves in depth like you do.
-    const cv = document.createElement('canvas'), el = sc.stand(cv, 0, 0, CW * U, CH * U);
-    cv.width = CW; cv.height = CH;
-    const cp = Scene.pen(cv.getContext('2d'), sc.C), cg = cv.getContext('2d');
+    // The card: a standee that moves in depth like you do, at the planes' 2 canvas px a scene px
+    // (so its face can show the card's sprite at half a scene px a pixel).
+    const cv = document.createElement('canvas'), el = sc.stand(cv, 0, 0, CW * U, CH * U), cg = cv.getContext('2d');
+    cv.width = CW * 2; cv.height = CH * 2;
+    cg.imageSmoothingEnabled = false;
+    const cp = Scene.pen(cg, sc.C, 0, 0, 2), cpl = { art: (img, x, y) => cg.drawImage(img, x * 2, y * 2) };
+    let card = { art: null, rarity: 'common' };
     const fig = Scene.figure(sc, { s: U });
     const front = Scene.plane(sc, { left: mx(AX0), x0: AX0, depth: D_FRONT, w: AW, h: GY });
     let last = at(START), shadowKey = '';
     const paint = () => {
       const S = last, now = performance.now() / 1000, c = S.c, sink = Math.max(0, -c.h), feet = CH + sink, { R } = cp;
-      act.clear(); front.clear(); cg.clearRect(0, 0, CW, CH);
+      act.clear(); front.clear(); cg.clearRect(0, 0, cv.width, cv.height);
       const A = act.p;
       A.R(CXC - 11, GY - REST, 22, REST, 1); A.R(CXC - 10, GY - REST + 1, 20, REST - 2, 3); A.R(CXC - 10, GY - REST + 1, 20, 1, 5); A.R(CXC - 3, GY - 3, 6, 1, 8); // the cradle
       if (S.hook != null) chain(cp, CW / 2, Math.round(S.hook));
-      if (c.face) Factory.cardFace(cp, CW / 2 - 7, feet - TOP, c.w); else Scene.cardArt(cp, CW / 2 - 7, feet - TOP, c.hot, c.w);
-      if (c.hot) steam(cp, CW / 2, feet, now);
+      if (c.face) Scene.cardFace(cp, CW / 2 - 7, feet - TOP, c.w, { art: card.art, pl: cpl, rarity: card.rarity });
+      else Scene.cardArt(cp, CW / 2 - 7, feet - TOP, card.rarity, c.w);
+      if (c.hot) { glow(cp, CW / 2 - 7, feet - TOP, c.w); steam(cp, CW / 2, feet, now); }
       if (c.depth < 20 && (c.h < 6 || S.splash >= 0)) lip(cp, now, S.bubbles);
       splash(cp, S.splash);
       el.style.left = mx(CXC) - CW * U / 2 + 'px';
@@ -167,6 +182,8 @@ const Forge = (() => {
       fig.place({ x: mx(S.fx), y: S.depth, z, rot: S.rot, sx: S.sx, sy: S.sy });
     }
     draw.alive = sc.alive;
+    // The card being forged (its back and face are its own), or null for a stand-in.
+    draw.face = (d) => { card = { art: d ? Scene.spriteArt(d.sprite) : null, rarity: rarityOf(d) }; };
     return draw;
   }
 

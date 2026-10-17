@@ -10,7 +10,8 @@
      Scene.ground   pale ash ground past the plane's edges, with contact shadows
      Scene.ruins    the run map's spires scattered to the horizon, hotter each ante
      Scene.plane    an upright pixel canvas to draw the action on, in scene px
-     Scene.slingshot, Scene.card, Scene.pen, Scene.toStage
+     Scene.cardArt  a card back; Scene.cardFace a pixel card face; Scene.faces the real faces over the scene
+     Scene.slingshot, Scene.pen, Scene.toStage
    Units: plane x and y (depth) and heights are map units. Every canvas pixel is 2 map units;
    a scene px on an upright plane is `u` map units (4 unless said). Colors are palette ramp
    indexes (RunMap.ramp: 0 darkest .. 7 lightest, 8 the accent).
@@ -258,16 +259,21 @@ const Scene = (() => {
     const g = cv.getContext('2d');
     g.imageSmoothingEnabled = false;
     return {
-      cv, g, x0, w, h, p: pen(g, sc.C, x0, 0, s),
+      cv, g, x0, w, h, left, depth, u, p: pen(g, sc.C, x0, 0, s),
       clear: () => g.clearRect(0, 0, cv.width, cv.height),
       art: (img, x, y, k = 1) => g.drawImage(img, (x - x0) * s, y * s, img.width * k, img.height * k),
     };
   }
   /* A scene point on an upright plane, in the stage's own px (the screen may be scaled), for
-     putting HTML (card faces, labels) over the scene where something stands. */
+     putting HTML (card faces, labels) over the scene where something stands. The view is tilted,
+     so a straight read across the plane's box on screen drifts: a 1 px marker stands at the point
+     instead, and the camera says where it is. */
   function toStage(sc, pln, x, y) {
-    const { stage } = sc, s = stage.getBoundingClientRect(), r = pln.cv.getBoundingClientRect(), z = s.width / stage.offsetWidth;
-    return [(r.left - s.left + (x - pln.x0) / pln.w * r.width) / z - stage.clientLeft, (r.top - s.top + y / pln.h * r.height) / z - stage.clientTop];
+    const { stage } = sc, m = sc.stand(document.createElement('div'), pln.left + (x - pln.x0) * pln.u, pln.depth, 1, 1);
+    m.style.transform = `translateZ(${(pln.h - y) * pln.u}px) rotateX(-90deg)`;
+    const s = stage.getBoundingClientRect(), r = m.getBoundingClientRect(), z = s.width / stage.offsetWidth;
+    m.remove();
+    return [(r.left + r.width / 2 - s.left) / z - stage.clientLeft, (r.top + r.height / 2 - s.top) / z - stage.clientTop];
   }
 
   /* ---------- props ---------- */
@@ -294,21 +300,106 @@ const Scene = (() => {
     };
   }
 
-  /* A card back, 15 x 22 scene px (the shape of a card face): an ink edge, a pale border (gold for
-     the rare), a mid field with a diamond. It turns over by narrowing about its middle through
-     TURN's widths, a frame each; then the card's face opens from narrow (.dr-pick in style.css). */
+  /* ---------- cards ----------
+     Every card in a scene is CARD.W x CARD.H scene px, back or face. It turns over by narrowing
+     about its middle through TURN's widths, a frame each at 7 a second; the other side opens from
+     narrow the same way. A card you read or pick is the real face (HTML) over the scene: Scene.faces
+     opens it at its back's size, then grows it in steps to FACE.READ. Rarity shows the way the real
+     faces' frames do: a rare back has a gold diamond, a mythical one a gold border too. */
   const CARD = { W: 15, H: 22, TURN: [15, 9, 3] };
-  function cardArt({ R }, x, y, rare, w = CARD.W) {
-    const { W, H } = CARD;
+  const gilt = (rarity) => (rarity === 'mythical' ? 2 : rarity === 'rare' ? 1 : 0);
+  /* A card back: an ink edge, a pale border, a mid field with a diamond. `rarity` is a card's
+     (rarityOf), w its width while it turns. */
+  function cardArt({ R }, x, y, rarity = 'common', w = CARD.W) {
+    const { W, H } = CARD, g = gilt(rarity);
     x += (W - w) >> 1;
     R(x, y, w, H, 1);
-    if (w > 2) R(x + 1, y + 1, w - 2, H - 2, rare ? 8 : 6);
+    if (w > 2) R(x + 1, y + 1, w - 2, H - 2, g > 1 ? 8 : 6);
     if (w > 4) R(x + 2, y + 2, w - 4, H - 4, 3);
     if (w < W) return;
     R(x + 1, y + 1, 1, H - 2, 7);
-    const k = rare ? 8 : 7;
+    const k = g ? 8 : 7;
     R(x + 6, y + 8, 3, 6, k); R(x + 5, y + 9, 5, 4, k); R(x + 7, y + 7, 1, 8, k);
   }
+  /* A card's sprite (SPRITES[name]) as a 16 x 16 canvas in the palette's colors, like spriteURL,
+     for cardFace's `art`. */
+  function spriteArt(name) {
+    const src = SPRITES[name];
+    if (!src) return null;
+    const rows = expandSprite(src), cv = document.createElement('canvas'), g = cv.getContext('2d');
+    cv.width = 16; cv.height = rows.length;
+    rows.forEach((r, y) => [...r].forEach((ch, x) => { if (PAL[ch]) { g.fillStyle = PAL[ch]; g.fillRect(x, y, 1, 1); } }));
+    return cv;
+  }
+  /* A pixel card face, for a card that stays part of the scene (dipped, forged): its art in a frame,
+     a text band and its stats, narrowed about its middle to width w while it opens. `art`: the
+     card's sprite (spriteArt), drawn at half a scene px a pixel by `pl.art` (a plane's); without
+     it, a stand-in beast. A mythical card's border is gold, as on its back. */
+  function cardFace({ P, R }, x, y, w = CARD.W, { art = null, pl = null, rarity = 'common' } = {}) {
+    const { W, H } = CARD;
+    x += (W - w) >> 1;
+    R(x, y, w, H, 1);
+    if (w > 2) R(x + 1, y + 1, w - 2, H - 2, 6);
+    if (w > 2 && gilt(rarity) > 1) { R(x + 1, y + 1, w - 2, 1, 8); R(x + 1, y + H - 2, w - 2, 1, 8); R(x + w - 2, y + 1, 1, H - 2, 8); }
+    if (w < W) { if (w > 4) R(x + 2, y + 2, w - 4, 9, 5); return; }
+    R(x + 1, y + 1, 1, H - 2, 7);
+    R(x + 2, y + 2, 11, 9, 5); R(x + 2, y + 2, 11, 1, 4);
+    if (art && pl) pl.art(art, x + 3.5, y + 2.5);
+    else { R(x + 4, y + 6, 6, 3, 3); R(x + 8, y + 4, 3, 3, 3); R(x + 3, y + 5, 1, 2, 3); R(x + 5, y + 9, 1, 2, 2); R(x + 9, y + 9, 1, 2, 2); P(x + 9, y + 5, 7); }
+    R(x + 2, y + 12, 11, 2, 4);
+    R(x + 2, y + 18, 3, 2, 1); R(x + 10, y + 18, 3, 2, 1); P(x + 3, y + 18, 7); P(x + 11, y + 18, 7);
+  }
+  /* The real card faces over the scene, where their backs stood. `host`: an overlay on the stage
+     (class sc-faces) holding the .card elements `cards` (Run.cardGrid made them); `rects`: each
+     back's top left in scene px, as cardArt was given it, on the plane whose Scene.toStage is
+     `to(x, y)`. Each face opens from narrow at its back's size (OPEN, after the back's TURN), then
+     grows in GROW steps to READ of its own size: as a group, up from its foot (`grow: 'group'`, a
+     fan stays a fan) or each standing on its own foot ('foot'), kept inside the stage. 7 frames a
+     second; `now` skips to the end; they take no clicks until then. Returns the faces' holders
+     (class sc-face), each with its card inside; done(boxes): each one's [left, top, w, h] in stage px. */
+  const FACE = { READ: 0.74, OPEN: [0.2, 0.6, 1], GROW: 3, FPS: 7, PAD: 6 };
+  function faces(host, cards, rects, to, { grow = 'group', now = false, done = () => {} } = {}) {
+    const stage = host.parentElement;
+    const ws = cards.map((c) => { const w = document.createElement('div'); w.className = 'sc-face'; c.replaceWith(w); w.appendChild(c); return w; });
+    const fw = cards[0]?.offsetWidth || 1, fh = cards[0]?.offsetHeight || 1, s1 = FACE.READ;
+    // Where each starts (its middle, its scale: the back's width), and where it ends. The view's
+    // perspective narrows a back toward its foot, so it's read at all four corners.
+    const from = rects.map(([x, y]) => {
+      const [[ax], [bx], [cx, cy], [dx, dy]] = [to(x, y), to(x + CARD.W, y), to(x, y + CARD.H), to(x + CARD.W, y + CARD.H)];
+      const s = (bx - ax + dx - cx) / 2 / fw, foot = (cy + dy) / 2;
+      return { x: (ax + bx + cx + dx) / 4, y: foot - fh * s / 2, s };
+    });
+    // A group grows up from its foot (its middle across, its feet's level), so nothing under it is covered.
+    const n = from.length || 1, gx = from.reduce((a, f) => a + f.x, 0) / n, gy = from.reduce((a, f) => a + f.y + fh * f.s / 2, 0) / n;
+    const end = from.map((f) => (grow === 'foot'
+      ? { x: f.x, y: f.y + fh * (f.s - s1) / 2, s: s1 }
+      : { x: gx + (f.x - gx) * s1 / f.s, y: gy + (f.y - gy) * s1 / f.s, s: s1 }));
+    // Kept inside the stage, all together.
+    const box = (e) => [e.x - fw * e.s / 2, e.y - fh * e.s / 2, fw * e.s, fh * e.s];
+    const bs = end.map(box), W = stage.clientWidth, H = stage.clientHeight, P = FACE.PAD;
+    const L = Math.min(...bs.map((b) => b[0])), R = Math.max(...bs.map((b) => b[0] + b[2]));
+    const T = Math.min(...bs.map((b) => b[1])), B = Math.max(...bs.map((b) => b[1] + b[3]));
+    const dx = L < P ? P - L : R > W - P ? W - P - R : 0, dy = T < P ? P - T : B > H - P ? H - P - B : 0;
+    for (const e of end) { e.x += dx; e.y += dy; }
+    const put = (w, { x, y, s }, sx = 1) => {
+      w.style.transform = `translate(${Math.round(x - fw * s * sx / 2)}px, ${Math.round(y - fh * s / 2)}px) scale(${s * sx}, ${s})`;
+    };
+    const frames = FACE.OPEN.length + FACE.GROW;
+    let f = now ? frames - 1 : 0;
+    const step = () => {
+      if (!ws.every((w) => w.isConnected)) return;
+      ws.forEach((w, i) => {
+        if (f < FACE.OPEN.length) return put(w, from[i], FACE.OPEN[f]);
+        const k = (f - FACE.OPEN.length + 1) / FACE.GROW, a = from[i], b = end[i];
+        put(w, { x: a.x + (b.x - a.x) * k, y: a.y + (b.y - a.y) * k, s: a.s + (b.s - a.s) * k });
+      });
+      if (++f < frames) return setTimeout(step, 1000 / FACE.FPS);
+      ws.forEach((w) => w.classList.add('sc-ready'));
+      done(end.map(box));
+    };
+    step();
+    return ws;
+  }
 
-  return { mount, figure, land, SQUASH, play, ground, ruins, span, plane, toStage, slingshot, CARD, cardArt, pen, bay, lvl, cl, rgb };
+  return { mount, figure, land, SQUASH, play, ground, ruins, span, plane, toStage, slingshot, CARD, FACE, cardArt, cardFace, spriteArt, faces, pen, bay, lvl, cl, rgb };
 })();
