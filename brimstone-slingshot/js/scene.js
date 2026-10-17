@@ -159,6 +159,7 @@ const Scene = (() => {
       clear: () => og.clearRect(0, 0, over.w, over.h),
       shade(X, Y, rx, ry) {
         const cx = (X - over.x0) / 2, cy = (Y - over.y0) / 2;
+        if (!Number.isFinite(cx + cy + rx + ry)) return; // a bad position would never end the loop
         for (let y = Math.floor(cy - ry); y <= cy + ry; y++) for (let x = Math.floor(cx - rx); x <= cx + rx; x++) {
           const a = (x - cx) / rx, b = (y - cy) / ry;
           if (a * a + b * b < 1) dot(x, y, tone(Math.round(x + ou), Math.round(y + ovv), 0.55));

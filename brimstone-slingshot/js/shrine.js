@@ -3,8 +3,8 @@
    BRIMSTONE SLINGSHOT — the Bone Shrine (a ? stop event, see Run.shrine in js/run.js).
    A grand altar in the crypt (js/settings.js): a three-step dais, a pyramid of ten skulls under a
    gold-rimmed slab, and two pillars of skulls with a flame on top, candles on the steps. Your
-   figurine lands beside it on the tail of the map's lob. OFFER YOUR WEAKEST lifts a card back over
-   your head and hops it up onto the slab; every skull's eyes wake in turn, the card narrows away,
+   figurine lands beside it on the tail of the map's lob and holds up your weakest card (the real
+   card's face) while you choose. OFFER YOUR WEAKEST lobs it up onto the slab; every skull's eyes wake in turn, the card narrows away,
    the pile shudders, and three hearts (max life +3) fly back to you.
    Built on the scene kit (js/scene.js): only the altar, the hearts and the timeline are its own.
    Scene px: the action is laid out on upright planes in scene pixels of 4 map units, x across and
@@ -18,7 +18,8 @@ const Shrine = (() => {
   const AX0 = -12, AW = 174;              // the upright planes' left edge and width (scene px); they run from the sky (y 0) to GY
   const FX = 36;                          // where you stand (scene x)
   const CW = 17, CH = 25;                // the offered card, in scene px (the real card face, scaled to fit)
-  const SLAB_TOP = 43, SLAB_MID = 100.5;  // the slab's top edge (its horns) and middle: where the card rests
+  const LOB = 30;                         // the card's lob apex above its straight line to the slab (scene px)
+  const SLAB_TOP = 43, SLAB_MID = 100.5; // the slab's top edge (its horns) and middle: where the card rests
   // The entrance, in scene px (x 4 for map units): the tail of the map's lob, as Run.bowl's BOWL_LAND.
   const LAND = { across: 80, back: 10, high: 40, ms: 700 };
   const { cl } = Scene;
@@ -33,11 +34,11 @@ const Shrine = (() => {
        sx, sy: squash, card: { held: rise step 0..2 | hop: progress 0..1 | slab: true, w: how open it is (1..0) } or null, lit: skulls whose eyes
        are awake (0..20), ox: the pile's shudder, hearts: [{ x, y }] } */
   const LANDED = LAND.ms / 1000 + Scene.SQUASH.ms / 1000, REST = LANDED + 0.4, START = REST;
-  const T_HOP = 0.5, T_SLAB = 1.3, T_NARROW = 2.6, T_GONE = 3.1, T_HEARTS = 3.2;
+  const T_SLAB = 0.8, T_NARROW = 2.1, T_GONE = 2.6, T_HEARTS = 2.7, T_SHIVER = 2.4; // seconds after OFFER
   const END = START + T_HEARTS + 0.8 + 0.5 + 0.7;
   const HEART_CUES = [0, 1, 2].map((i) => [START + T_HEARTS + 0.4 * i + 0.5, 'heal']);
   const ENTER_CUES = [[LAND.ms / 1000, 'land']];
-  const CUES = [[START, 'select'], [START + T_SLAB, 'place'], ...[0, 1, 2, 3, 4].map((i) => [START + T_SLAB + 0.25 * i, 'tally']),
+  const CUES = [[START, 'select'], [START + T_SLAB, 'land'], ...[0, 1, 2, 3, 4].map((i) => [START + T_SLAB + 0.25 * i, 'tally']),
     [START + T_NARROW, 'spell'], ...HEART_CUES];
   function hearts(S, a, t0, src) {
     for (let i = 0; i < 3; i++) {
@@ -61,15 +62,15 @@ const Shrine = (() => {
       return S;
     }
     const a = t - START;
-    if (a <= 0) return S; // waiting (REST is START): no card until you offer it
-    // The card is held above your head, clear of you, and rises in three steps; five hops take it up
-    // onto the slab; there it narrows away in steps. The mount works out where each of those is on screen.
-    if (a < T_HOP) S.card = { held: 2 * a / T_HOP, w: 1 };                              // rises smoothly
-    else if (a < T_SLAB) { const u = (a - T_HOP) / (T_SLAB - T_HOP); S.card = { hop: u * u * (3 - 2 * u), w: 1 }; } // one eased flight
-    else if (a < T_NARROW) S.card = { slab: true, w: 1 };
+    // The weakest card is already held over your head while you choose: it rises there as you finish
+    // landing. OFFER lobs it up onto the slab, where it narrows away in steps. The mount works out
+    // where each of those is on screen.
+    if (a <= 0) { S.card = { held: 2 * cl((t - LANDED) / (REST - LANDED)), w: 1 }; return S; }
+    if (a < T_SLAB) { const u = a / T_SLAB; S.card = { hop: u, rot: 4 * u, w: 1 }; } // a lob like yours: steady across, a parabolic arc, one full spin at a steady rate (upright again at the slab; the landing stops it)
+    else if (a < T_NARROW) S.card = { slab: true, w: 1, sq: a < T_SLAB + Scene.SQUASH.ms / 1000 }; // lands with the same squash you do
     else if (a < T_GONE) { const w = [1, 0.6, 0.2, 0][Math.floor((a - T_NARROW) * 7)]; if (w) S.card = { slab: true, w }; }
     S.lit = a < T_SLAB ? 0 : Math.min(20, Math.floor((a - T_SLAB) * 16));
-    S.ox = wob(a, 2.9);
+    S.ox = a < T_NARROW ? wob(a, T_SLAB) : wob(a, T_SHIVER); // the pile shivers as the card lands, and again as it goes
     hearts(S, a, T_HEARTS, [100, 40]);
     return S;
   }
@@ -147,6 +148,7 @@ const Shrine = (() => {
       face.className = `card ${def.type}${def.token ? ' token' : ''} still`;
       face.innerHTML = cardInnerHTML(def);
       Object.assign(face.style, { position: 'absolute', left: '0', top: '0', margin: '0', transformOrigin: '0 0', pointerEvents: 'none', zIndex: '3' });
+      face.style.transformOrigin = '50% 50%';
       stage.appendChild(face);
       fw = face.offsetWidth || 1; fh = face.offsetHeight || 1; // its natural size, measured while it shows
       face.style.display = 'none';
@@ -157,8 +159,12 @@ const Shrine = (() => {
     // The ground is tilted, so rectangles are foreshortened in height: the face keeps its own
     // proportions, scaled from its width and standing on the foot of its anchor. Only its width
     // narrows as it turns.
-    const ruler = sc.stand(document.createElement('div'), mx(SLAB_MID - CW / 2), D_ACT - CH * U, CW * U, CH * U);
-    ruler.style.transform = `translateZ(${(GY - SLAB_TOP) * U}px) rotateX(-90deg)`;
+    // The ruler is an empty copy of the altar's plane with a marker standing on the slab's top edge
+    // (a thin bar CW wide), so it is projected exactly as the slab is drawn.
+    const rulerPlane = sc.stand(document.createElement('div'), mx(AX0), D_ACT, AW * U, GY * U); // as Scene.plane stands the altar's
+    const ruler = document.createElement('div');
+    Object.assign(ruler.style, { position: 'absolute', left: (SLAB_MID - CW / 2 - AX0) * U + 'px', top: SLAB_TOP * U + 'px', width: CW * U + 'px', height: '1px' });
+    rulerPlane.appendChild(ruler);
     const lerpA = (p, q, k) => p.map((v, i) => lerp(v, q[i], k));
     function placeFace(c) {
       if (!face) return;
@@ -170,9 +176,10 @@ const Shrine = (() => {
       const held = (n) => [lx((F.left + F.right) / 2), ly(F.top) - (2 + 3 * n) * uy, CW * ux / fw];
       const slab = [lx((R.left + R.right) / 2), ly(R.bottom), R.width / z / fw];
       let a = c.slab ? slab : c.hop != null ? lerpA(held(2), slab, c.hop) : held(c.held);
-      if (c.hop != null) a = [a[0], a[1] - 24 * uy * Math.sin(Math.PI * c.hop), a[2]];
-      const [cx, bottom, s] = a, w = fw * s * c.w;
-      face.style.transform = `translate(${cx - w / 2}px, ${bottom - fh * s}px) scale(${s * c.w}, ${s})`;
+      if (c.hop != null) a = [a[0], a[1] - LOB * 4 * c.hop * (1 - c.hop) * uy, a[2]]; // the map's lob: 4H k (1 - k)
+      const [cx, bottom, s] = a, sq = c.sq ? Scene.SQUASH : { sx: 1, sy: 1 }, sy = s * sq.sy;
+      // About its middle, so the tumble turns it in place; a squash keeps its foot down.
+      face.style.transform = `translate(${cx - fw / 2}px, ${bottom - fh * sy / 2 - fh / 2}px) rotate(${(c.rot || 0) * 90}deg) scale(${s * c.w * sq.sx}, ${sy})`;
     }
 
     function draw(S) {
@@ -194,15 +201,31 @@ const Shrine = (() => {
       SK.forEach(([x, y], i) => skullArt(act.p, x, y, i < S.lit, i < PYR.length ? S.ox : 0));
       for (const x of COLS) flameArt(act.p, x + 6, 50, fl);
       slabArt(act.p, S.ox);
-      // The card, in your hands, in flight and on the slab: the real face over the scene.
-      placeFace(S.card);
       // In front of you: the hearts coming back.
       for (const h of S.hearts) heartArt(front.p, h.x, h.y);
       fig.place({ x: mx(S.fx), y: S.depth, z, rot: S.rot, sx: S.sx, sy: S.sy });
+      // The card, in your hands, in flight and on the slab: the real face over the scene. After
+      // you are placed, since held it is anchored to where you are this frame.
+      placeFace(S.card);
     }
     draw.alive = sc.alive;
     return draw;
   }
 
-  return { mount, at, LANDED, REST, START, END, ENTER_CUES, CUES };
+  /* PROPS: this scene's objects for other scenes and the builder (js/props.js): each { id, name, x0,
+     w, cx (its middle), gy (its ground line), home: { x, depth } (where it stands in this scene),
+     draw(pln, t, heat, sc) } in this file's scene px. */
+  const PROPS = [{
+    id: 'altar', name: 'skull altar', x0: 40, w: 125, cx: 100, gy: GY, home: { x: 100, depth: D_ACT },
+    draw(pln, t) { // as draw(): the dais, candles, skulls, the pillars' braziers and the slab, at rest
+      const p = pln.p, fl = Math.floor(t * 5) % 2;
+      daisArt(p);
+      for (const x of [68, 131]) candleArt(p, x, 90, fl);
+      for (const x of [63, 135]) candleArt(p, x, 94, 1 - fl);
+      SK.forEach(([x, y]) => skullArt(p, x, y, false, 0));
+      for (const x of COLS) flameArt(p, x + 6, 50, fl);
+      slabArt(p, 0);
+    },
+  }];
+  return { mount, at, LANDED, REST, START, END, ENTER_CUES, CUES, PROPS };
 })();

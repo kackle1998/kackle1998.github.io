@@ -273,7 +273,7 @@ const RUN_EVENTS = [
     ],
   },
   {
-    id: 'moth', title: 'WANDERING MOTH', art: 'moth',
+    id: 'moth', title: 'WANDERING MOTH', art: 'moth', screen: 'moth', // the glass moth in the graveyard (Run.moth, js/moth.js)
     text: 'A moth made of glass circles your light. Pay 4 life and it gives one creature in your deck its wings: Airborne.',
     choices: [
       { label: 'PAY 4 LIFE', ok: (run) => run.s.life > 4, pick: (d) => !d.sigils.includes('airborne') && d.sigils.length < 4,
@@ -399,6 +399,14 @@ const WHEEL_SPIN_MS = 4200;
    and a bonus for a strike. BOWL_STOP is what Run.bowl shows in the header. */
 const BOWL_STOP = { title: 'BRIMSTONE LANES', art: 'ri_rack',
   text: 'Ten pins stand at the end of a long lane. One ball, one throw. Every pin that falls pays an arcana.' };
+/* The Sigil Altar, a stop of its own on the map: the Rune Circle's scene in a graveyard, paid
+   for with the creature the sigil comes from (Run.rune, Altar in js/rune.js). */
+const ALTAR_STOP = { title: 'SIGIL ALTAR', art: 'ri_altar', consume: true,
+  text: 'A bone altar among the graves. Lay a creature on it and one of its sigils passes to another. The creature is gone.',
+  choices: [
+    { label: 'SACRIFICE', ok: (run) => run.givers().length > 0, need: 'None of your creatures can pass on a sigil.' },
+    { label: 'LEAVE', act: () => 'The altar waits for another.' },
+  ] };
 const BOWL_PER_PIN = 1;
 const BOWL_STRIKE_BONUS = 3;
 const BOWL_SLIDE_HZ = 0.35;                              // the ball sliding along the foul line, sweeps a second
@@ -607,7 +615,7 @@ const Run = {
     switch (n.t) {
       case 'battle': case 'boss': return this.battle(n);
       case 'fire': return this.campfire(n);
-      case 'altar': return this.transfer({ icon: 'ri_altar', title: 'SIGIL ALTAR', consume: true });
+      case 'altar': return this.rune(n, ALTAR_STOP);
       case 'trade': return this.trader(n);
       case 'event': return this.event(n);
       case 'bowl': return this.bowl(n, BOWL_STOP);
@@ -1514,7 +1522,7 @@ const Run = {
     this.save();
     RunMap.cleared().then(() => Scene.play({ draw, at, from: 0, to, cues, done }));
   },
-  /* The test benches: Run.sceneTest(id) in the console, or index.html?scenetest=<id> (bowl, draft, dip, mirror, spring, rune, forge, shrine, offer, ghost, relic, bones;
+  /* The test benches: Run.sceneTest(id) in the console, or index.html?scenetest=<id> (bowl, draft, dip, mirror, spring, moth, rune, altar, forge, shrine, offer, ghost, relic, bones;
      ?bowltest and ?drafttest too). The scene plays as often as you like on a stand-in run: nothing
      is saved (save() checks this.bench) or paid, and DONE puts your run back. this.bench holds the
      bench's own state: the bowling lane's throws, Bone Draft's ante and the colors it deals from. */
@@ -1524,7 +1532,9 @@ const Run = {
     dip: (run) => run.dip(null, RUN_EVENTS.find((e) => e.id === 'pool')),
     mirror: (run) => run.dip(null, RUN_EVENTS.find((e) => e.id === 'mirror')),
     spring: (run) => run.dip(null, RUN_EVENTS.find((e) => e.id === 'spring')),
+    moth: (run) => run.moth(null, RUN_EVENTS.find((e) => e.id === 'moth')),
     rune: (run) => run.rune(null, RUN_EVENTS.find((e) => e.id === 'rune')),
+    altar: (run) => run.rune(null, ALTAR_STOP),
     forge: (run) => run.forge(null, RUN_EVENTS.find((e) => e.id === 'forge')),
     shrine: (run) => run.shrine(null, RUN_EVENTS.find((e) => e.id === 'shrine')),
     offer: (run) => run.handover(null, RUN_EVENTS.find((e) => e.id === 'offer')),
@@ -1667,8 +1677,9 @@ const Run = {
     lk.lock();
     this.sceneEnter(sp, { draw, at: Dip.at, to: Dip.REST, cues: Dip.ENTER_CUES, done: rest });
     if (test) {
-      // The bench dips a stand-in as often as you like, every way.
-      $$('[data-mode]').forEach((b) => (b.onclick = () => { if (lk.busy()) return; sfx('select'); play(b.dataset.mode, rest); }));
+      // The bench dips a random creature as often as you like, every way.
+      const mons = Object.values(CARDS).filter((c) => c.type === 'creature' && SPRITES[c.sprite]);
+      $$('[data-mode]').forEach((b) => (b.onclick = () => { if (lk.busy()) return; sfx('select'); draw.face(mons[Math.floor(Math.random() * mons.length)]); play(b.dataset.mode, rest); }));
       $('#spAnte').onclick = () => { if (lk.busy()) return; sfx('select'); test.ante = test.ante % RunMap.SPIRE_ANTES.length + 1; this.s.node = { sp: { landed: true } }; this.dip(n, ev); };
       $('#rnLeave').onclick = () => { if (lk.busy()) return; sfx('select'); this.sceneTestEnd(); };
       return;
@@ -1682,6 +1693,7 @@ const Run = {
         const mode = typeof ch.dip === 'function' ? ch.dip(this, ch) : ch.dip;
         sp.dip = { ch: i, rid: d ? d.rid : null, mode };
         this.save();
+        draw.face(d);
         play(mode, () => finish(ch, d, mode));
       };
       if (!ch.pick) return go(null);
@@ -1697,14 +1709,76 @@ const Run = {
     }));
   },
 
+  /* ---------- the Wandering Moth (a ? event, js/moth.js) ----------
+     You land in a graveyard (the entrance, once per stop: node.mt.landed) and a glass moth circles
+     you while you choose. PAY 4 LIFE asks, over the scene, which creature gets its wings; the pick
+     is saved on node.mt.to before the moth hovers over you and dusts you with glints, and the
+     life is paid and Airborne given once the scene has shown it (a reload after the pick applies
+     it straight away). LEAVE sends it off. Input does nothing while anything moves. */
+  moth(n, ev) {
+    const node = this.s.node, mt = node.mt || (node.mt = {}), test = this.bench;
+    const [payCh, leaveCh] = ev.choices;
+    const finish = (d) => this.finishStop(ev.art, ev.title, ...this.result(payCh.act(this, d), [d]));
+    if (mt.to != null && !test) { const d = this.card(mt.to); if (d) return finish(d); }
+    const ante = test ? test.ante : Math.min(this.s.circuit || 1, RunMap.SPIRE_ANTES.length);
+    const stage = this.sceneScreen(ev.art, ev.title, escapeHTML(ev.text),
+      test ? `<button class="btn" id="mtGive">GIVE WINGS</button><button class="btn" id="mtLeave">LEAVE</button><button class="btn" id="mtAnte">ANTE ${ante}</button><button class="btn" id="rnLeave">DONE</button>`
+        : `<button class="btn" id="mtPay">${escapeHTML(payCh.label)}</button><button class="btn" id="mtLeave">${escapeHTML(leaveCh.label)}</button>` +
+          (this.canChoose(payCh) ? '' : `<div class="rn-need">${escapeHTML(payCh.need || '')}</div>`));
+    const draw = Moth.mount(stage, RunMap.SPIRE_ANTES[ante - 1].heat), lk = this.sceneLock();
+    const rest = () => { draw(Moth.at(Moth.REST, 'idle')); draw.idle(true); lk.unlock(); if (!test) $('#mtPay').disabled = !this.canChoose(payCh); };
+    const play = (mode, to, cues, done) => {
+      draw.idle(false);
+      if (FAST) return done();
+      lk.lock();
+      Scene.play({ draw, at: (t) => Moth.at(t, mode), from: 0, to, cues, done });
+    };
+    lk.lock();
+    this.sceneEnter(mt, { draw, at: Moth.at, to: Moth.REST, cues: Moth.ENTER_CUES, done: rest });
+    // After the moth goes, the bench rebuilds the scene (it keeps nothing) and a real run leaves.
+    const gone = () => { if (test) { this.s.node = { mt: { landed: true } }; this.moth(n, ev); } };
+    $('#mtLeave').onclick = () => {
+      if (lk.busy()) return;
+      sfx('select');
+      play('leave', Moth.LEAVE_END, [], test ? gone : () => this.finishStop(ev.art, ev.title, ...this.result(leaveCh.act(this))));
+    };
+    if (test) {
+      $('#mtGive').onclick = () => { if (lk.busy()) return; sfx('select'); play('gift', Moth.GIFT_END, Moth.GIFT_CUES, gone); };
+      $('#mtAnte').onclick = () => { if (lk.busy()) return; sfx('select'); test.ante = test.ante % RunMap.SPIRE_ANTES.length + 1; this.s.node = { mt: { landed: true } }; this.moth(n, ev); };
+      $('#rnLeave').onclick = () => { if (lk.busy()) return; sfx('select'); this.sceneTestEnd(); };
+      return;
+    }
+    $('#mtPay').onclick = () => {
+      if (lk.busy() || !this.canChoose(payCh)) return;
+      sfx('select');
+      // Which creature: picked over the scene; BACK puts the question away.
+      const wrap = document.createElement('div');
+      wrap.className = 'rn-deckwrap';
+      wrap.innerHTML = `<div class="rn panel slot-see"><div class="rn-sub">Pick a creature to give wings.</div><div class="rn-body" id="mtBody"></div>
+        <div class="rn-btns"><button class="btn" id="mtBack">BACK</button></div></div>`;
+      $('#screen').appendChild(wrap);
+      const mons = this.creatures().filter(payCh.pick);
+      this.cardGrid($('#mtBody'), mons, (d) => {
+        wrap.remove();
+        mt.to = d.rid;
+        this.save();
+        play('gift', Moth.GIFT_END, Moth.GIFT_CUES, () => finish(d));
+      }, mons.length > 7);
+      $('#mtBack').onclick = () => { sfx('select'); wrap.remove(); };
+    };
+  },
+
   /* ---------- the Rune Circle (a ? event, js/rune.js on the factory of js/factory.js) ----------
-     You land in the circle between two creatures (the entrance, once per stop: node.rn.landed),
+     You land in the circle between two empty plinths (the entrance, once per stop: node.rn.landed),
      then choose. PAY 3 LIFE asks, over the scene, whose sigil to copy, which one and who gets it;
-     the last pick saves node.rn.to before the circle spins up and the copy flies across. The
+     the last pick saves node.rn.to, your two real cards open on the plinths, and the circle spins
+     up and copies the sigil across. The
      life is paid and the sigil given once the scene has shown it; a reload after the last pick
-     applies it straight away. Input does nothing while anything moves. The furnaces heat up with the ante. */
+     applies it straight away. Input does nothing while anything moves. The place heats up with the ante.
+     The Sigil Altar (ALTAR_STOP, ev.consume) plays the same in a graveyard (Altar in js/rune.js):
+     no life is paid, the giver is sacrificed and falls away once the copy has landed. */
   rune(n, ev) {
-    const node = this.s.node, rn = node.rn || (node.rn = {}), test = this.bench;
+    const node = this.s.node, rn = node.rn || (node.rn = {}), test = this.bench, Sc = ev.consume ? Altar : Rune;
     const [payCh, leaveCh] = ev.choices, ok = test || this.canChoose(payCh);
     const finish = () => {
       const from = this.card(rn.from), d = this.card(rn.to), k = rn.sigil;
@@ -1712,9 +1786,10 @@ const Run = {
       const rc = this.rc(d.rid);
       rc.sigils.push(k);
       if (k === 'snipe' || k === 'mend') rc[k] = from[k];
-      this.s.life -= payCh.cost;
+      if (ev.consume) this.remove(from.rid);
+      else this.s.life -= payCh.cost;
       sfx('spell');
-      this.finishStop(ev.art, ev.title, `${d.name} gained ${sigilName(k, from)}.`, [d]);
+      this.finishStop(ev.art, ev.title, `${d.name} gained ${sigilName(k, from)}.${ev.consume ? ` ${from.name} is gone.` : ''}`, ev.consume ? [d, from] : [d]);
     };
     if (rn.to != null && !test) return finish();
     const ante = test ? test.ante : Math.min(this.s.circuit || 1, RunMap.SPIRE_ANTES.length);
@@ -1722,18 +1797,46 @@ const Run = {
       test ? `<button class="btn" id="rcPay">${escapeHTML(payCh.label)}</button><button class="btn" id="rcAnte">ANTE ${ante}</button><button class="btn" id="rnLeave">DONE</button>`
         : `<button class="btn" id="rcPay" ${ok ? '' : 'disabled'}>${escapeHTML(payCh.label)}</button><button class="btn" id="rnLeave">${escapeHTML(leaveCh.label)}</button>` +
           (ok ? '' : `<div class="rn-need">${escapeHTML(payCh.need)}</div>`));
-    const draw = Rune.mount(stage, RunMap.SPIRE_ANTES[ante - 1].heat), lk = this.sceneLock();
-    const rest = () => { draw(Rune.at(Rune.REST)); lk.unlock(); if (!ok) $('#rcPay').disabled = true; };
-    const play = (done) => {
-      if (FAST) return done();
+    const draw = Sc.mount(stage, RunMap.SPIRE_ANTES[ante - 1].heat), lk = this.sceneLock();
+    const rest = () => { draw(Sc.at(Sc.REST)); lk.unlock(); if (!ok) $('#rcPay').disabled = true; };
+    // Your two real cards, standing on the plinths over the scene (opening in steps), the giver's
+    // first. Returns them, with their top in scene px for the sigil chips.
+    const cards = (defs) => {
+      const els = defs.map((d, i) => {
+        const el = document.createElement('div');
+        el.className = 'rc-real';
+        stage.appendChild(el);
+        this.cardGrid(el, [d], null, true);
+        const [x, y] = draw.toStage(i ? Sc.MID_B : Sc.MID_A, Sc.GY - Sc.PH);
+        el.style.left = Math.round(x - el.offsetWidth / 2) + 'px';
+        el.style.top = Math.round(y - el.offsetHeight) + 'px';
+        return el;
+      });
+      // The scene height the camera puts level with the cards' top, found by halving.
+      let lo = 0, hi = Sc.GY;
+      for (let i = 0; i < 14; i++) { const m = (lo + hi) / 2; if (draw.toStage(Sc.MID_A, m)[1] < els[0].offsetTop) lo = m; else hi = m; }
+      const top = (lo + hi) / 2;
+      draw.cards(top);
+      return { els, top };
+    };
+    // The copy, played over the real cards: each lights as its part happens.
+    const play = (defs, done) => {
+      const { els, top } = cards(defs);
+      if (FAST) return done(els);
       lk.lock();
-      Scene.play({ draw, at: Rune.at, from: Rune.REST, to: Rune.END, cues: Rune.CUES, done });
+      const at = (t) => { const S = Sc.at(t, top); els[0].classList.toggle('rc-lit', S.flashA); els[0].classList.toggle('rc-gone', !!S.gone); els[1].classList.toggle('rc-lit', S.flashB); return S; };
+      Scene.play({ draw, at, from: Sc.REST, to: Sc.END, cues: Sc.CUES, done: () => done(els) });
     };
     lk.lock();
-    this.sceneEnter(rn, { draw, at: Rune.at, to: Rune.REST, cues: Rune.ENTER_CUES, done: rest });
+    this.sceneEnter(rn, { draw, at: Sc.at, to: Sc.REST, cues: Sc.ENTER_CUES, done: rest });
     if (test) {
-      // The bench copies a stand-in sigil as often as you like.
-      $('#rcPay').onclick = () => { if (lk.busy()) return; sfx('select'); play(rest); };
+      // The bench copies between two dealt cards as often as you like.
+      $('#rcPay').onclick = () => {
+        if (lk.busy()) return;
+        sfx('select');
+        const mons = runOffer(Math.random, test.colors, 12).filter((c) => c.type === 'creature');
+        play([mons[0] || CARDS.golem, mons[1] || CARDS.moth], (els) => { els.forEach((el) => el.remove()); draw.cards(null); rest(); });
+      };
       $('#rcAnte').onclick = () => { if (lk.busy()) return; sfx('select'); test.ante = test.ante % RunMap.SPIRE_ANTES.length + 1; this.s.node = { rn: { landed: true } }; this.rune(n, ev); };
       $('#rnLeave').onclick = () => { if (lk.busy()) return; sfx('select'); this.sceneTestEnd(); };
       return;
@@ -1749,7 +1852,7 @@ const Run = {
       return wrap;
     };
     const pickFrom = () => {
-      const givers = this.givers(), wrap = ask('Pick a creature whose sigil you want to copy.', () => {});
+      const givers = this.givers(), wrap = ask(ev.consume ? 'Pick a creature to sacrifice. One of its sigils will pass to another.' : 'Pick a creature whose sigil you want to copy.', () => {});
       this.cardGrid($('#rcBody'), givers, (d) => { wrap.remove(); rn.from = d.rid; pickSigil(); }, givers.length > 7);
     };
     const pickSigil = () => {
@@ -1761,8 +1864,8 @@ const Run = {
     };
     const pickTo = () => {
       const from = this.card(rn.from), k = rn.sigil, takers = this.creatures().filter((r) => this.canTake(r, k, from.rid));
-      const wrap = ask(`Which creature receives ${escapeHTML(sigilName(k, from))}? It costs ${payCh.cost} life.`, pickSigil);
-      this.cardGrid($('#rcBody'), takers, (d) => { wrap.remove(); rn.to = d.rid; this.save(); play(finish); }, takers.length > 7);
+      const wrap = ask(`Which creature receives ${escapeHTML(sigilName(k, from))}?${ev.consume ? ` ${escapeHTML(from.name)} will be sacrificed.` : ` It costs ${payCh.cost} life.`}`, pickSigil);
+      this.cardGrid($('#rcBody'), takers, (d) => { wrap.remove(); rn.to = d.rid; this.save(); play([from, d], finish); }, takers.length > 7);
     };
     $('#rcPay').onclick = () => { if (lk.busy() || !ok) return; sfx('select'); pickFrom(); };
     $('#rnLeave').onclick = () => { if (lk.busy()) return; sfx('select'); this.finishStop(ev.art, ev.title, ...this.result(leaveCh.act(this, null, leaveCh))); };

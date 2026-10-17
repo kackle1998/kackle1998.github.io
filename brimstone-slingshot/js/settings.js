@@ -5,7 +5,11 @@
    edge), and something alive in the background, all hotter each ante.
      Scene.setting(sc, name, opts) builds one behind the action and returns the ground
      (Scene.ground's { clear, shade, patch }) for contact shadows.
-   Names: ruins (the run map's spires), crypt (a stone wall with sagging arches), casino, lava, graveyard, forge (Factory.build).
+   Names: ruins (the run map's spires), crypt (a stone wall with sagging arches), casino, lava, graveyard, forge (Factory).
+   Each is a preset of four parts that mix and match (see SETTINGS below): a floor, a backdrop
+   (the sky or a wall), features (spires, slot cabinets..., any number) and the critters and
+   effects in its background, so opts { floor, backdrop, features, critters, effects } can swap
+   any of them, e.g. slot cabinets and graves on flagstones before the crypt wall.
    opts: { heat (0..2, RunMap.SPIRE_ANTES), area, clear, near, light, rubble, shards, shadows,
    over }: as Scene.ground and Scene.ruins. `near` props use the spire kinds ('spike' tall,
    'basalt' low, 'strata' the one that shows the heat); each setting renames them to its own.
@@ -131,8 +135,8 @@
   };
 
   /* ---------- the crypt: a damp stone wall with sagging arches, lit by candles ---------- */
-  /* Built like the forge: a floor and a wall rather than props to the horizon. The flagstone floor
-     runs up to a wall of damp stone blocks (darker and streaked toward its foot) standing at
+  /* A wall backdrop, like the forge's: it closes the room rather than scattering props to the
+     horizon (its preset floor is the flagstones, FLOORS below). A wall of damp stone blocks (darker and streaked toward its foot) standing at
      D_WALL, with six arches whose crowns have sagged: open ones dark inside, one bricked up, one
      half fallen in on its rubble, and cracks running up from the dropped keystones. Candles stand
      in clusters at the arch feet, on ledges between them, and in four groups on the floor; more
@@ -212,15 +216,9 @@
   // A candle flame in three stepped frames (never blinking), `tall` px taller at ante 3; the wick under it.
   const flameArt = ({ R }, c, st, tall) => { const f = (st + c.id) % 3, h = [3, 4, 3][f] + tall; R(c.x, c.y - c.h - h + 1, 2, h - 1, 8); R(c.x + [0, 0, 1][f], c.y - c.h - h, 1, 2, 7); R(c.x + (c.id % 2), c.y - c.h, 1, 1, 1); };
   const lit = (heat, c) => hs(c.id, 7) < [0.35, 0.75, 1][heat];
-  function crypt(sc, heat, { shadows = [], over }) {
+  function cryptWall(sc, heat) {
     const { C } = sc;
     sc.stage.firstChild.remove(); // the nebula sky: the wall stands in front of it
-    const gnd = Scene.ground(sc, {
-      x0: -1200, y0: D_WALL, w: 1920, h: (820 - D_WALL) / 2, tones: [3, 4, 5, 6], seed: 31, grit: 1500,
-      light: (X, Y) => 1.15 - Math.hypot((X - 640) / 1300, (Y - 300) / 700),
-      pattern: (X, Y) => { const r = Math.floor(Y / 28); return pmod(Y, 28) < 2 || pmod(X + (r % 2) * 24, 48) < 2 ? 3 : -1; }, // flagstones
-      shadows: [[-1200, D_WALL, 2640, D_WALL + 18], ...shadows], over, // the wall's foot in shade
-    });
     const wall = wallArt(C);
     sc.stand(wall, WX, D_WALL, WW * 2, WH * 2);
     const wp = Scene.pen(wall.getContext('2d'), C);
@@ -238,7 +236,6 @@
       cs.forEach((c) => candleArt(p, c));
       return { g, p, cs };
     });
-    motes(sc, { n: 24, dir: 1, ks: [6], fps: 3, depth: -100, h: 200 }); // dust drifting down
     let last = -1;
     sc.every(50, () => {
       const st = Math.floor(performance.now() / 160);
@@ -256,50 +253,206 @@
         for (const c of f.cs) { candleArt(f.p, c); if (heat && lit(heat, c)) flameArt(f.p, c, st, 0); }
       }
     });
-    return gnd;
   }
 
-  /* ---------- the settings ---------- */
-  // Each: ground options for the heat, the props (kinds, size), and the life behind the action.
-  const SET = {
-    ruins: {
-      ground: () => ({}),
-      life(sc, heat) { motes(sc, heat ? { n: 15 + 25 * heat } : { n: 20, dir: 1, ks: [5], fps: 4 }); },
-    },
-    crypt: { build: crypt },
-    casino: {
-      ground: () => ({ seed: 17, grit: 1200, pattern: (X, Y) => (pmod(X + Y, 64) < 2 || pmod(X - Y, 64) < 2 ? 4 : -1) }),
-      kinds: { spike: 'slot', basalt: 'chips', strata: 'tower' }, size: { slot: [0.45, 1.3], chips: [0.5, 0.6], tower: [0.6, 1.2] },
-      life(sc, heat) {
-        motes(sc, { n: 12 + 10 * heat, ks: [8, 7], fps: 3 });
-        crosser(sc, { depth: 120, w: 8, h: 8, period: 6, frames: 4, fps: 8, draw: ({ R }, f) => { R(1, 0, 6, 8, 1); R(0, 1, 8, 6, 1); R(1, 1, 6, 6, 8); R(1 + [0, 2, 4, 2][f], 1, 2, 6, 7); } }); // a rolling chip
-      },
-    },
-    lava: {
-      ground: (heat) => ({ tones: [2, 3, 4, 5], seed: 7, pattern: (X, Y) => { const n = Math.abs(Math.sin(X * 0.013 + Math.sin(Y * 0.021) * 2) + Math.sin(Y * 0.017 + X * 0.004)); return n < 0.035 ? (heat ? 8 : 1) : n < 0.07 ? 2 : -1; } }),
-      kinds: { strata: 'vent' }, size: { vent: [0.6, 1.4] },
-      life(sc, heat) { motes(sc, { n: 30 + 20 * heat }); motes(sc, { n: 10 + 10 * heat, depth: 60, h: 80, seed: 3 }); },
-    },
-    graveyard: {
-      ground: () => ({ seed: 29, pattern: (X, Y) => (Math.abs(X - 720 - (Y - 400) * 0.35) < 70 && bay(Math.round(X / 2), Math.round(Y / 2)) < 9 ? 6 : -1) }),
-      kinds: { spike: 'tree', basalt: 'stone', strata: 'cross' }, size: { tree: [0.6, 1.6], stone: [0.45, 0.9], cross: [0.55, 0.8] },
-      life(sc) {
-        motes(sc, { n: 25, dir: 1, ks: [4], fps: 4 });
-        crosser(sc, { depth: -380, w: 11, h: 5, lift: 90, period: 11, draw: ({ R }, f) => { R(4, 2, 4, 2, 1); R(8, 1, 2, 1, 1); if (f) { R(0, 3, 4, 1, 1); } else { R(1, 0, 3, 2, 1); R(4, 1, 1, 1, 1); } } }); // a crow
-      },
-    },
+  /* ---------- critters and effects ---------- */
+  /* Named background life any scene (or the builder, builder.html) can add: CRITTERS pass behind
+     the action (Scene.crosser), EFFECTS drift through the air (Scene.motes); each takes the heat
+     and option overrides. */
+  const BAT = ({ R }, f) => { R(5, 2, 3, 3, 1); if (f) { R(0, 3, 5, 1, 1); R(8, 3, 5, 1, 1); } else { R(1, 0, 4, 2, 1); R(8, 0, 4, 2, 1); R(4, 1, 1, 1, 1); R(8, 1, 1, 1, 1); } };
+  const CROW = ({ R }, f) => { R(4, 2, 4, 2, 1); R(8, 1, 2, 1, 1); if (f) R(0, 3, 4, 1, 1); else { R(1, 0, 3, 2, 1); R(4, 1, 1, 1, 1); } };
+  const CHIP = ({ R }, f) => { R(1, 0, 6, 8, 1); R(0, 1, 8, 6, 1); R(1, 1, 6, 6, 8); R(1 + [0, 2, 4, 2][f], 1, 2, 6, 7); };
+  const CRITTERS = {
+    bat: (sc, heat, o = {}) => crosser(sc, { depth: -260, w: 13, h: 6, lift: 70, period: 7, draw: BAT, ...o }),
+    crow: (sc, heat, o = {}) => crosser(sc, { depth: -380, w: 11, h: 5, lift: 90, period: 11, draw: CROW, ...o }),
+    chip: (sc, heat, o = {}) => crosser(sc, { depth: 120, w: 8, h: 8, period: 6, frames: 4, fps: 8, draw: CHIP, ...o }),
+  };
+  const EFFECTS = {
+    embers: (sc, heat, o = {}) => motes(sc, { n: 15 + 20 * heat, ...o }),
+    ash: (sc, heat, o = {}) => motes(sc, { n: 25, dir: 1, ks: [4], fps: 4, ...o }),
+    dust: (sc, heat, o = {}) => motes(sc, { n: 24, dir: 1, ks: [6], fps: 3, depth: -100, h: 200, ...o }),
+    glints: (sc, heat, o = {}) => motes(sc, { n: 12 + 10 * heat, ks: [8, 7], fps: 3, ...o }),
+    cinders: (sc, heat, o = {}) => (heat ? motes(sc, { n: 15 + 25 * heat, ...o }) : motes(sc, { n: 20, dir: 1, ks: [5], fps: 4, ...o })), // pale ash, embers once the spires heat up
+    sparks: (sc, heat, o = {}) => motes(sc, { n: 10 + 10 * heat, depth: 60, h: 80, seed: 3, ...o }), // embers low and near
   };
 
-  function setting(sc, name, { heat = 0, area = AREA, clear = CLEAR, near = [], light = LIGHT, rubble = [], shards = [], shadows = [], over, ...more } = {}) {
-    if (name === 'forge') return Factory.build(sc, heat, { rubble, shards, shadows, over });
-    const S = SET[name];
-    if (!S) throw new Error('No scene setting called ' + name + ' - try ' + Object.keys(SET).concat('forge').join(', '));
-    if (S.build) return S.build(sc, heat, { shadows, over });
-    const gnd = Scene.ground(sc, { x0: -1200, y0: -1000, w: 1920, h: 900, light, rubble, shards, shadows, over, ...S.ground(heat), ...more });
-    Scene.ruins(sc, { area, clear, near, heat, draw: ART[name] || RunMap.propArt, kinds: S.kinds, size: S.size });
-    S.life(sc, heat);
+  /* ---------- the parts: floors, backdrops, features ---------- */
+  /* A place is parts that mix and match: a FLOOR (the ground under everything), a BACKDROP (what
+     closes off the back: the orrery sky, or a wall), FEATURES (natural features standing on the
+     floor, scattered to the horizon: spires, slot cabinets... any number of sets at once), and
+     the CRITTERS and EFFECTS moving in the background (above). Each preset in SETTINGS names its own. */
+  const flagstones = (X, Y) => { const r = Math.floor(Y / 28); return pmod(Y, 28) < 2 || pmod(X + (r % 2) * 24, 48) < 2 ? 3 : -1; };
+  /* Patterned floors, each pattern(heat) => (X, Y) => ramp index or -1, in plane units. Seams are
+     ink-dark, rims lit on the upper left and shaded on the lower right; heat brings brimstone (8)
+     into the joints at ante 3. */
+  const fh = (i, j, s) => { const a = Math.sin(i * 127.1 + j * 311.7 + s * 74.7) * 43758.5453; return a - Math.floor(a); };
+  const S3 = Math.sqrt(3);
+  // A cell's thing (a stone, a bone), worked out once: the floors ask about every pixel.
+  const cells = (make) => { const m = new Map(); return (i, j) => { const k = i * 65536 + j; let v = m.get(k); if (v === undefined) m.set(k, v = make(i, j)); return v; }; };
+  const cobbles = (heat) => {
+    const S = 22, stone = cells((i, j) => ({ sx: (i + 0.2 + 0.6 * fh(i, j, 1)) * S, sy: (j + 0.2 + 0.6 * fh(i, j, 2)) * S, id: fh(i, j, 3) }));
+    return (X, Y) => {
+    const ci = Math.floor(X / S), cj = Math.floor(Y / S);
+    let d1 = 1e9, d2 = 1e9, px = 0, py = 0, id = 0;
+    for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) {
+      const c = stone(ci + a, cj + b), d = Math.hypot(X - c.sx, Y - c.sy);
+      if (d < d1) { d2 = d1; d1 = d; px = c.sx; py = c.sy; id = c.id; } else if (d < d2) d2 = d;
+    }
+    const e = d2 - d1;
+    if (e < 3) return heat === 2 && id > 0.55 ? 8 : 2;
+    if (e < 6) return X - px + (Y - py) < 0 ? 7 : 3;
+    if (heat >= 1 && id < 0.3 && Math.abs((X - px) * 0.7 - (Y - py)) < 1.2 && d1 < S * 0.4) return heat === 2 ? 8 : 3; // cracked stones
+    return -1;
+    };
+  };
+  const planks = (heat) => (X, Y) => {
+    const B = 24, L = 88, row = Math.floor(Y / B), y = pmod(Y, B), off = fh(row, 0, 5) * L, u = X + off, col = Math.floor(u / L), x = pmod(u, L), id = fh(row, col, 6);
+    if (y < 2 || x < 2) return 2;
+    if (heat === 2 && id < 0.25) { const d = Math.hypot((x - L / 2) / 16, (y - B / 2) / 6); if (d < 1) return d > 0.75 ? 8 : 1; } // burned through
+    if (y < 4) return 7;
+    if (x < 4) return 6;
+    if (y >= B - 2) return 3;
+    if ((x >= 7 && x < 9 || x >= L - 9 && x < L - 7) && (y >= 6 && y < 8 || y >= B - 8 && y < B - 6)) return 2; // nails
+    if (heat >= 1 && id < 0.45 && bay(X >> 1, Y >> 1) < 8) return 3; // scorched boards
+    const g = Y + Math.sin(u * 0.05 + row) * 3, gf = g / 6 - Math.floor(g / 6);
+    return gf < 0.17 && fh(Math.floor(u / 12), row, 7) > 0.4 ? 4 : -1; // grain
+  };
+  const checker = (heat) => (X, Y) => {
+    const T = 40, x = pmod(X, T), y = pmod(Y, T), dk = (Math.floor(X / T) + Math.floor(Y / T)) & 1;
+    if (heat >= 1 && Math.abs(Math.sin(X * 0.03 + Math.sin(Y * 0.05) * 2) + Math.sin(Y * 0.04 + X * 0.011)) < 0.045) return heat === 2 ? 8 : 2;
+    if (x < 2 || y < 2) return 3;
+    if (x < 4 || y < 4) return 7;
+    if (x >= T - 2 || y >= T - 2) return dk ? 3 : 4;
+    return dk ? (bay(X >> 1, Y >> 1) < 5 ? 3 : 4) : -1;
+  };
+  const dunes = (heat) => (X, Y) => {
+    const S = 30, i = Math.floor(X / S), j = Math.floor(Y / S), q = fh(i, j, 8), cx = (i + 0.3 + 0.4 * fh(i, j, 9)) * S, cy = (j + 0.3 + 0.4 * fh(i, j, 10)) * S, d = Math.hypot((X - cx) / 1.4, Y - cy);
+    if (q < [0.18, 0.3, 0.5][heat] && d < 4.5) { // pebbles, more of them brimstone each ante
+      const br = q < [0, 0.2, 0.4][heat];
+      if (d > 3.2) return X - cx + (Y - cy) > 0 ? 2 : br ? 7 : 6;
+      return br ? 8 : 4;
+    }
+    const w = (Y + Math.sin(X * 0.035) * 7 + Math.sin(X * 0.011 + Y * 0.006) * 16) / 20, f = w - Math.floor(w);
+    return f < 0.1 ? 3 : f < 0.18 ? 7 : -1; // ripple troughs and their lit crests
+  };
+  const columns = (heat) => (X, Y) => {
+    const s = 15, x = (S3 / 3 * X - Y / 3) / s, z = (2 / 3 * Y) / s, y = -x - z;
+    let rx = Math.round(x), ry = Math.round(y), rz = Math.round(z);
+    const ex = Math.abs(rx - x), ey = Math.abs(ry - y), ez = Math.abs(rz - z);
+    if (ex > ey && ex > ez) rx = -ry - rz; else if (ey > ez) ry = -rx - rz; else rz = -rx - ry;
+    const dx = X - s * S3 * (rx + rz / 2), dy = Y - s * 1.5 * rz, id = fh(rx, rz, 11);
+    const e = s * S3 / 2 - Math.max(Math.abs(dx), Math.abs(dx) * 0.5 + Math.abs(dy) * S3 / 2);
+    if (e < 1.8) return heat === 2 && id > 0.5 ? 8 : 2;
+    if (e < 4) return dx + dy < 0 ? 7 : 3;
+    return id < [0.15, 0.3, 0.3][heat] ? (bay(X >> 1, Y >> 1) < 9 ? 3 : 4) : -1; // sunk columns
+  };
+  const ossuary = (heat) => {
+    const S = 34, at = cells((i, j) => {
+      if (fh(i, j, 12) < 0.55) return null;
+      const an = fh(i, j, 15) * Math.PI;
+      return { bx: (i + 0.5) * S + (fh(i, j, 13) - 0.5) * 8, by: (j + 0.5) * S + (fh(i, j, 14) - 0.5) * 8, ux: Math.cos(an), uy: Math.sin(an), L: 7 + fh(i, j, 16) * 5 };
+    });
+    const bone = (X, Y) => {
+      const ci = Math.floor(X / S), cj = Math.floor(Y / S);
+      for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) {
+        const c = at(ci + a, cj + b);
+        if (!c) continue;
+        const { ux, uy, L } = c, rx = X - c.bx, ry = Y - c.by;
+        if (Math.abs(rx) > L + 5 || Math.abs(ry) > L + 5) continue;
+        if (Math.abs(rx * ux + ry * uy) <= L && Math.abs(-rx * uy + ry * ux) < 2.2) return true;
+        for (const e of [-L, L]) for (const k of [-2, 2]) if (Math.hypot(rx - (e * ux - k * uy), ry - (e * uy + k * ux)) < 2.8) return true;
+      }
+      return false;
+    };
+    return (X, Y) => {
+      if (bone(X, Y)) return bone(X + 2, Y + 2) ? (heat ? 6 : 7) : heat ? 3 : 4; // sooted from ante 2
+      if (bone(X - 2, Y - 2)) return 3;
+      return heat === 2 && fh(Math.floor(X / 10), Math.floor(Y / 10), 17) < 0.08 && pmod(X, 10) < 4 && pmod(Y, 10) < 2 ? 8 : -1; // embers
+    };
+  };
+  // Floors: Scene.ground options for the heat, or build(sc, heat, opts) for a floor with more to it.
+  const FLOORS = {
+    ash: () => ({}),
+    flagstones: () => ({ seed: 31, grit: 1500, pattern: flagstones, light: (X, Y) => 1.15 - Math.hypot((X - 640) / 1300, (Y - 300) / 700) }),
+    felt: () => ({ seed: 17, grit: 1200, pattern: (X, Y) => (pmod(X + Y, 64) < 2 || pmod(X - Y, 64) < 2 ? 4 : -1) }),
+    cracks: (heat) => ({ tones: [2, 3, 4, 5], seed: 7, pattern: (X, Y) => { const n = Math.abs(Math.sin(X * 0.013 + Math.sin(Y * 0.021) * 2) + Math.sin(Y * 0.017 + X * 0.004)); return n < 0.035 ? (heat ? 8 : 1) : n < 0.07 ? 2 : -1; } }),
+    path: () => ({ seed: 29, pattern: (X, Y) => (Math.abs(X - 720 - (Y - 400) * 0.35) < 70 && bay(Math.round(X / 2), Math.round(Y / 2)) < 9 ? 6 : -1) }),
+    grate: { build: (sc, heat, o) => Factory.floor(sc, heat, o) },
+    cobbles: (heat) => ({ seed: 37, grit: 1200, pattern: cobbles(heat) }),
+    planks: (heat) => ({ seed: 41, grit: 800, pattern: planks(heat) }),
+    checker: (heat) => ({ seed: 43, grit: 800, pattern: checker(heat) }),
+    dunes: (heat) => ({ seed: 47, grit: 2000, pattern: dunes(heat) }),
+    columns: (heat) => ({ seed: 53, grit: 1000, pattern: columns(heat) }),
+    ossuary: (heat) => ({ seed: 59, grit: 1200, pattern: ossuary(heat) }),
+  };
+  // Backdrops: the sky stays open (the horizon is wherever the floor ends); a wall builds itself in
+  // its place at depth `front`, where the floor stops. `open` is where open floor begins in front
+  // of it: features scatter only nearer than that, never into the wall's own works.
+  const BACKDROPS = {
+    sky: {},
+    crypt: { front: D_WALL, open: D_WALL + 30, wall: cryptWall }, // past the shade at the wall's foot
+    forge: { front: -130, open: 170, wall: (sc, heat) => Factory.backdrop(sc, heat) }, // the hall (D_HALL, js/factory.js); open floor starts in front of its lava river (-90..-40) and machine row (D_MACH 150)
+  };
+  // Features: props scattered over the floor (Scene.ruins), drawn with propArt's signature; their
+  // kinds rename the spire kinds ('spike' tall, 'basalt' low, 'strata' the one that shows the heat).
+  const FEATURES = {
+    spires: {},
+    slots: { draw: ART.casino, kinds: { spike: 'slot', basalt: 'chips', strata: 'tower' }, size: { slot: [0.45, 1.3], chips: [0.5, 0.6], tower: [0.6, 1.2] } },
+    vents: { draw: ART.lava, kinds: { strata: 'vent' }, size: { vent: [0.6, 1.4] } },
+    graves: { draw: ART.graveyard, kinds: { spike: 'tree', basalt: 'stone', strata: 'cross' }, size: { tree: [0.6, 1.6], stone: [0.45, 0.9], cross: [0.55, 0.8] } },
+  };
+  // The presets: each place's floor, backdrop, features (any number), and the critters and effects
+  // moving in its background. The forge's motion is its machines, part of its backdrop.
+  const SETTINGS = {
+    ruins: { floor: 'ash', backdrop: 'sky', features: ['spires'], critters: [], effects: ['cinders'] },
+    crypt: { floor: 'flagstones', backdrop: 'crypt', features: [], critters: [], effects: ['dust'] },
+    casino: { floor: 'felt', backdrop: 'sky', features: ['slots'], critters: ['chip'], effects: ['glints'] },
+    lava: { floor: 'cracks', backdrop: 'sky', features: ['vents'], critters: [], effects: ['embers', 'sparks'] },
+    graveyard: { floor: 'path', backdrop: 'sky', features: ['graves'], critters: ['crow'], effects: ['ash'] },
+    forge: { floor: 'grate', backdrop: 'forge', features: [], critters: [], effects: [] },
+  };
+  /* `horizon` (under the sky) sets how much sky shows over the features' far row: 'wall' (the
+     standard: the floor runs far off and a tall row hides the horizon), 'low' (as the hand scenes:
+     the floor ends nearer, at `far`, with a low row there) or 'open' (the same, the middle kept
+     clear at every depth). The sky shows where the floor ends, so pulling `far` in lowers it. */
+  const HORIZONS = {
+    wall: { far: -1000 },
+    low: { far: -380, ruins: { wall: 0.3, count: 150 } },
+    open: { far: -380, ruins: { wall: 0, count: 110 }, clearMiddle: true },
+  };
+
+  /* Build a place behind the action and return its floor (Scene.ground's { clear, shade, patch })
+     for contact shadows. `name` is a preset from SETTINGS; floor and backdrop swap in another's,
+     `features` is a list of feature sets scattered together (or one name), and `critters` /
+     `effects` are lists of Scene.CRITTERS / Scene.EFFECTS names for the background motion (each
+     defaults to the preset's; `life: false` leaves the preset's motion out). `near` props are big
+     features placed by hand near the action, in the spire kinds, drawn as the first feature set's
+     own. Features in front of a wall stop short of it, with no tall far row. */
+  function setting(sc, name, { heat = 0, floor, backdrop, features, critters, effects, life = true, horizon = 'wall', area = AREA, clear = CLEAR, near = [], light = LIGHT, rubble = [], shards = [], shadows = [], over, ...more } = {}) {
+    const P = SETTINGS[name];
+    if (!P) throw new Error('No scene setting called ' + name + ' - try ' + Object.keys(SETTINGS).join(', '));
+    const fs = [].concat(features || P.features).filter((k) => k !== 'none'), F = FLOORS[floor || P.floor], B = BACKDROPS[backdrop || P.backdrop];
+    const cs = critters || (life ? P.critters : []), es = effects || (life ? P.effects : []);
+    const bad = [!F && 'floor ' + floor, !B && 'backdrop ' + backdrop, ...fs.filter((k) => !FEATURES[k]).map((k) => 'features ' + k),
+      ...cs.filter((k) => !CRITTERS[k]).map((k) => 'critter ' + k), ...es.filter((k) => !EFFECTS[k]).map((k) => 'effect ' + k)].filter(Boolean);
+    if (bad.length) throw new Error('Unknown part: ' + bad.join(', '));
+    const H = B.wall ? { far: B.front, from: B.open, ruins: { wall: 0, count: 140 } } : HORIZONS[horizon] || HORIZONS.wall, far = H.far, from = H.from || far;
+    if (B.wall) B.wall(sc, heat);
+    // Each feature set takes a share of the props, from its own random stream; the near props go with the first.
+    // Before a wall they start where its open floor begins (Scene.ruins starts 40 past area.y0).
+    const count = Math.round((H.ruins && H.ruins.count || 380) / Math.max(1, fs.length)), y0 = H.from ? from - 40 : far;
+    fs.forEach((k, i) => Scene.ruins(sc, { area: { ...area, y0 }, clear: H.clearMiddle ? { ...clear, y: far } : clear, near: i ? [] : near, heat, ...FEATURES[k], ...H.ruins, count, seed: 5 + i * 7 }));
+    const gnd = F.build ? F.build(sc, heat, { rubble, shards, shadows, over, y0: far })
+      : Scene.ground(sc, { x0: -1200, y0: far, w: 1920, h: Math.round((820 - far) / 2), light, rubble, shards, shadows: B.wall ? [[-1200, far, 2640, far + 18], ...shadows] : shadows, over, ...F(heat), ...more }); // a wall's foot in shade
+    for (const k of cs) CRITTERS[k](sc, heat);
+    for (const k of es) EFFECTS[k](sc, heat);
     return gnd;
   }
 
-  Object.assign(Scene, { setting, motes, crosser, SETTINGS: Object.keys(SET).concat('forge') });
+  Object.assign(Scene, {
+    setting, motes, crosser, CRITTERS, EFFECTS,
+    SETTINGS: Object.keys(SETTINGS), PRESETS: SETTINGS,
+    HORIZONS: Object.keys(HORIZONS),
+    PARTS: { floors: Object.keys(FLOORS), backdrops: Object.keys(BACKDROPS), features: Object.keys(FEATURES), walls: Object.keys(BACKDROPS).filter((k) => BACKDROPS[k].wall) },
+  });
 })();

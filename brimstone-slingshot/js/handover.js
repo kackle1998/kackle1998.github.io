@@ -248,5 +248,19 @@ const Handover = (() => {
     return draw;
   }
 
-  return { make, CARDS_AT, LAND };
+  /* PROPS: this scene's objects for other scenes and the builder (js/props.js): each { id, name, x0,
+     w, cx (its middle), gy (its ground line), home: { x, depth } (where it stands in this scene),
+     draw(pln, t, heat, sc) } in this file's scene px. */
+  const handCv = new Map();
+  const PROPS = [
+    { id: 'heap', name: 'bone heap', x0: 50, w: 52, cx: 76, gy: GY, home: { x: LX + 10, depth: D_ACT }, draw: (pln) => heap(pln.p, 76) },
+    { id: 'portcullis', name: 'portcullis', x0: 60, w: 18, cx: 69, gy: GY, home: { x: GATE.l + 7, depth: D_ACT }, draw: (pln) => gate(pln.p, 62, 0) },
+    { id: 'hand', name: "Pit Boss's floating hand", x0: 30, w: 90, cx: 75, gy: GY, home: { x: RX, depth: D_ACT },
+      draw(pln, t, heat, sc) { // the open right hand, hovering a step up and down
+        const key = sc.C.join();
+        if (!handCv.has(key)) { const cv = document.createElement('canvas'); cv.width = HAND.w; cv.height = HAND.h; handArt(cv, sc.C, 'open', false); handCv.set(key, cv); }
+        pln.art(handCv.get(key), 75 - HAND.ax, Y - HAND.ay + Math.floor(t * 2.5) % 2, U / 2);
+      } },
+  ];
+  return { make, CARDS_AT, LAND, PROPS };
 })();

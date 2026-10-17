@@ -241,5 +241,9 @@ const Draft = (() => {
     return draw;
   }
 
-  return { mount, at, LANDED, REST, PULL, END, CARDS_AT, ENTER_CUES, CUES };
+  /* PROPS: this scene's objects for other scenes and the builder (js/props.js): each { id, name, x0,
+     w, cx (its middle), gy (its ground line), home: { x, depth } (where it stands in this scene),
+     draw(pln, t, heat, sc) } in this file's scene px. */
+  const PROPS = [{ id: 'pack', name: 'giant booster pack', x0: PX0 - 2, w: PW + 4, cx: PX0 + PW / 2, gy: GY, home: { x: PX0 + PW / 2, depth: D_ACT }, draw: (pln) => packArt(pln.p, 0, 0) }];
+  return { mount, at, LANDED, REST, PULL, END, CARDS_AT, ENTER_CUES, CUES, PROPS };
 })();

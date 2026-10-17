@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Scene Builder</title>
+  <!-- The event scene builder: event mockups on the game's own scene code, with the place, ante,
+       camera and background life picked by hand. Open builder.html?mockup=<name> to show the
+       designs in mockups/<name>.js (see mockups/README.md); with no mockup it shows the figurine
+       landing. SAVE PICKS writes builder-picks.json (serve.py) for the event-animation skill. -->
+  <link href="https://fonts.googleapis.com/css2?family=Silkscreen&family=VT323&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <style>
+    /* style.css locks the page for the full-screen game; the builder scrolls. */
+    html:has(body.bd), body.bd { height: auto; overflow: auto; }
+    body.bd { margin: 0; padding: 16px; background: var(--paper); color: var(--ink); font: 18px/1.3 'VT323', monospace; }
+    .bd h1 { font: 16px 'Silkscreen', monospace; margin: 0 0 4px; letter-spacing: 1px; }
+    .bd-sub { margin: 0 0 12px; color: var(--dark); }
+    .bd-wrap { display: grid; grid-template-columns: 250px minmax(0, 1fr); gap: 16px; align-items: start; }
+    .bd-panel { position: sticky; top: 16px; max-height: calc(100vh - 32px); overflow-y: auto; border: 3px solid var(--ink); background: var(--white); padding: 10px 12px; } /* scrolls on its own when taller than the window */
+    .bd-panel h2 { font: 11px 'Silkscreen', monospace; margin: 12px 0 4px; letter-spacing: 1px; }
+    .bd-panel h2:first-child { margin-top: 0; }
+    .bd-panel select, .bd-panel button { font: 17px 'VT323', monospace; color: var(--ink); background: var(--paper); border: 2px solid var(--ink); padding: 1px 6px; cursor: pointer; }
+    .bd-panel select { width: 100%; }
+    .bd-panel button.on { background: var(--ink); color: var(--white); }
+    .bd-panel label { display: block; cursor: pointer; }
+    .bd-panel label.off { color: var(--mid); cursor: default; }
+    .bd-row { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+    .bd-panel input[type=range] { width: 100%; accent-color: var(--ink); }
+    .bd-note { color: var(--dark); font-size: 16px; margin: 6px 0 0; }
+    .bd-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(420px, 100%), 1fr)); gap: 16px; }
+    @media (max-width: 760px) { /* narrow windows: the panel above the designs */
+      .bd-wrap { grid-template-columns: minmax(0, 1fr); }
+      .bd-panel { position: static; max-height: none; }
+    }
+    .bd-cell.big { grid-column: 1 / -1; }
+    .bd-frame { position: relative; width: 100%; aspect-ratio: 1088 / 449; overflow: hidden; cursor: zoom-in; }
+    .bd-cell.big .bd-frame { cursor: zoom-out; }
+    .bd-frame .bw-stage { position: absolute; left: 0; top: 0; width: 1082px; height: 443px; flex: none; transform-origin: 0 0; cursor: inherit; }
+    .bd-name { font: 12px 'Silkscreen', monospace; margin: 6px 0 0; display: flex; justify-content: space-between; gap: 8px; }
+    .bd-desc { margin: 2px 0 0; color: var(--dark); }
+    .bd-err { color: var(--ink); background: var(--accent); padding: 4px 8px; margin: 0 0 12px; display: none; }
+    .bd-prop select { width: 100%; margin: 0 0 4px 22px; width: calc(100% - 22px); }
+    .bd-out { width: 100%; height: 120px; font: 14px monospace; margin-top: 6px; display: none; }
+  </style>
+</head>
+<body class="bd">
+  <h1>SCENE BUILDER</h1>
+  <p class="bd-sub" id="bdSub"></p>
+  <p class="bd-err" id="bdErr"></p>
+  <div class="bd-wrap">
+    <div class="bd-panel">
+      <h2>START FROM</h2>
+      <select id="bdStart"></select>
+      <p class="bd-note" id="bdStartNote">Copy an existing event's stage, then change anything.</p>
+      <h2>PRESET</h2>
+      <select id="bdSetting"></select>
+      <h2>FLOOR</h2>
+      <select id="bdFloor"></select>
+      <h2>BACKDROP</h2>
+      <select id="bdBack"></select>
+      <h2>FEATURES</h2>
+      <div id="bdFeat"></div>
+      <label><input type="checkbox" id="bdNear" checked> big ones close to the action</label>
+      <h2>HORIZON</h2>
+      <select id="bdSky"></select>
+      <h2>ANTE</h2>
+      <div class="bd-row" id="bdAnte"></div>
+      <h2>CAMERA</h2>
+      <select id="bdCam"></select>
+      <h2>PROPS</h2>
+      <div id="bdProps"></div>
+      <p class="bd-note">Objects from the events. Each stands at a spot: HOME is where its own event puts it; the rest are the standard spots every scene shares.</p>
+      <h2>CRITTERS</h2>
+      <div id="bdCritters"></div>
+      <h2>EFFECTS</h2>
+      <div id="bdEffects"></div>
+      <h2>PLAYBACK</h2>
+      <div class="bd-row"><button id="bdPlay">PAUSE</button><button id="bdRestart">RESTART</button><select id="bdSpeed" style="width:auto"><option value="1">1x</option><option value="0.5">1/2x</option><option value="0.25">1/4x</option></select></div>
+      <input type="range" id="bdScrub" min="0" max="1000" value="0">
+      <h2>PICKS</h2>
+      <div class="bd-row"><button id="bdSave">SAVE PICKS</button><button id="bdCopy">COPY</button></div>
+      <p class="bd-note" id="bdNote">Pick a design with its KEEP box, then save.</p>
+      <textarea class="bd-out" id="bdOut" readonly></textarea>
+    </div>
+    <div class="bd-grid" id="bdGrid"></div>
+  </div>
+
+  <script>
+  // Stand-ins for game globals the scene scripts touch but scenes never use, so the whole game
+  // needn't boot: the menu backdrop (js/crt.js), the run map's width (js/run.js), and the DOM
+  // helpers (js/ui.js) that the options screen's key handler calls on every keypress.
+  const Backdrop = { setPalette() {} };
+  const RUN_MAP_W = 836;
+  const $ = (s) => document.querySelector(s);
+  const $$ = (s) => document.querySelectorAll(s);
+  </script>
+  <script src="js/data.js"></script>
+  <script src="js/custom.js"></script>
+  <script src="js/render.js"></script>
+  <script src="js/engine.js"></script>
+  <script src="js/options.js"></script>
+  <script src="js/runmap.js"></script>
+  <script src="js/scene.js"></script>
+  <script src="js/settings.js"></script>
+  <script src="js/factory.js"></script>
+  <script src="js/draft.js"></script>
+  <script src="js/dip.js"></script>
+  <script src="js/shrine.js"></script>
+  <script src="js/handover.js"></script>
+  <script src="js/props.js"></script>
+  <script>
+  'use strict';
+  /* ---------- the builder ---------- */
+  /* A mockup file (mockups/<name>.js) calls Builder.add(design) once per design:
+       { name, desc, len, hold, at(t) => state, mount(ctx) => draw(state) }
+     The builder builds the stage (camera, setting, its life, the critters and effects picked
+     here) and hands mount a ctx: { sc, gnd, heat, U, GY, mx, D_ACT, D_FIG, plane(depth), fig,
+     land(t, opts), shadow(fx, depth, z) }. mount adds the design's own action and returns
+     draw(state); at(t) is the design's whole state at t seconds, with no DOM, as in a game
+     scene module (js/draft.js). The code moves into js/<name>.js as is. */
+  const Builder = (() => {
+    const designs = [];
+    const U = 4, GY = 103, D_ACT = 380, D_FIG = 396;
+    const mx = (x) => 720 + (x - 75) * U; // a scene x as a plane x (map units): scene x 75 is the middle
+    const LAND = { across: 80, back: 10, high: 40, ms: 700 };
+    /* Starters: each existing event's stage as the panel sets it, to copy from (as a new card copies
+       another). `file` is the event's code, which the event-animation skill copies for the new
+       event's mockup. The bowling lane isn't here: its lane and camera are its own (js/bowl.js). */
+    const home = (...ids) => ids.map((id) => ({ id, spot: 'home' }));
+    const RUINS = { setting: 'ruins', floor: 'ash', backdrop: 'sky', features: ['spires'], horizon: 'wall', near: true, critters: [], effects: [] };
+    const FACTORY = { setting: 'forge', floor: 'grate', backdrop: 'forge', features: [], horizon: 'wall', near: false, critters: [], effects: [], cam: 'factory', props: [] };
+    const HANDS = { ...RUINS, horizon: 'low', cam: 'wide' };
+    const STARTERS = {
+      // fig: where the event lands your figurine (scene x), for the default landing design.
+      draft: { name: 'Bone Draft', file: 'js/draft.js', ...RUINS, cam: 'draft', fig: 18, props: home('slingshot', 'pack') },
+      pool: { name: 'Molten Pool', file: 'js/dip.js', ...RUINS, cam: 'close', fig: 128, props: home('molten-pool') },
+      shrine: { name: 'Bone Shrine', file: 'js/shrine.js', setting: 'crypt', floor: 'flagstones', backdrop: 'crypt', features: [], horizon: 'wall', near: false, cam: 'draft', fig: 36, props: home('altar'), critters: ['bat'], effects: ['dust'] },
+      forge: { name: 'Crystal Forge', file: 'js/forge.js', ...FACTORY, fig: 44 },
+      rune: { name: 'Rune Circle', file: 'js/rune.js', ...FACTORY },
+      offer: { name: "The Dealer's Offer", file: 'js/handover.js', ...HANDS, props: home('hand') },
+      ghost: { name: 'Lost Spellslinger', file: 'js/handover.js', ...HANDS, props: home('hand') },
+      bones: { name: 'Bone Pile', file: 'js/handover.js', ...HANDS, props: home('hand', 'heap') },
+      relic: { name: 'Reliquary', file: 'js/handover.js', ...HANDS, props: home('hand', 'portcullis') },
+    };
+    // A newly ticked prop goes home, unless something already stands there: then the first free standard spot.
+    const SPOT_ORDER = ['front right', 'front left', 'front far right', 'front far left', 'mid right', 'mid left', 'mid center', 'back right', 'back left', 'back center'];
+    const CAMS = {
+      draft: { name: 'Bone Draft (standard)', rows: 700, top: 90 },
+      bowl: { name: 'Bowling lane (sky shows)', rows: 600, top: -30 },
+      close: { name: 'Molten Pool (close in)', rows: 480, top: -110 },
+      wide: { name: 'Hand scenes (pulled back)', rows: 860, top: 300 },
+      factory: { name: 'Factory (Rune Circle, Crystal Forge)', rows: 700, top: 178 },
+    };
+    // The parts' names in the panel (Scene.PARTS has them all; a new one shows by its own name).
+    const NAMES = { ash: 'ash', flagstones: 'flagstones', felt: 'casino felt', cracks: 'cracked basalt', path: 'dirt path', grate: 'iron grate', cobbles: 'cobbles', planks: 'planks', checker: 'checker tiles', dunes: 'dune sand', columns: 'basalt columns', ossuary: 'ossuary',
+      sky: 'orrery sky', crypt: 'crypt wall', forge: 'factory hall',
+      spires: 'spires', slots: 'slot cabinets', vents: 'spikes and vents', graves: 'trees and headstones', none: 'none' };
+    const named = (k) => NAMES[k] || k;
+    // Near props framing the action: the spire kinds, which each setting turns into its own.
+    const NEAR = [[-30, 210, 'spike', 80, 22], [3, 170, 'spike', 92, 24], [14, 250, 'basalt', 44, 24], [112, 170, 'spike', 104, 26], [138, 240, 'basalt', 40, 24], [180, 200, 'spike', 96, 24], [27, 190, 'strata', 116, 32], [124, 200, 'strata', 124, 36]];
+
+    // The figurine on the tail of the map's lob, from off the left, landing at scene x tx (the house entrance).
+    // edge: the stage's left edge in scene x (ctx.edge); left out, the lob keeps its own length.
+    function land(t, { tx = 75, depth = D_FIG, edge = Infinity } = {}) {
+      const L = Scene.land(Scene.cl(t * 1000 / LAND.ms), LAND.high * U), across = Math.max(LAND.across, tx - edge);
+      const S = { fx: tx - across * L.k, depth: depth - LAND.back * U * L.k, feet: GY - L.z / U, rot: L.rot, sx: 1, sy: 1 };
+      if (!L.k && t < LAND.ms / 1000 + Scene.SQUASH.ms / 1000) { S.sx = Scene.SQUASH.sx; S.sy = Scene.SQUASH.sy; }
+      return S;
+    }
+    // The default design: just the figurine landing, so the place itself can be judged.
+    const LANDING = {
+      name: 'Landing', desc: 'The figurine lands in the place you picked. Load a mockup to see an event here.', len: 1.6, hold: 1,
+      edge: Infinity, // the stage's left edge, from mount, so the lob starts off screen
+      at(t) { return land(t, { tx: (STARTERS[st.start] || {}).fig || 75, edge: this.edge }); }, // where the copied event lands you
+      mount(ctx) {
+        this.edge = ctx.edge;
+        const { fig, shadow, mx } = ctx;
+        return (S) => { shadow(S.fx, S.depth, (GY - S.feet) * U); fig.place({ x: mx(S.fx), y: S.depth, z: (GY - S.feet) * U, rot: S.rot, sx: S.sx, sy: S.sy }); };
+      },
+    };
+
+    const st = { setting: 'ruins', ante: 0, cam: 'draft', floor: 'ash', backdrop: 'sky', features: ['spires'], horizon: 'wall', props: [], near: true, start: null, critters: [], effects: [], keep: null, speed: 1 };
+    const KEY = 'builder.v1.' + (new URLSearchParams(location.search).get('mockup') || 'none');
+    try { Object.assign(st, JSON.parse(localStorage.getItem(KEY) || '{}')); } catch (e) { /* a private window: start fresh */ }
+    // Parts saved under an older builder, or since renamed: back to the preset's own.
+    const preset = () => Scene.PRESETS[st.setting] || Scene.PRESETS.ruins;
+    if (!Scene.PRESETS[st.setting]) st.setting = 'ruins';
+    if (!Scene.PARTS.floors.includes(st.floor)) st.floor = preset().floor;
+    if (!Scene.PARTS.backdrops.includes(st.backdrop)) st.backdrop = preset().backdrop;
+    if (!Array.isArray(st.features)) st.features = preset().features.slice(); // saved by an older builder
+    st.features = st.features.filter((k) => Scene.PARTS.features.includes(k));
+    if (!Array.isArray(st.critters)) st.critters = []; if (!Array.isArray(st.effects)) st.effects = [];
+    st.critters = st.critters.filter((k) => Scene.CRITTERS[k]); st.effects = st.effects.filter((k) => Scene.EFFECTS[k]);
+    delete st.life;
+    if (!STARTERS[st.start]) st.start = null;
+    if (!CAMS[st.cam]) st.cam = 'draft';
+    if (!Array.isArray(st.props)) st.props = [];
+    st.props = st.props.map((e) => (typeof e === 'string' ? { id: e, spot: 'home' } : e)).filter((e) => Scene.PROPS.some((q) => q.id === e.id)); // ids alone: saved by an older builder
+    if (!Scene.HORIZONS.includes(st.horizon)) st.horizon = 'wall';
+    const save = () => { try { localStorage.setItem(KEY, JSON.stringify(st)); } catch (e) { /* not kept */ } };
+    const $ = (id) => document.getElementById(id);
+    let live = [], T = 0, playing = true, lastNow = performance.now();
+
+    function stage(cell, d) {
+      const f = cell.querySelector('.bd-frame');
+      f.innerHTML = '<div class="bw-stage"></div>';
+      const el = f.firstChild;
+      el.style.transform = `scale(${f.clientWidth / 1088})`;
+      const cam = CAMS[st.cam], heat = st.ante, sc = Scene.mount(el, { rows: cam.rows, top: cam.top });
+      const near = st.near ? NEAR.map(([sx, dd, k, h, w], i) => ({ k, x: mx(sx), d: dd, h, w, l: 3, seed: 3 + i })) : [];
+      const gnd = Scene.setting(sc, st.setting, { heat, near, floor: st.floor, backdrop: st.backdrop, features: st.features, critters: st.critters, effects: st.effects, horizon: st.horizon, over: { x0: 260, y0: 280, w: 460, h: 130 } });
+      // The props ticked, each on its own plane at the next free spot around the action (scene x, depth).
+      const paints = st.props.map((e) => Scene.placeProp(sc, Scene.PROPS.find((q) => q.id === e.id), { spot: e.spot, heat }));
+      if (paints.length) sc.every(100, () => { const t = performance.now() / 1000; for (const p of paints) p(t); });
+      const fig = Scene.figure(sc, { s: U });
+      let sk = '';
+      const shadow = (fx, depth, z) => {
+        const key = [Math.round(fx), Math.round(depth), Math.round(z / 16)].join();
+        if (key === sk) return;
+        sk = key;
+        gnd.clear();
+        const r = Math.max(2.5, 6 - z / 80);
+        gnd.shade(mx(fx) + 4, depth + 2, r * 1.3, r * 0.5);
+      };
+      const plane = (depth, o = {}) => Scene.plane(sc, { left: mx(-12), x0: -12, depth, w: 174, h: GY, ...o });
+      const [edge] = Scene.span(sc, D_FIG, LAND.high * U);
+      const ctx = { sc, gnd, heat, U, GY, mx, D_ACT, D_FIG, plane, fig, shadow, edge: (edge - 720) / U + 75 - 24, land };
+      return d.mount(ctx);
+    }
+    function build() {
+      $('bdErr').style.display = 'none';
+      for (const s of live) {
+        try { s.draw = stage(s.cell, s.d); } catch (e) { s.draw = null; fail(s.d.name + ': ' + e.message); }
+      }
+    }
+    function fail(msg) { const el = $('bdErr'); el.textContent = msg; el.style.display = 'block'; console.error(msg); }
+    function layout() {
+      const list = designs.length ? designs : [LANDING];
+      $('bdGrid').innerHTML = '';
+      live = list.map((d, i) => {
+        const cell = document.createElement('div');
+        cell.className = 'bd-cell';
+        cell.innerHTML = `<div class="bd-frame"></div><p class="bd-name"><span></span>${designs.length ? `<label><input type="radio" name="keep" value="${i}"> KEEP</label>` : ''}</p><p class="bd-desc"></p>`;
+        cell.querySelector('.bd-name span').textContent = d.name;
+        cell.querySelector('.bd-desc').textContent = d.desc || '';
+        const r = cell.querySelector('input');
+        if (r) { r.checked = st.keep === d.name; r.onchange = () => { st.keep = d.name; save(); }; }
+        cell.querySelector('.bd-frame').onclick = () => { cell.classList.toggle('big'); requestAnimationFrame(fit); };
+        $('bdGrid').appendChild(cell);
+        return { d: { hold: 1, ...d }, cell, draw: null };
+      });
+      new ResizeObserver(fit).observe($('bdGrid'));
+      build();
+    }
+    function fit() { for (const s of live) { const f = s.cell.querySelector('.bd-frame'), el = f.firstChild; if (el) el.style.transform = `scale(${f.clientWidth / 1088})`; } }
+    const longest = () => Math.max(...live.map((s) => s.d.len + s.d.hold));
+    function frame(now) {
+      if (playing) T += (now - lastNow) / 1000 * st.speed;
+      lastNow = now;
+      const L = longest();
+      if (T > L) T %= L;
+      if (playing) $('bdScrub').value = Math.round(T / L * 1000);
+      for (const s of live) if (s.draw) { try { s.draw(s.d.at(Math.min(s.d.len, T % (s.d.len + s.d.hold)))); } catch (e) { s.draw = null; fail(s.d.name + ': ' + e.message); } }
+      requestAnimationFrame(frame);
+    }
+
+    function controls() {
+      const opt = (sel, entries, cur) => { sel.innerHTML = entries.map(([v, n]) => `<option value="${v}"${v === cur ? ' selected' : ''}>${n}</option>`).join(''); };
+      const set = (k, v) => { st[k] = v; save(); sync(); build(); };
+      opt($('bdStart'), [['', 'nothing (a blank stage)'], ...Object.entries(STARTERS).map(([k, v]) => [k, v.name])], st.start || '');
+      $('bdStart').onchange = (e) => {
+        const k = e.target.value, S = STARTERS[k];
+        if (S) { const { name, file, fig, ...parts } = S; Object.assign(st, JSON.parse(JSON.stringify(parts))); } // copies, so later changes don't touch the starter
+        st.start = k || null;
+        save(); sync(); build();
+      };
+      opt($('bdSetting'), Scene.SETTINGS.map((s) => [s, s]), st.setting);
+      // A preset sets every part, ticking its own features, critters and effects; each can then be changed on its own.
+      $('bdSetting').onchange = (e) => {
+        const P = Scene.PRESETS[e.target.value];
+        Object.assign(st, { setting: e.target.value, floor: P.floor, backdrop: P.backdrop, features: P.features.slice(), critters: P.critters.slice(), effects: P.effects.slice() });
+        save(); sync(); build();
+      };
+      opt($('bdBack'), Scene.PARTS.backdrops.map((k) => [k, named(k)]), st.backdrop);
+      $('bdBack').onchange = (e) => set('backdrop', e.target.value);
+      opt($('bdSky'), [['wall', 'far off, tall far row'], ['low', 'nearer, low far row'], ['open', 'nearer, open middle']], st.horizon);
+      $('bdSky').onchange = (e) => set('horizon', e.target.value);
+
+      $('bdAnte').innerHTML = [0, 1, 2].map((h) => `<button data-h="${h}">${h + 1}</button>`).join('');
+      $('bdAnte').querySelectorAll('button').forEach((b) => (b.onclick = () => set('ante', +b.dataset.h)));
+      opt($('bdCam'), Object.entries(CAMS).map(([k, c]) => [k, c.name]), st.cam);
+      $('bdCam').onchange = (e) => set('cam', e.target.value);
+      opt($('bdFloor'), Scene.PARTS.floors.map((k) => [k, named(k)]), st.floor);
+      $('bdFloor').onchange = (e) => set('floor', e.target.value);
+      $('bdNear').onchange = (e) => set('near', e.target.checked);
+      const boxes = (el, names, key) => {
+        el.innerHTML = names.map((n) => `<label><input type="checkbox" value="${n}"> ${n}</label>`).join('');
+        el.querySelectorAll('input').forEach((c) => (c.onchange = () => set(key, [...el.querySelectorAll('input:checked')].map((x) => x.value))));
+      };
+      boxes($('bdFeat'), Scene.PARTS.features, 'features');
+      $('bdFeat').querySelectorAll('label').forEach((l) => { const c = l.querySelector('input'); l.lastChild.textContent = ' ' + named(c.value); });
+      // Each prop: a box, and once ticked a spot picker (home, or a standard spot).
+      const spotOpts = [['home', 'home (its own event\'s spot)'], ...Object.keys(Scene.SPOTS).map((k) => [k, k])];
+      $('bdProps').innerHTML = Scene.PROPS.map((q) => `<div class="bd-prop"><label><input type="checkbox" value="${q.id}"> ${q.name} (${q.from})</label><select data-spot="${q.id}">${spotOpts.map(([v, n]) => `<option value="${v}">${n}</option>`).join('')}</select></div>`).join('');
+      const taken = (q, spot) => st.props.some((e) => { const a = Scene.spotOf(Scene.PROPS.find((x) => x.id === e.id), e.spot), b = Scene.spotOf(q, spot); return a.x === b.x && a.depth === b.depth; });
+      $('bdProps').querySelectorAll('input').forEach((c) => (c.onchange = () => {
+        const q = Scene.PROPS.find((x) => x.id === c.value);
+        set('props', c.checked ? st.props.concat({ id: q.id, spot: taken(q, 'home') ? SPOT_ORDER.find((k) => !taken(q, k)) || 'home' : 'home' }) : st.props.filter((e) => e.id !== q.id));
+      }));
+      $('bdProps').querySelectorAll('select').forEach((sel) => (sel.onchange = () => set('props', st.props.map((e) => (e.id === sel.dataset.spot ? { ...e, spot: sel.value } : e)))));
+      boxes($('bdCritters'), Object.keys(Scene.CRITTERS), 'critters');
+      boxes($('bdEffects'), Object.keys(Scene.EFFECTS), 'effects');
+      $('bdPlay').onclick = () => { playing = !playing; $('bdPlay').textContent = playing ? 'PAUSE' : 'PLAY'; };
+      $('bdRestart').onclick = () => { T = 0; };
+      $('bdSpeed').value = String(st.speed);
+      $('bdSpeed').onchange = (e) => { st.speed = +e.target.value; save(); };
+      $('bdScrub').oninput = (e) => { playing = false; $('bdPlay').textContent = 'PLAY'; T = e.target.value / 1000 * longest(); };
+      $('bdSave').onclick = savePicks;
+      $('bdCopy').onclick = () => { const out = $('bdOut'); out.value = JSON.stringify(picks(), null, 2); out.style.display = 'block'; out.select(); try { navigator.clipboard.writeText(out.value); $('bdNote').textContent = 'Copied. Paste it to Claude.'; } catch (e) { $('bdNote').textContent = 'Select the text and copy it.'; } };
+      sync();
+    }
+    function sync() {
+      $('bdAnte').querySelectorAll('button').forEach((b) => b.classList.toggle('on', +b.dataset.h === st.ante));
+      $('bdStart').value = st.start || '';
+      $('bdStartNote').textContent = st.start ? `Copied from ${STARTERS[st.start].name} (${STARTERS[st.start].file}). Change anything; the new event starts from its code.` : "Copy an existing event's stage, then change anything.";
+      $('bdCam').value = st.cam;
+      $('bdSetting').value = st.setting; $('bdFloor').value = st.floor; $('bdBack').value = st.backdrop;
+      $('bdFeat').querySelectorAll('input').forEach((c) => (c.checked = st.features.includes(c.value)));
+      $('bdNear').checked = st.near;
+      const wall = Scene.PARTS.walls.includes(st.backdrop), bare = !st.features.length; // the big close ones are features: none without them
+      $('bdNear').disabled = bare;
+      $('bdNear').parentElement.classList.toggle('off', bare);
+      $('bdSky').value = st.horizon;
+      $('bdSky').disabled = wall; // a wall stands in front of the sky: the features stop at it
+      $('bdProps').querySelectorAll('.bd-prop').forEach((row) => {
+        const e = st.props.find((x) => x.id === row.querySelector('input').value), sel = row.querySelector('select');
+        row.querySelector('input').checked = !!e;
+        sel.style.display = e ? '' : 'none';
+        if (e) sel.value = e.spot;
+      });
+      $('bdCritters').querySelectorAll('input').forEach((c) => (c.checked = st.critters.includes(c.value)));
+      $('bdEffects').querySelectorAll('input').forEach((c) => (c.checked = st.effects.includes(c.value)));
+    }
+    const picks = () => ({ mockup: new URLSearchParams(location.search).get('mockup') || null, keep: st.keep, startFrom: st.start ? { event: STARTERS[st.start].name, file: STARTERS[st.start].file } : null, setting: st.setting, floor: st.floor, backdrop: st.backdrop, features: st.features, horizon: st.horizon, props: st.props, ante: st.ante + 1, camera: st.cam, bigFeaturesClose: st.near, critters: st.critters, effects: st.effects });
+    async function savePicks() {
+      try {
+        const r = await fetch('/builder/picks', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(picks(), null, 2) });
+        if (!r.ok) throw new Error(r.status);
+        $('bdNote').textContent = 'Saved to builder-picks.json. Tell Claude you saved.';
+      } catch (e) {
+        $('bdNote').textContent = "Couldn't save (is serve.py running?). Use COPY instead.";
+      }
+    }
+
+    function start() {
+      const name = new URLSearchParams(location.search).get('mockup');
+      $('bdSub').textContent = name ? `Mockup: ${name} (mockups/${name}.js)` : 'No mockup loaded: add ?mockup=<name> to the address.';
+      controls();
+      if (!name) { layout(); requestAnimationFrame(frame); return; }
+      const s = document.createElement('script');
+      s.src = `mockups/${encodeURIComponent(name)}.js?t=${Date.now()}`;
+      s.onload = () => { layout(); requestAnimationFrame(frame); };
+      s.onerror = () => { fail(`Couldn't load mockups/${name}.js`); layout(); requestAnimationFrame(frame); };
+      document.body.appendChild(s);
+    }
+    window.addEventListener('error', (e) => fail(e.message));
+    return { add: (d) => designs.push(d), start, land, U, GY, D_ACT, D_FIG, mx, LAND };
+  })();
+  Builder.start();
+  </script>
+</body>
+</html>

@@ -88,19 +88,6 @@ const Forge = (() => {
     const g = kind ? HEART : SWORD, ox = cx - (g[0].length >> 1), oy = y + (kind ? 2 : 1);
     g.forEach((row, j) => [...row].forEach((ch, i) => { if (ch === '#') R(ox + i, oy + j, 1, 1, 8); }));
   }
-  // A card face, narrowed about its middle to width w while it opens: a beast in its frame, a text band, its stats.
-  function faceArt({ P, R }, x, y, w) {
-    const { W, H } = Scene.CARD;
-    x += (W - w) >> 1;
-    R(x, y, w, H, 1);
-    if (w > 2) R(x + 1, y + 1, w - 2, 20, 6);
-    if (w < W) { if (w > 4) R(x + 2, y + 2, w - 4, 9, 5); return; }
-    R(x + 1, y + 1, 1, 20, 7);
-    R(x + 2, y + 2, 11, 9, 5); R(x + 2, y + 2, 11, 1, 4);
-    R(x + 4, y + 6, 6, 3, 3); R(x + 8, y + 4, 3, 3, 3); R(x + 3, y + 5, 1, 2, 3); R(x + 5, y + 9, 1, 2, 2); R(x + 9, y + 9, 1, 2, 2); P(x + 9, y + 5, 7);
-    R(x + 2, y + 12, 11, 2, 4);
-    R(x + 2, y + 18, 3, 2, 1); R(x + 10, y + 18, 3, 2, 1); P(x + 3, y + 18, 7); P(x + 11, y + 18, 7);
-  }
   // The chain from the top of the standee down to y (the clasp's bottom).
   function chain({ R }, x, y) {
     if (y <= 0) return;
@@ -151,7 +138,7 @@ const Forge = (() => {
       const A = act.p;
       A.R(CXC - 11, GY - REST, 22, REST, 1); A.R(CXC - 10, GY - REST + 1, 20, REST - 2, 3); A.R(CXC - 10, GY - REST + 1, 20, 1, 5); A.R(CXC - 3, GY - 3, 6, 1, 8); // the cradle
       if (S.hook != null) chain(cp, CW / 2, Math.round(S.hook));
-      if (c.face) faceArt(cp, CW / 2 - 7, feet - TOP, c.w); else Scene.cardArt(cp, CW / 2 - 7, feet - TOP, c.hot, c.w);
+      if (c.face) Factory.cardFace(cp, CW / 2 - 7, feet - TOP, c.w); else Scene.cardArt(cp, CW / 2 - 7, feet - TOP, c.hot, c.w);
       if (c.hot) steam(cp, CW / 2, feet, now);
       if (c.depth < 20 && (c.h < 6 || S.splash >= 0)) lip(cp, now, S.bubbles);
       splash(cp, S.splash);

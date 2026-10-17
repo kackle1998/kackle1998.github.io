@@ -140,9 +140,20 @@ const Dip = (() => {
   // The Haste sigil: a bolt, `s` px a pixel, in the accent.
   const BOLT = ['..#', '.#.', '###', '.#.', '#..'];
   const bolt = ({ R }, x, y, s) => BOLT.forEach((r, j) => [...r].forEach((ch, i) => { if (ch === '#') R(x + i * s, y + j * s, s, s, 8); }));
-  /* A card face, CARD.W x CARD.H (a beast in its frame, a text band, its stats), narrowed about
-     its middle to width w while it opens; sig 1: the small Haste sigil on it. */
-  function faceArt(p, x, y, w, sig) {
+  // A card's sprite (SPRITES[name]) as a 16 x 16 canvas, in the palette's colors like spriteURL.
+  function spriteArt(name) {
+    const src = SPRITES[name];
+    if (!src) return null;
+    const rows = expandSprite(src), cv = document.createElement('canvas'), g = cv.getContext('2d');
+    cv.width = 16; cv.height = rows.length;
+    rows.forEach((r, y) => [...r].forEach((ch, x) => { if (PAL[ch]) { g.fillStyle = PAL[ch]; g.fillRect(x, y, 1, 1); } }));
+    return cv;
+  }
+  /* A card face, CARD.W x CARD.H (its art in a frame, a text band, its stats), narrowed about its
+     middle to width w while it opens; sig 1: the small Haste sigil on it. `art`: the card's own
+     sprite (spriteArt), drawn in the frame at half a scene px a pixel on plane `pl`; without it, a
+     stand-in beast. */
+  function faceArt(p, x, y, w, sig, art, pl) {
     const { P, R } = p;
     x += (CARD.W - w) >> 1;
     R(x, y, w, CARD.H, 1);
@@ -150,7 +161,8 @@ const Dip = (() => {
     if (w < CARD.W) { if (w > 4) R(x + 2, y + 2, w - 4, 9, 5); return; }
     R(x + 1, y + 1, 1, 20, 7);
     R(x + 2, y + 2, 11, 9, 5); R(x + 2, y + 2, 11, 1, 4);
-    R(x + 4, y + 6, 6, 3, 3); R(x + 8, y + 4, 3, 3, 3); R(x + 3, y + 5, 1, 2, 3); R(x + 5, y + 9, 1, 2, 2); R(x + 9, y + 9, 1, 2, 2); P(x + 9, y + 5, 7);
+    if (art) pl.art(art, x + 3.5, y + 2.5);
+    else { R(x + 4, y + 6, 6, 3, 3); R(x + 8, y + 4, 3, 3, 3); R(x + 3, y + 5, 1, 2, 3); R(x + 5, y + 9, 1, 2, 2); R(x + 9, y + 9, 1, 2, 2); P(x + 9, y + 5, 7); }
     R(x + 2, y + 12, 11, 2, 4);
     R(x + 2, y + 18, 3, 2, 1); R(x + 10, y + 18, 3, 2, 1); P(x + 3, y + 18, 7); P(x + 11, y + 18, 7);
     if (sig === 1) bolt(p, x + 6, y + 14, 1);
@@ -249,7 +261,7 @@ const Dip = (() => {
     // Only the part above the water is drawn as the thing itself.
     const dry = { P: (u, v, k) => { if (v < SURF) P(u, v, k); }, R: (u, v, w, h, k) => { const h2 = Math.min(h, SURF - v); if (h2 > 0) R(u, v, w, h2, k); } };
     if (flask) flaskArt(dry, L, T, c.w, c.fill, c.cork);
-    else if (c.face) faceArt(dry, L, T, c.w, c.sig);
+    else if (c.face) faceArt(dry, L, T, c.w, c.sig, b.art, b.pl);
     else Scene.cardArt(dry, L, T, false, c.w);
     if (c.sig === 2) bolt(p, L + 4, T + 10, 2);
     if (c.sig === 3) for (const [dx, dy] of [[4, 13], [10, 13], [4, 21], [10, 21], [3, 17], [11, 17]]) P(L + dx, T + dy, 7);
@@ -306,6 +318,7 @@ const Dip = (() => {
 
     const act = Scene.plane(sc, { left: mx(AX0), x0: AX0, depth: D_ACT, w: AW, h: GY });
     const b = bake(sc.C, water), fig = Scene.figure(sc, { s: U });
+    b.pl = act;
     let shadowKey = '', last = at(REST);
     const paint = () => {
       act.clear();
@@ -328,8 +341,25 @@ const Dip = (() => {
       fig.place({ x: mx(S.fx), y: S.depth, z, rot: S.rot, sx: S.sx, sy: S.sy });
     }
     draw.alive = sc.alive;
+    // The card being dipped (its face shows its own art), or null for a stand-in.
+    draw.face = (d) => { b.art = d ? spriteArt(d.sprite) : null; };
     return draw;
   }
 
-  return { mount, at, end, cues, LANDED, REST, ENTER_CUES, CAM };
+  /* PROPS: this scene's objects for other scenes and the builder (js/props.js): each { id, name, x0,
+     w, cx (its middle), gy (its ground line), home: { x, depth } (where it stands in this scene),
+     draw(pln, t, heat, sc) } in this file's scene px. */
+  const baked = new Map();
+  const pool = (water, name) => ({
+    id: water + '-pool', name, x0: AX0, w: AW, cx: POOL[0], gy: GY, home: { x: POOL[0], depth: D_ACT },
+    draw(pln, t, heat, sc) {
+      const key = water + sc.C.join();
+      if (!baked.has(key)) baked.set(key, bake(sc.C, water));
+      const b = baked.get(key), st = Math.floor(t * 4);
+      pln.g.drawImage(b.cv, 0, 0);
+      b.gl.forEach(([x, y], i) => { const o = [0, 1, 2, 1][(st + i) % 4]; if (b.wet(x + o, y) && b.wet(x + o + 1, y)) pln.p.R(x + o, y, 2, 1, b.K.glint); }); // the glints, as waterArt
+    },
+  });
+  const PROPS = [pool('molten', 'molten pool'), pool('black', 'black mirror pool'), pool('sulfur', 'sulfur spring')];
+  return { mount, at, end, cues, LANDED, REST, ENTER_CUES, CAM, PROPS };
 })();

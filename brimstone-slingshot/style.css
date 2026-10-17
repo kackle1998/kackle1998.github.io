@@ -925,6 +925,11 @@ body[data-crt="off"] .rm-fig img, .rm-fig.hopping img { animation: none; }
    where their backs rose out of the pack: the backs narrow in the scene, then the faces open from
    narrow to full in three stepped frames (jump-none: no frame where nothing shows). */
 .dr-pick { position: absolute; z-index: 2; flex-wrap: nowrap; padding: 0; transform-origin: 50% 50%; animation: drFlip .43s steps(3, jump-none) both; }
+/* The Rune Circle's two real cards on their plinths (Run.rune); rc-lit while the circle copies from or onto one. */
+.rc-real { position: absolute; z-index: 2; flex-wrap: nowrap; padding: 0; transform-origin: 50% 50%; animation: drFlip .43s steps(3, jump-none) both; }
+.rc-real.rc-lit .card { outline: 3px solid var(--accent); outline-offset: -3px; }
+.rc-real.rc-gone { animation: rcGone .43s steps(3, jump-none) both; } /* the Sigil Altar's sacrifice narrows away */
+@keyframes rcGone { from { transform: none; } to { transform: scaleX(.15); visibility: hidden; } }
 @keyframes drFlip { from { transform: scaleX(.15); } to { transform: none; } }
 .wh-got { width: 21px; height: 21px; margin-right: 12px; vertical-align: -3px; image-rendering: pixelated; }
 .rn-need { width: 100%; text-align: center; font-size: 18px; color: var(--mid); }

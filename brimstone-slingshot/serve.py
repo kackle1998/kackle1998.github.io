@@ -1,6 +1,7 @@
 """Local server for Brimstone Slingshot that tells the browser not to cache files,
 so changes to the game show up on a normal refresh."""
 import http.server
+import json
 import os
 import socketserver
 import sys
@@ -12,6 +13,22 @@ class NoCacheHandler(http.server.SimpleHTTPRequestHandler):
     def end_headers(self):
         self.send_header("Cache-Control", "no-store")
         super().end_headers()
+
+    # The scene builder (builder.html) saves its picks here, for the event-animation skill to read.
+    def do_POST(self):
+        if self.path != "/builder/picks":
+            self.send_error(404)
+            return
+        body = self.rfile.read(min(int(self.headers.get("Content-Length", 0)), 64 * 1024))
+        try:
+            json.loads(body)
+        except ValueError:
+            self.send_error(400, "not JSON")
+            return
+        with open("builder-picks.json", "wb") as f:
+            f.write(body)
+        self.send_response(200)
+        self.end_headers()
 
 
 # No address reuse: on Windows it would let two servers share the port silently.

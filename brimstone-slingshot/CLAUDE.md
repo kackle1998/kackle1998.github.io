@@ -21,10 +21,11 @@ not as files. Draw them the way the game's art engine in `js/runmap.js` does:
 
 After showing the mockups, ask which designs to keep before changing any game code.
 
-Event scenes are the exception to the flat canvas above. They're mocked up in the game's own 2.5D
-scene, with the template in the event-animation skill (below), so the preview looks the way the
-game will. Show one mockup per design (A, B, C), not a column per ante: the template's Ante
-buttons rebuild each stage at that ante's heat.
+Event scenes are the exception to the flat canvas above. They're mocked up in the scene builder
+(`builder.html?mockup=<name>`, with designs in `mockups/<name>.js`), which runs the game's own scene
+code, so the preview looks the way the game will. Show one design per entry (A, B, C), not a column
+per ante: the builder's Ante buttons rebuild each stage. The user picks the place and background
+life in its panel. See the event-animation skill.
 
 ## Event scenes: use the event-animation skill
 
