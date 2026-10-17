@@ -56,6 +56,7 @@ const STOPS = {
   trade:  { name: 'TRADER',      icon: 'ri_arcana',  desc: 'Trader: spend arcana on cards and tonic.' },
   event:  { name: '???',         icon: 'ri_event',  desc: 'Unknown: something hums under the board.' },
   bowl:   { name: 'BRIMSTONE LANES', icon: 'ri_rack', desc: 'Bowling: one ball, ten pins, an arcana for every pin that falls.' },
+  casino: { name: 'CASINO',      icon: 'ri_casino', desc: 'Casino: fling yourself at the roulette wheel or the slots.' },
   boss:   { name: 'THE DEALER',  icon: 'ri_chip',   desc: 'The Dealer: the house always plays last.' },
 };
 
@@ -125,7 +126,9 @@ function runOffer(R, colors, n, { row = 1, weight = () => 1, least = 'common', s
 const runPrice = (c) => Math.min(4, Math.max(2, costTotal(c.cost))) + RARITY_MARKUP[rarityOf(c)];
 function getRunRecord() { return { wins: 0, losses: 0, ...Store.read(RUN_RECORD_KEY, {}) }; }
 
-const RUN_BOWL_ODDS = 0.33;                             // chance a map has a bowling lane (js/bowl.js)
+// The rare stops share one chance, so they stay equally rare: each map rolls it once for each.
+const RUN_SPECIAL_ODDS = 0.33;                             // chance a map has each rare stop
+const RUN_SPECIAL_STOPS = ['bowl', 'casino'];              // the bowling lane (js/bowl.js), the casino (js/casino.js)
 /* Start, 5 rows of 2-3 stops, then the boss. Links run in sorted order, so the map's arcs never cross. */
 function genRunMap(R) {
   const even = (v) => Math.round(v / 2) * 2;
@@ -164,11 +167,13 @@ function genRunMap(R) {
       edges.push([A[i], B[j]]);
     }
   }
-  // Now and then a campfire, trader or altar is a bowling lane instead (rolled last, so the rest of
-  // the map comes out as it would without it). The last row's campfire always stays.
-  if (R() < RUN_BOWL_ODDS) {
+  // Now and then a campfire, trader or altar is a bowling lane or a casino instead, each rolled on
+  // its own at the same odds (rolled last, so the rest of the map comes out as it would without
+  // them). The last row's campfire always stays.
+  for (const t of RUN_SPECIAL_STOPS) {
+    if (R() >= RUN_SPECIAL_ODDS) continue;
     const can = nodes.filter((n) => n.row < RUN_ROWS && ['fire', 'trade', 'altar'].includes(n.t));
-    if (can.length) can[runRand(R, can.length)].t = 'bowl';
+    if (can.length) can[runRand(R, can.length)].t = t;
   }
   return { nodes, edges, layout: RUN_LAYOUT };
 }
@@ -202,7 +207,7 @@ function respaceRunMap(map) {
    `ok` and `pick` decide whether it can be chosen; `need` says why not. `act` returns the outcome text. */
 const RUN_EVENTS = [
   {
-    id: 'cracked', title: 'CRACKED CHIP', art: 'ri_chip',
+    id: 'cracked', title: 'CRACKED CHIP', art: 'ri_chip', screen: 'cracked', // on the Rune Circle's scene (Run.cracked, js/rune.js)
     text: 'A cracked chip hums in the dirt. Press it in hard and a creature gains +2 attack, but forgets one of its sigils at random. Press it in gently and it gains just +1 attack.',
     choices: [
       { label: 'PRESS HARD (+2, LOSE A SIGIL)', pick: (d) => d.sigils.length > 0, need: 'Needs a creature with a sigil.',
@@ -329,13 +334,14 @@ const RUN_EVENTS = [
       { label: 'LEAVE', act: () => 'The cards hum on behind the grate.' },
     ],
   },
-  /* Runs its own screen (Run.slots) instead of choices. */
+  /* The casino's two games (casino: true): only its tables open them (Run.casino), never a ? stop.
+     Each runs its own screen (Run.slots, Run.wheel) instead of choices. */
   {
-    id: 'slots', title: 'BONE SLOTS', art: 'ri_slots', screen: 'slots',
+    id: 'slots', title: 'BONE SLOTS', art: 'ri_slots', screen: 'slots', casino: true,
     text: 'A one-armed machine rattles in the dark. Every pull pays out.', choices: [],
   },
   {
-    id: 'wheel', title: 'SIGIL WHEEL', art: 'ri_wheel', screen: 'wheel',
+    id: 'wheel', title: 'SIGIL WHEEL', art: 'ri_wheel', screen: 'wheel', casino: true,
     text: 'A bone wheel ringed with sigils. It turns once, and only once.', choices: [],
   },
   {
@@ -402,10 +408,14 @@ const WHEEL_PX = 112;                                   // drawn at this size, s
 const WHEEL_SKIP = ['snipe', 'mend', 'undying'];        // sigils with an amount, and the mythicals' Undying, stay off the wheel
 const WHEEL_SPIN_MS = 4200;
 
-/* The bowling lane (js/bowl.js), a rare stop of its own (RUN_BOWL_ODDS): one throw, an arcana per pin,
+/* The bowling lane (js/bowl.js), a rare stop of its own (RUN_SPECIAL_ODDS): one throw, an arcana per pin,
    and a bonus for a strike. BOWL_STOP is what Run.bowl shows in the header. */
 const BOWL_STOP = { title: 'BRIMSTONE LANES', art: 'ri_rack',
   text: 'Ten pins stand at the end of a long lane. One ball, one throw. Every pin that falls pays an arcana.' };
+/* The casino (js/casino.js), a rare stop of its own (RUN_SPECIAL_ODDS, as the bowling lane): fling
+   yourself at the roulette wheel (the Sigil Wheel) or the slot machine (Bone Slots). */
+const CASINO_STOP = { title: 'CASINO', art: 'ri_casino',
+  text: 'Try your luck at the casino!' };
 /* The Sigil Altar, a stop of its own on the map: the Rune Circle's scene in a graveyard, paid
    for with the creature the sigil comes from (Run.rune, Altar in js/rune.js). */
 const ALTAR_STOP = { title: 'SIGIL ALTAR', art: 'ri_altar', consume: true,
@@ -626,6 +636,7 @@ const Run = {
       case 'trade': return this.trader(n);
       case 'event': return this.event(n);
       case 'bowl': return this.bowl(n, BOWL_STOP);
+      case 'casino': return this.casino(n);
       default: return this.leave();
     }
   },
@@ -1107,8 +1118,9 @@ const Run = {
   event(n) {
     const s = this.s, node = s.node;
     if (!node.ev) {
-      const fresh = RUN_EVENTS.filter((e) => !s.events.includes(e.id));
-      const from = fresh.length ? fresh : RUN_EVENTS;
+      const pool = RUN_EVENTS.filter((e) => !e.casino); // the casino's games only open at the casino
+      const fresh = pool.filter((e) => !s.events.includes(e.id));
+      const from = fresh.length ? fresh : pool;
       const forced = isDev() && RUN_EVENTS.find((e) => e.id === this.debugEvent);
       node.ev = forced ? forced.id : from[runRand(this.rand(300 + n.id), from.length)].id;
       this.debugEvent = null;
@@ -1580,6 +1592,45 @@ const Run = {
     if (test) $('#rnLeave').onclick = () => { sfx('select'); this.sceneTestEnd(); };
   },
 
+  /* ---------- the casino (a stop of its own, js/casino.js) ----------
+     You land in a slingshot (the entrance, once per stop: node.cs.landed), then fling yourself at
+     a table: click it, or its button. The pick is saved (node.cs.game) before you fly, so a reload
+     goes straight to that game: the roulette wheel opens the Sigil Wheel (Run.wheel), the slot
+     machine Bone Slots (Run.slots), each on this stop's node, and leaving either ends the stop.
+     Input does nothing while the figurine is moving. The bench lands you back in the slingshot. */
+  casino(n) {
+    const node = this.s.node, cs = node.cs || (node.cs = {}), test = this.bench, ev = CASINO_STOP;
+    const game = (id) => RUN_EVENTS.find((e) => e.id === Casino.GAMES[id].ev);
+    if (cs.game && !test) { const g = game(cs.game); return this[g.screen](n, g); }
+    const ante = test ? test.ante : Math.min(this.s.circuit || 1, RunMap.SPIRE_ANTES.length);
+    const stage = this.sceneScreen(ev.art, ev.title, escapeHTML(ev.text),
+      '<button class="btn" id="csWheel">ROULETTE</button><button class="btn" id="csSlots">SLOTS</button>'
+        + (test ? `<button class="btn" id="csAnte">ANTE ${ante}</button><button class="btn" id="rnLeave">DONE</button>` : '<button class="btn" id="rnLeave">LEAVE</button>'));
+    const lk = this.sceneLock();
+    const pick = (id) => {
+      if (lk.busy()) return;
+      sfx('select');
+      lk.lock();
+      if (!test) { cs.game = id; this.save(); }
+      const open = () => (test ? (this.s.node = { cs: { landed: true } }, this.casino(n)) : this.casino(n));
+      if (FAST) return open();
+      const f = Casino.fling(id);
+      // As the map: a short beat after the squash, then the wipe into the game.
+      Scene.play({ draw, at: f.at, to: f.END, cues: f.CUES, done: () => RunMap.wipe(open) });
+    };
+    const draw = Casino.mount(stage, RunMap.SPIRE_ANTES[ante - 1].heat, pick);
+    lk.lock();
+    this.sceneEnter(cs, { draw, at: Casino.at, to: Casino.REST, cues: Casino.ENTER_CUES, done: () => { draw(Casino.at(Casino.REST)); lk.unlock(); } });
+    $('#csWheel').onclick = () => pick('wheel');
+    $('#csSlots').onclick = () => pick('slots');
+    if (test) {
+      $('#csAnte').onclick = () => { if (lk.busy()) return; sfx('select'); test.ante = test.ante % RunMap.SPIRE_ANTES.length + 1; this.s.node = { cs: { landed: true } }; this.casino(n); };
+      $('#rnLeave').onclick = () => { if (lk.busy()) return; sfx('select'); this.sceneTestEnd(); };
+      return;
+    }
+    $('#rnLeave').onclick = () => { if (lk.busy()) return; sfx('select'); this.leave(); };
+  },
+
   bowlTally() {
     const t = this.bench.throws, n = t.length, sum = t.reduce((a, x) => a + x.down, 0);
     const strikes = t.filter((x) => x.down === Bowl.PINS.length).length, gutters = t.filter((x) => !x.down).length;
@@ -1620,6 +1671,7 @@ const Run = {
      bench's own state: the bowling lane's throws, Bone Draft's ante and the colors it deals from. */
   SCENE_BENCHES: {
     bowl: (run) => run.bowl(null, BOWL_STOP),
+    casino: (run) => run.casino(null),
     fire: (run) => run.campfire(null),
     draft: (run) => run.draft(null, RUN_EVENTS.find((e) => e.id === 'pack')),
     dip: (run) => run.dip(null, RUN_EVENTS.find((e) => e.id === 'pool')),
@@ -1627,6 +1679,7 @@ const Run = {
     spring: (run) => run.dip(null, RUN_EVENTS.find((e) => e.id === 'spring')),
     moth: (run) => run.moth(null, RUN_EVENTS.find((e) => e.id === 'moth')),
     rune: (run) => run.rune(null, RUN_EVENTS.find((e) => e.id === 'rune')),
+    cracked: (run) => run.cracked(null, RUN_EVENTS.find((e) => e.id === 'cracked')),
     altar: (run) => run.rune(null, ALTAR_STOP),
     forge: (run) => run.forge(null, RUN_EVENTS.find((e) => e.id === 'forge')),
     shrine: (run) => run.shrine(null, RUN_EVENTS.find((e) => e.id === 'shrine')),
@@ -2002,6 +2055,43 @@ const Run = {
       play(() => this.finishStop(ev.art, ev.title, sh.res.text, sh.res.cards));
     };
     $('#rnLeave').onclick = () => { if (lk.busy()) return; sfx('select'); this.finishStop(ev.art, ev.title, ...this.result(leaveCh.act(this, null, leaveCh))); };
+  },
+
+  /* ---------- the Cracked Chip (a ? event, the Rune Circle's scene: Cracked in js/rune.js) ----------
+     You land in the circle with the cracked chip hanging over your head (the entrance, once per
+     stop: node.cc.landed), then choose. Pressing it asks, over the scene, which creature; the
+     outcome follows straight away. Input does nothing while you land. */
+  cracked(n, ev) {
+    const node = this.s.node, cc = node.cc || (node.cc = {}), test = this.bench;
+    const ante = test ? test.ante : Math.min(this.s.circuit || 1, RunMap.SPIRE_ANTES.length);
+    const can = (ch) => test || this.canChoose(ch), need = ev.choices.find((ch) => !can(ch));
+    const stage = this.sceneScreen(ev.art, ev.title, escapeHTML(ev.text),
+      ev.choices.filter((ch) => !test || ch.pick).map((ch) => `<button class="btn" data-ch="${ev.choices.indexOf(ch)}">${escapeHTML(ch.label)}</button>`).join('') +
+        (test ? `<button class="btn" id="ccAnte">ANTE ${ante}</button><button class="btn" id="rnLeave">DONE</button>` : need ? `<div class="rn-need">${escapeHTML(need.need || '')}</div>` : ''));
+    const draw = Cracked.mount(stage, RunMap.SPIRE_ANTES[ante - 1].heat), lk = this.sceneLock();
+    const rest = () => { draw(Cracked.at(Cracked.REST)); lk.unlock(); $$('[data-ch]').forEach((b) => (b.disabled = !can(ev.choices[+b.dataset.ch]))); };
+    lk.lock();
+    this.sceneEnter(cc, { draw, at: Cracked.at, to: Cracked.REST, cues: Cracked.ENTER_CUES, done: rest });
+    $$('[data-ch]').forEach((b) => (b.onclick = () => {
+      const ch = ev.choices[+b.dataset.ch];
+      if (lk.busy() || !can(ch)) return;
+      sfx('select');
+      if (test) return; // the bench only shows the scene
+      if (!ch.pick) return this.finishStop(ev.art, ev.title, ...this.result(ch.act(this, null, ch)));
+      // Which creature: picked over the scene; BACK puts the question away.
+      const wrap = document.createElement('div');
+      wrap.className = 'rn-deckwrap';
+      wrap.innerHTML = `<div class="rn panel slot-see"><div class="rn-sub">Pick a creature.</div><div class="rn-body" id="ccBody"></div>
+        <div class="rn-btns"><button class="btn" id="ccBack">BACK</button></div></div>`;
+      $('#screen').appendChild(wrap);
+      const mons = this.creatures().filter(ch.pick);
+      this.cardGrid($('#ccBody'), mons, (d) => { wrap.remove(); this.finishStop(ev.art, ev.title, ...this.result(ch.act(this, d), [d])); }, mons.length > 7);
+      $('#ccBack').onclick = () => { sfx('select'); wrap.remove(); };
+    }));
+    if (test) {
+      $('#ccAnte').onclick = () => { if (lk.busy()) return; sfx('select'); test.ante = test.ante % RunMap.SPIRE_ANTES.length + 1; this.s.node = { cc: { landed: true } }; this.cracked(n, ev); };
+      $('#rnLeave').onclick = () => { if (lk.busy()) return; sfx('select'); this.sceneTestEnd(); };
+    }
   },
 
   /* ---------- the Crystal Forge (a ? event, js/forge.js on the factory of js/factory.js) ----------

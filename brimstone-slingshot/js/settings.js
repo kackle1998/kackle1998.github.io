@@ -5,7 +5,8 @@
    edge), and something alive in the background, all hotter each ante.
      Scene.setting(sc, name, opts) builds one behind the action and returns the ground
      (Scene.ground's { clear, shade, patch }) for contact shadows.
-   Names: ruins (the run map's spires), crypt (a stone wall with sagging arches), casino, lava, graveyard, forge (Factory).
+   Names: ruins (the run map's spires), crypt (a stone wall with sagging arches), casino, tropicana (a casino court: an arcade under stained-glass sunbursts), lava,
+   graveyard, forge (Factory).
    Each is a preset of four parts that mix and match (see SETTINGS below): a floor, a backdrop
    (the sky or a wall), features (spires, slot cabinets..., any number) and the critters and
    effects in its background, so opts { floor, backdrop, features, critters, effects } can swap
@@ -48,16 +49,61 @@
   /* Something passing behind the action: a w x h px standee at `depth`, crossing plane x x0 to
      x1 every `period` seconds (smoothly), `lift` px off the ground, drawn frame by frame
      (draw(pen, frame), `frames` of them at `fps`). */
-  function crosser(sc, { depth = -300, x0 = -400, x1 = 1900, w = 12, h = 8, lift = 0, period = 9, frames = 2, fps = 6, draw }) {
-    const cv = document.createElement('canvas'), H = h + lift;
-    cv.width = w; cv.height = H;
-    const el = sc.stand(cv, x0, depth, w * 2, H * 2), g = cv.getContext('2d'), p = Scene.pen(g, sc.C);
-    let lf = -1;
-    sc.every(40, () => {
-      const t = performance.now() / 1000, f = Math.floor(t * fps) % frames;
-      el.style.left = Math.round(x0 + (x1 - x0) * ((t / period) % 1)) + 'px';
-      if (f !== lf) { lf = f; g.clearRect(0, 0, w, H); draw(p, f); }
+  /* A group of critters passing behind the action. `life` (the builder's sliders) varies them:
+     count (how many, times n), size (scale), variety (how much each one's size, depth and shape
+     differ: draw(pen, frame, variant) gets variant 0, 1 or 2), and motion (how lively: some walk
+     the other way, speeds differ, walkers stop and start, fliers rise and dip in stepped px). */
+  const LIFE = { count: 1, size: 1, variety: 0.5, motion: 0.5 };
+  function crosser(sc, { depth = -300, x0 = -400, x1 = 1900, w = 12, h = 8, lift = 0, period = 9, frames = 2, fps = 6, n = 1, seed = 1, px = 2, draw, life = {} }) {
+    const L = { ...LIFE, ...life }, fly = lift > 0, pad = fly ? 8 : 0, span = x1 - x0;
+    const many = Math.max(0, Math.round(n * L.count));
+    const bugs = Array.from({ length: many }, (_, i) => {
+      const R = mulberry32(seed * 101 + i * 7 + 3);
+      const s = Math.max(0.5, Math.round(L.size * (1 + L.variety * (R() - 0.5) * 1.2) * 4) / 4); // in quarter steps
+      const variant = R() < L.variety ? 1 + Math.floor(R() * 2) : 0;
+      const dir = R() < 0.4 * Math.min(1, L.motion) ? -1 : 1;
+      // lift is in sprite px at the standard 2 plane px each, so the height flown stays put whatever the critter's size.
+      const H = h + pad * 2 + 2 + Math.round(lift * 2 / (px * s)), W = w + 2, cv = document.createElement('canvas'); // a px each side for the rim
+      cv.width = W; cv.height = H;
+      const el = sc.stand(cv, x0, Math.round(depth + (R() - 0.5) * 160 * L.variety), W * px * s, H * px * s); // px: plane px per sprite px
+      return { cv, el, g: cv.getContext('2d'), H, W, variant, dir, x: x0 + R() * span, spd: span / period * Math.max(0.3, 1 + L.motion * (R() - 0.5) * 1.2),
+        w1: 0.4 + R() * 0.8, ph: R() * 7, ft: R() * frames, key: '' };
     });
+    bugs.forEach((b) => (b.p = Scene.pen(b.g, sc.C)));
+    const rimRGB = Scene.rgb(sc.C[6]);
+    let last = performance.now();
+    sc.every(40, () => {
+      const now = performance.now(), dt = Math.min(0.2, (now - last) / 1000), t = now / 1000;
+      last = now;
+      for (const b of bugs) {
+        const wave = Math.sin(t * b.w1 + b.ph);
+        // Walkers stop and go (more stops with more motion); fliers speed up and slow down.
+        const go = fly ? 1 + L.motion * 0.4 * wave : wave < -1 + L.motion * 0.7 ? 0 : 1 + L.motion * 0.4;
+        b.x += b.dir * b.spd * go * dt;
+        if (b.x > x1) b.x = x0; else if (b.x < x0) b.x = x1;
+        b.el.style.left = Math.round(b.x) + 'px';
+        if (go) b.ft += dt * fps * go; // a stopped walker holds its pose
+        const f = Math.floor(b.ft) % frames, bob = fly ? Math.round(Math.sin(Math.floor(t * 4) / 4 * b.w1 * 3 + b.ph) * L.motion * pad) : 0, key = f + ',' + bob;
+        if (key === b.key) continue;
+        b.key = key;
+        b.g.setTransform(1, 0, 0, 1, 0, 0);
+        b.g.clearRect(0, 0, b.W, b.H);
+        b.g.setTransform(b.dir, 0, 0, 1, b.dir < 0 ? w + 1 : 1, pad + 1 + bob); // facing its way, risen or dipped
+        draw(b.p, f, b.variant);
+        if (fly) rim(b.g, b.W, b.H, rimRGB); // so a dark flier reads over the dark sky too
+      }
+    });
+  }
+  // A 1 px rim of one tone around everything drawn on a canvas (as the figurine's ink outline, in a pale tone).
+  function rim(g, W, H, [r, gg, bb]) {
+    const img = g.getImageData(0, 0, W, H), d = img.data, solid = [];
+    for (let i = 0; i < W * H; i++) solid.push(d[i * 4 + 3] > 0);
+    const on = (x, y) => x >= 0 && y >= 0 && x < W && y < H && solid[y * W + x];
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      if (solid[y * W + x] || !(on(x - 1, y) || on(x + 1, y) || on(x, y - 1) || on(x, y + 1))) continue;
+      const o = (y * W + x) * 4; d[o] = r; d[o + 1] = gg; d[o + 2] = bb; d[o + 3] = 255;
+    }
+    g.putImageData(img, 0, 0);
   }
 
   /* ---------- prop art (propArt's signature) ---------- */
@@ -300,16 +346,131 @@
     });
   }
 
+  /* ---------- the Tropicana: a casino court's arcade under stained-glass sunbursts ---------- */
+  /* A wall backdrop after the Atlantic City Tropicana's fountain court: pale stucco in two tiers.
+     Below, an arcade of round arches between fluted pilasters, dark inside, with slot cabinets
+     glowing in the dark beyond; two arches carry an oval sign plaque. Above each arch, a half-round
+     lunette of stained glass: a sunburst of rays in leading round a gold sun, in a lit molding.
+     Between the tiers runs a band of recessed relief panels with a row of marquee bulbs; a run of
+     lit bulbs chases along it, longer each ante, and the cabinets' toppers light from ante 2. The
+     wall's art is at 2 map units a pixel, TW x TH, its left edge at plane x TX, standing at D_TROP. */
+  const D_TROP = -130, TX = -1100, TW = 1800, TH = 230;
+  // The arches spring low, so their fanlights show under every camera; the big lunettes sit above the band.
+  const T_SPRING = 196, T_AR = 44, T_LUN = 118, T_LR = 60, T_B0 = 120, T_B1 = 140;
+  const TARCH = [...Array(6)].map((_, i) => ({ cx: 150 + i * 300, sign: i === 2 || i === 4 }));
+  // One pixel of a stained-glass sunburst, a half disc of radius r on the line cy (dx from its
+  // middle), with n rays: a ramp index, or -1 outside it. `mold` adds a lit molding round it.
+  function lunette(x, y, dx, cy, r, n, mold) {
+    const d = Math.hypot(dx, y - cy);
+    if (mold && y === cy + 1 && Math.abs(dx) < r + 7) return 4; // the sill's shadow
+    if (y > cy || d >= r + (mold ? 7 : 0)) return -1;
+    if (d >= r) return d < r + 2 ? (dx < 0 ? 7 : 5) : d < r + 5 ? (dx < 0 ? 6 : 5) : 4; // the molding, lit upper left
+    if (d >= r - 2) return 2; // the outer leading
+    const sun = Math.round(r * 0.22), ring = Math.round(r * 0.6);
+    if (d < sun) return d >= sun - 2 ? 2 : 8; // the sun
+    const seg = Math.atan2(cy - y, dx) / Math.PI * n, ray = Math.floor(seg);
+    if (seg - ray < 0.1 || Math.abs(d - ring) < 1) return 2; // leading between the panes, and a ring
+    const k = d < ring ? (ray % 2 ? 8 : 7) : (ray % 2 ? 5 : 7);
+    return k !== 8 && bay(x, y) < 3 ? k - 1 : k; // the glass's grain
+  }
+  function tropArt(C) {
+    const cv = document.createElement('canvas');
+    cv.width = TW; cv.height = TH;
+    const g = cv.getContext('2d'), img = g.createImageData(TW, TH), px = img.data, RGB = C.map(Scene.rgb);
+    const put = (x, y, k) => { if (x < 0 || y < 0 || x >= TW || y >= TH) return; const o = (y * TW + x) * 4, c = RGB[k]; px[o] = c[0]; px[o + 1] = c[1]; px[o + 2] = c[2]; px[o + 3] = 255; };
+    for (let y = 0; y < TH; y++) for (let x = 0; x < TW; x++) {
+      let k = 6; // pale stucco, a step darker under the cornice and toward the foot
+      if (y < 8) k = y < 6 ? 4 : 7; // the cornice: a dark soffit, its lit lip
+      else if (y < 14 && bay(x, y) < (14 - y) * 2) k = 5;
+      if (y > TH - 60 && bay(x, y) < (y - (TH - 60)) / 4) k = 5;
+      if (y >= T_B0 && y <= T_B1) { // the band: moldings top and bottom, recessed panels between the lunettes
+        if (y === T_B0 || y === T_B1 - 1) k = 7; else if (y === T_B0 + 1 || y === T_B1) k = 4;
+        else {
+          const ix = pmod(x, 300) - 86, iy = y - T_B0 - 5, iw = 128, ih = T_B1 - T_B0 - 9;
+          if (ix >= 0 && ix < iw && iy >= 0 && iy < ih) {
+            k = ix < 1 || iy < 1 ? 4 : ix >= iw - 1 || iy >= ih - 1 ? 7 : 5; // recessed: shadowed top left, lit bottom right
+            if (k === 5 && Math.abs(Math.abs(ix - iw / 2) - 22 - Math.abs(iy - ih / 2) * 1.8) < 1.2) k = 6; // a carved scroll
+          }
+        }
+      }
+      for (const a of TARCH) {
+        const dx = x - a.cx, ad = Math.abs(dx), l = lunette(x, y, dx, T_LUN, T_LR, 14, true);
+        if (l >= 0) k = l;
+        if (y <= T_B1 || ad >= T_AR + 7) continue;
+        const r = y > T_SPRING ? ad : Math.hypot(dx, y - T_SPRING);
+        if (r < T_AR && y <= T_SPRING) k = lunette(x, y, dx, T_SPRING, T_AR, 10, false); // the fanlight
+        else if (r < T_AR && y < T_SPRING + 3) k = y === T_SPRING + 1 ? 7 : 4; // the transom bar
+        else if (r < T_AR) k = y < T_SPRING + 5 || dx < -T_AR + 4 || y > TH - 4 || bay(x, y) < 2 ? 1 : 0; // the dark doorway; its head and left reveal a step lighter
+        else if (r < T_AR + 7) k = r < T_AR + 2 ? (dx < 0 ? 4 : 7) : r < T_AR + 5 ? (dx < 0 ? 7 : 5) : 4; // the jambs and archivolt
+      }
+      const pdx = pmod(x + 150, 300) - 150, pa = Math.abs(pdx); // pilasters halfway between the arches
+      if (y > T_B1 && pa < 16) {
+        if (y < T_B1 + 8) k = y < T_B1 + 3 ? 7 : pa > 13 ? 4 : 6; // the capital
+        else if (y > TH - 12) k = y < TH - 10 ? 7 : pdx > 10 ? 4 : 5; // the base
+        else k = pa > 12 ? (pdx < 0 ? 7 : 4) : pmod(pdx, 6) < 1 || pdx > 6 ? 5 : 6; // the fluted shaft
+      }
+      if (y >= TH - 3) k = y === TH - 3 ? 4 : 3; // the baseboard
+      put(x, y, k);
+    }
+    for (const a of TARCH) if (a.sign) { // an oval sign plaque on the band over the arch, gold rimmed, lettered in blocks
+      const cy = (T_B0 + T_B1) >> 1;
+      for (let y = cy - 9; y <= cy + 9; y++) for (let x = a.cx - 24; x <= a.cx + 24; x++) {
+        const e = ((x - a.cx) / 24) ** 2 + ((y - cy) / 9) ** 2;
+        if (e <= 1) put(x, y, e > 0.75 ? (x < a.cx ? 8 : 4) : e > 0.6 ? 2 : 3);
+      }
+      for (let i = -15; i <= 13; i += 4) { put(a.cx + i, cy - 1, 7); put(a.cx + i + 1, cy - 1, 7); put(a.cx + i, cy, 7); put(a.cx + i + 1, cy, 6); }
+    }
+    g.putImageData(img, 0, 0);
+    return cv;
+  }
+  // Slot cabinets in the dark of each arch (wall px), and the marquee bulbs along the band every 10 px.
+  const TSLOTS = TARCH.flatMap((a, i) => [-28, -9, 10, 29].map((dx, j) => ({ x: a.cx + dx - 6, y: TH - 24, id: i * 4 + j })));
+  const TBULBS = [...Array(TW / 10)].map((_, i) => ({ x: 4 + i * 10, y: T_B0 + 3 })).filter((b) => !TARCH.some((a) => a.sign && Math.abs(b.x - a.cx) < 28)); // not over the plaques
+  function tropWall(sc, heat) {
+    const { C } = sc;
+    sc.stage.firstChild.remove(); // the nebula sky: the wall stands in front of it
+    sc.stand(tropArt(C), TX, D_TROP, TW * 2, TH * 2);
+    const hot = document.createElement('canvas');
+    hot.width = TW; hot.height = TH;
+    sc.stand(hot, TX, D_TROP + 1, TW * 2, TH * 2);
+    const hg = hot.getContext('2d'), { R } = Scene.pen(hg, C), run = [3, 5, 8][heat];
+    let last = -1;
+    sc.every(50, () => {
+      const st = Math.floor(performance.now() / 200); // 5 steps a second
+      if (st === last) return;
+      last = st;
+      hg.clearRect(0, 0, TW, TH);
+      for (const s of TSLOTS) { // a dark cabinet, its screen's reels stepping, a topper lit from ante 2
+        const f = (st + s.id * 3) % 6;
+        R(s.x, s.y, 12, 21, 1); R(s.x + 1, s.y - 2, 10, 2, heat ? 8 : 3); R(s.x + 2, s.y + 2, 8, 8, 5);
+        for (let r = 0; r < 3; r++) R(s.x + 2 + r * 3, s.y + 3 + ((f + r) % 3) * 2, 2, 2, [7, 8, 6][(f + r + s.id) % 3]);
+      }
+      TBULBS.forEach((b, i) => R(b.x, b.y, 2, 2, pmod(i - st, 20) < run ? 8 : 4)); // a run of lit bulbs chasing right
+    });
+  }
+
   /* ---------- critters and effects ---------- */
   /* Named background life any scene (or the builder, builder.html) can add: CRITTERS pass behind
      the action (Scene.crosser), EFFECTS drift through the air (Scene.motes); each takes the heat
      and option overrides. */
-  const BAT = ({ R }, f) => { R(5, 2, 3, 3, 1); if (f) { R(0, 3, 5, 1, 1); R(8, 3, 5, 1, 1); } else { R(1, 0, 4, 2, 1); R(8, 0, 4, 2, 1); R(4, 1, 1, 1, 1); R(8, 1, 1, 1, 1); } };
-  const CROW = ({ R }, f) => { R(4, 2, 4, 2, 1); R(8, 1, 2, 1, 1); if (f) R(0, 3, 4, 1, 1); else { R(1, 0, 3, 2, 1); R(4, 1, 1, 1, 1); } };
-  const CHIP = ({ R }, f) => { R(1, 0, 6, 8, 1); R(0, 1, 8, 6, 1); R(1, 1, 6, 6, 8); R(1 + [0, 2, 4, 2][f], 1, 2, 6, 7); };
+  // Each draw(pen, frame, variant): variant 0 is the standard shape, 1 and 2 its variations.
+  const BAT = ({ R }, f, v = 0) => {
+    R(5, 2, 3, 3, 1);
+    if (v === 1) { R(5, 1, 1, 1, 1); R(7, 1, 1, 1, 1); } // big ears
+    if (f) { R(0, 3, 5, 1, 1); R(8, 3, 5, 1, 1); if (v === 2) { R(0, 4, 1, 1, 1); R(12, 4, 1, 1, 1); } } // ragged, drooping tips
+    else { R(1, 0, 4, 2, 1); R(8, 0, 4, 2, 1); R(4, 1, 1, 1, 1); R(8, 1, 1, 1, 1); }
+  };
+  const CROW = ({ R }, f, v = 0) => {
+    R(4, 2, 4, 2, 1); R(8, 1, 2, 1, 1);
+    if (v === 1) R(2, 3, 2, 1, 1); // a long tail
+    if (v === 2) R(8, 0, 1, 1, 1); // a crest
+    if (f) R(0, 3, 4, 1, 1); else { R(1, 0, 3, 2, 1); R(4, 1, 1, 1, 1); }
+  };
+  const CHIP = ({ R }, f, v = 0) => { const face = [8, 7, 3][v], edge = [7, 8, 6][v]; R(1, 0, 6, 8, 1); R(0, 1, 8, 6, 1); R(1, 1, 6, 6, face); R(1 + [0, 2, 4, 2][f], 1, 2, 6, edge); };
   // A spider crawling right, side on, about half the figurine's height: a round abdomen behind, the
   // head in front, four legs a side bent high at the knee. Frames step the gait, alternate legs lifted.
-  const SPIDER = ({ R, P }, f) => {
+  // Variants: 1 a fat abdomen with a pale band, 2 a small one with an accent spot.
+  const SPIDER = ({ R, P }, f, v = 0) => {
     const line = (x0, y0, x1, y1, k) => { const n = Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0)); for (let i = 0; i <= n; i++) P(Math.round(x0 + (x1 - x0) * i / n), Math.round(y0 + (y1 - y0) * i / n), k); };
     const by = f % 2; // the body dips a pixel on each step
     [[8, 3, 2], [11, 7, 8], [14, 12, 15], [16, 17, 22]].forEach(([hx, kx, fx], i) => {
@@ -317,16 +478,21 @@
       line(hx, 9 + by, kx + sw, 3 + up, 1); line(kx + sw, 3 + up, fx + sw, 15 - up, 1);
       line(hx + 1, 9 + by, kx + sw + 1, 3 + up, 1); // legs 2 px thick, so the scanlines don't break them
     });
-    R(3, 4 + by, 8, 7, 1); R(2, 5 + by, 10, 5, 1); R(4, 3 + by, 6, 1, 1); // the abdomen
-    R(4, 4 + by, 3, 2, 3); R(4, 6 + by, 1, 1, 3); // lit from the upper left
+    if (v === 2) { R(5, 5 + by, 6, 5, 1); R(4, 6 + by, 8, 3, 1); P(7, 6 + by, 8); } // small, an accent spot on its back
+    else {
+      R(3, 4 + by, 8, 7, 1); R(2, 5 + by, 10, 5, 1); R(4, 3 + by, 6, 1, 1); // the abdomen
+      if (v === 1) { R(1, 5 + by, 1, 4, 1); R(3, 2 + by, 6, 1, 1); R(4, 7 + by, 6, 2, 4); } // fatter, a pale band
+      R(4, 4 + by, 3, 2, 3); R(4, 6 + by, 1, 1, 3); // lit from the upper left
+    }
     R(12, 7 + by, 5, 4, 1); R(13, 6 + by, 3, 1, 1); R(13, 7 + by, 2, 1, 3); // the head
     P(16, 8 + by, 8); P(15, 8 + by, 8); // eyes
   };
   const CRITTERS = {
-    spider: (sc, heat, o = {}) => crosser(sc, { depth: 300, w: 24, h: 17, period: 16, frames: 4, fps: 6, draw: SPIDER, ...o }),
-    bat: (sc, heat, o = {}) => crosser(sc, { depth: -260, w: 13, h: 6, lift: 70, period: 7, draw: BAT, ...o }),
-    crow: (sc, heat, o = {}) => crosser(sc, { depth: -380, w: 11, h: 5, lift: 90, period: 11, draw: CROW, ...o }),
-    chip: (sc, heat, o = {}) => crosser(sc, { depth: 120, w: 8, h: 8, period: 6, frames: 4, fps: 8, draw: CHIP, ...o }),
+    spider: (sc, heat, o = {}) => crosser(sc, { depth: 300, w: 24, h: 17, period: 16, frames: 4, fps: 6, n: 2, seed: 4, draw: SPIDER, ...o }),
+    // Fliers keep in front of the walls and low enough to cross the pale ground, where dark ink reads (not the dark sky).
+    bat: (sc, heat, o = {}) => crosser(sc, { depth: 300, w: 13, h: 6, lift: 30, period: 7, n: 3, seed: 1, px: 4, draw: BAT, ...o }),
+    crow: (sc, heat, o = {}) => crosser(sc, { depth: 240, w: 11, h: 5, lift: 40, period: 11, n: 2, seed: 2, px: 4, draw: CROW, ...o }),
+    chip: (sc, heat, o = {}) => crosser(sc, { depth: 120, w: 8, h: 8, period: 6, frames: 4, fps: 8, n: 2, seed: 3, draw: CHIP, ...o }),
   };
   const EFFECTS = {
     // In front of the spires (depth 150 and nearer), behind the action plane (380); tones that show on pale ground.
@@ -497,6 +663,7 @@
     cobbles: (heat) => ({ seed: 37, grit: 1200, pattern: cobbles(heat) }),
     planks: (heat) => ({ seed: 41, grit: 800, pattern: planks(heat) }),
     checker: (heat) => ({ seed: 43, grit: 800, pattern: checker(heat) }),
+    tiles: () => ({ seed: 43, grit: 800, pattern: checker(0) }), // the checker kept clean at every ante (the casino court's)
     dunes: (heat) => ({ seed: 47, grit: 2000, pattern: dunes(heat) }),
     columns: (heat) => ({ seed: 53, grit: 1000, pattern: columns(heat) }),
     ossuary: (heat) => ({ seed: 59, grit: 1200, pattern: ossuary(heat) }),
@@ -508,6 +675,7 @@
   const BACKDROPS = {
     sky: {},
     crypt: { front: D_WALL, open: D_WALL + 30, wall: cryptWall }, // past the shade at the wall's foot
+    tropicana: { front: D_TROP, open: D_TROP + 30, wall: tropWall },
     forge: { front: -130, open: 170, wall: (sc, heat) => Factory.backdrop(sc, heat) }, // the hall (D_HALL, js/factory.js); open floor starts in front of its lava river (-90..-40) and machine row (D_MACH 150)
   };
   // Features: props scattered over the floor (Scene.ruins), drawn with propArt's signature; their
@@ -527,6 +695,7 @@
     casino: { floor: 'felt', backdrop: 'sky', features: ['slots'], critters: ['chip'], effects: ['glints'] },
     lava: { floor: 'cracks', backdrop: 'sky', features: ['vents'], critters: [], effects: ['embers', 'sparks'] },
     graveyard: { floor: 'path', backdrop: 'sky', features: ['graves'], critters: ['crow'], effects: ['ash'] },
+    tropicana: { floor: 'tiles', backdrop: 'tropicana', features: [], critters: [], effects: [] },
     forge: { floor: 'grate', backdrop: 'forge', features: [], critters: [], effects: [] },
   };
   /* `horizon` (under the sky) sets how much sky shows over the features' far row: 'wall' (the
@@ -556,9 +725,21 @@
      defaults to the preset's; `life: false` leaves the preset's motion out). `near` props are big
      features placed by hand near the action, in the spire kinds, drawn as the first feature set's
      own. Features in front of a wall stop short of it, with no tall far row. */
+  // A floor's Scene.ground options, from its far edge back to the camera; and the key it's kept by
+  // (Scene.warmGround), or none when the light or ground options are a scene's own.
+  const floorOpts = (F, heat, far, light, more = {}) => ({ x0: -1200, y0: far, w: 1920, h: Math.round((820 - far) / 2), light, ...F(heat), ...more });
+  const floorKey = (floor, heat, far, light, more = {}) => (light === LIGHT && !Object.keys(more).length ? `${floor}|${heat}|${far}` : null);
+  /* Work out a setting's floor in the background while the map is idle (Scene.warmGround), so the
+     scene opens quickly: the same name and floor, backdrop, horizon and heat its setting() will get. */
+  function warmFloor(name, { heat = 0, floor, backdrop, horizon = 'wall' } = {}) {
+    const P = SETTINGS[name], fl = floor || (P && P.floor), F = FLOORS[fl], B = BACKDROPS[backdrop || (P && P.backdrop)];
+    if (!F || F.build || !B) return;
+    const far = (B.wall ? { far: B.front } : HORIZONS[horizon] || HORIZONS.wall).far;
+    Scene.warmGround(floorKey(fl, heat, far, LIGHT), floorOpts(F, heat, far, LIGHT));
+  }
   // density: { feature set: how many, 1 as standard }, e.g. { woods: 1.6 } for thicker woods.
   // band: how deep a slice of features shares one canvas (Scene.ruins): deeper for thick features, so the browser draws fewer.
-  function setting(sc, name, { heat = 0, floor, backdrop, features, critters, effects, life = true, band = 32, horizon = 'wall', density = {}, clearing = 'wide', area = AREA, clear, near = [], light = LIGHT, rubble = [], shards = [], shadows = [], over, ...more } = {}) {
+  function setting(sc, name, { heat = 0, floor, backdrop, features, critters, effects, life = true, band = 32, horizon = 'wall', density = {}, clearing = 'wide', critterLife = {}, area = AREA, clear, near = [], light = LIGHT, rubble = [], shards = [], shadows = [], over, ...more } = {}) {
     const P = SETTINGS[name];
     if (!P) throw new Error('No scene setting called ' + name + ' - try ' + Object.keys(SETTINGS).join(', '));
     const fs = [].concat(features || P.features).filter((k) => k !== 'none'), F = FLOORS[floor || P.floor], B = BACKDROPS[backdrop || P.backdrop];
@@ -575,14 +756,14 @@
     const CL = CLEARINGS[clearing] || CLEARINGS.wide, cl0 = clear || CL.clear, y1 = Math.max(area.y1, CL.y1), more2 = (y1 - y0) / (area.y1 - y0); // more ground, more props
     fs.forEach((k, i) => { const d = Math.max(0.05, density[k] || 1) * more2; Scene.ruins(sc, { area: { ...area, y0, y1 }, clear: H.clearMiddle ? { ...cl0, y: Math.min(far, cl0.y) } : cl0, near: i ? [] : near, heat, ...FEATURES[k], ...H.ruins, count: Math.round(count * d), gap: Math.min(1, 1 / Math.sqrt(d)), seed: 5 + i * 7, band }); });
     const gnd = F.build ? F.build(sc, heat, { rubble, shards, shadows, over, y0: far })
-      : Scene.ground(sc, { x0: -1200, y0: far, w: 1920, h: Math.round((820 - far) / 2), light, rubble, shards, shadows: B.wall ? [[-1200, far, 2640, far + 18], ...shadows] : shadows, over, ...F(heat), ...more }); // a wall's foot in shade
-    for (const k of cs) CRITTERS[k](sc, heat);
+      : Scene.ground(sc, { ...floorOpts(F, heat, far, light, more), key: floorKey(floor || P.floor, heat, far, light, more), rubble, shards, shadows: B.wall ? [[-1200, far, 2640, far + 18], ...shadows] : shadows, over }); // a wall's foot in shade
+    for (const k of cs) CRITTERS[k](sc, heat, { life: critterLife });
     for (const k of es) EFFECTS[k](sc, heat);
     return gnd;
   }
 
   Object.assign(Scene, {
-    setting, motes, crosser, CRITTERS, EFFECTS,
+    setting, warmFloor, motes, crosser, CRITTERS, EFFECTS,
     SETTINGS: Object.keys(SETTINGS), PRESETS: SETTINGS,
     HORIZONS: Object.keys(HORIZONS), CLEARINGS: Object.keys(CLEARINGS),
     PARTS: { floors: Object.keys(FLOORS), backdrops: Object.keys(BACKDROPS), features: Object.keys(FEATURES), walls: Object.keys(BACKDROPS).filter((k) => BACKDROPS[k].wall) },

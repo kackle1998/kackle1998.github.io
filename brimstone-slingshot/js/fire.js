@@ -194,5 +194,8 @@ const Fire = (() => {
     return draw;
   }
 
-  return { mount, at, LANDED, REST, RAISE, WARM, BURN, ENTER_CUES, RAISE_CUES, WARM_CUES, BURN_CUES };
+  // Work the campfire's floor out ahead, while the map is idle (Scene.warmFloor), so the stop opens quickly.
+  const warm = (heat) => Scene.warmFloor('ruins', { heat, floor: 'forest', backdrop: 'sky', horizon: 'wall' });
+
+  return { mount, warm, at, LANDED, REST, RAISE, WARM, BURN, ENTER_CUES, RAISE_CUES, WARM_CUES, BURN_CUES };
 })();

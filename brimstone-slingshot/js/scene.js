@@ -127,10 +127,43 @@ const Scene = (() => {
      px; put it down and right of the thing, away from the light), patch(X, Y, w, h, f(i, j) =>
      color): paint over px }. */
   // pattern(X, Y): an optional floor pattern (flagstones, felt, cracks), a ramp index per plane point, or -1 for plain ground.
-  function ground(sc, { x0, y0, w, h, light, tones = [3, 4, 5, 6], seed = 23, grit = 3000, rubble = [], shards = [], shadows = [], over, pattern }) {
-    const { C, RGB, pl } = sc, R0 = mulberry32(seed), lit = new Float32Array(w * h), mark = new Int8Array(w * h).fill(-1);
-    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) lit[y * w + x] = cl(light(x0 + x * 2, y0 + y * 2));
-    if (pattern) for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) mark[y * w + x] = pattern(x0 + x * 2, y0 + y * 2);
+  /* The costly part of a floor, its light and pattern per pixel, kept by `key` (js/settings.js makes
+     one for its floors: floor, heat, size) so a floor seen before, or warmed while the map was idle
+     (warmGround), is ready at once. fill(ms) works out rows for up to ms milliseconds (all of
+     them without ms) and says whether it's done. */
+  const FLOORS = new Map();
+  function floorData(key, { x0, y0, w, h, light, pattern }) {
+    let f = key && FLOORS.get(key);
+    if (!f) {
+      f = { lit: new Float32Array(w * h), mark: new Int8Array(w * h).fill(-1), row: 0 };
+      f.fill = (ms) => {
+        const t0 = performance.now();
+        for (; f.row < h; f.row++) {
+          const y = f.row;
+          for (let x = 0; x < w; x++) f.lit[y * w + x] = cl(light(x0 + x * 2, y0 + y * 2));
+          if (pattern) for (let x = 0; x < w; x++) f.mark[y * w + x] = pattern(x0 + x * 2, y0 + y * 2);
+          if (ms !== undefined && performance.now() - t0 > ms) { f.row++; break; }
+        }
+        return f.row >= h;
+      };
+      if (key) { FLOORS.set(key, f); if (FLOORS.size > 6) FLOORS.delete(FLOORS.keys().next().value); } // a few floors at most
+    }
+    return f;
+  }
+  /* Work a floor out in the background, a few ms at a time while the browser is idle, so the scene
+     that uses it opens quickly. Safe to call again: a floor already there or on its way is left be. */
+  const warming = new Set();
+  function warmGround(key, opts) {
+    if (!key || warming.has(key) || (FLOORS.get(key) && FLOORS.get(key).row >= opts.h)) return;
+    warming.add(key);
+    const f = floorData(key, opts), idle = window.requestIdleCallback || ((fn) => setTimeout(() => fn({ timeRemaining: () => 8 }), 30));
+    const step = (dl) => { if (f.fill(Math.max(4, Math.min(12, dl.timeRemaining() - 1)))) warming.delete(key); else idle(step); };
+    idle(step);
+  }
+  function ground(sc, { x0, y0, w, h, light, tones = [3, 4, 5, 6], seed = 23, grit = 3000, rubble = [], shards = [], shadows = [], over, pattern, key }) {
+    const { C, RGB, pl } = sc, R0 = mulberry32(seed), f = floorData(key, { x0, y0, w, h, light, pattern });
+    f.fill(); // whatever the warm-up hasn't done yet
+    const lit = f.lit, mark = f.mark.slice(); // grit and rubble are this scene's own, so they go on a copy
     for (let i = 0; i < grit; i++) mark[Math.floor(R0() * h) * w + Math.floor(R0() * w)] = R0() < 0.7 ? 3 : 4;
     const gx = (X) => Math.round((X - x0) / 2), gy = (Y) => Math.round((Y - y0) / 2);
     const blob = (X, Y, r, ks) => {
@@ -463,5 +496,5 @@ const Scene = (() => {
     };
   }
 
-  return { mount, figure, land, SQUASH, play, ground, ruins, span, plane, toStage, slingshot, CARD, FACE, cardArt, cardFace, spriteArt, faces, cardStandee, pen, bay, lvl, cl, rgb };
+  return { warmGround, mount, figure, land, SQUASH, play, ground, ruins, span, plane, toStage, slingshot, CARD, FACE, cardArt, cardFace, spriteArt, faces, cardStandee, pen, bay, lvl, cl, rgb };
 })();

@@ -24,6 +24,8 @@ const RunMap = (() => {
     trade: ['.....####..', '...####..#.', '..###......', '..##.......', '.###.......', '.###.......', '.###.......', '..##.......', '..###......', '...####..#.', '.....####..'],
     // The bowling lane: the rack from above, each pin two tall (11 wide has no room for a staggered 2x2 rack).
     bowl: ['#.#.#.#', '#.#.#.#', '.......', '.#.#.#.', '.#.#.#.', '.......', '..#.#..', '..#.#..', '.......', '...#...', '...#...'],
+    // The casino: a poker chip, notches round its edge and a ring inside.
+    casino: ['...#####...', '..##...##..', '.#.#####.#.', '##.#...#.##', '#.#.....#.#', '#.#.....#.#', '#.#.....#.#', '##.#...#.##', '.#.#####.#.', '..##...##..', '...#####...'],
     event: ['...#####...', '..##...##..', '..##...##..', '.......##..', '......##...', '.....##....', '.....##....', '...........', '.....##....', '.....##....'],
   };
   const RUNE = ['.#...', '.##..', '.#.#.', '.##..', '.#.#.', '.#..#', '.#...'];
@@ -1308,6 +1310,9 @@ const RunMap = (() => {
     CH = H / 2;
     const edges = run.map.edges.map(([a, b], i) => { const p = route(nodes[a], nodes[b]); return { i, a, b, p, s: sample(p) }; });
     const reach = Run.reach();
+    // A campfire you can go to next: work its floor out while you choose, so it opens quickly.
+    if (typeof Fire !== 'undefined' && reach.some((id) => nodes[id].t === 'fire'))
+      Fire.warm(SPIRE_ANTES[Math.min(run.circuit || 1, SPIRE_ANTES.length) - 1].heat);
     const live = new Set(edges.filter((e) => e.a === run.cur && reach.includes(e.b)).map((e) => e.i));
     const attuned = new Set(run.done);
     const visited = new Set(run.visited);

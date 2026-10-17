@@ -1,7 +1,7 @@
 'use strict';
 /* ============================================================
    BRIMSTONE SLINGSHOT — the Rune Circle (a ? stop event) and the Sigil Altar (a stop), see
-   Run.rune in js/run.js. One scene in two looks (LOOKS below): the Rune Circle stands in a
+   Run.rune in js/run.js, and the Cracked Chip's backdrop (Run.cracked). One scene in three looks (LOOKS below): the Rune Circle stands in a
    demonic factory (js/factory.js) and costs 3 life; the Altar stands in a graveyard (Scene.setting)
    and costs the card the sigil comes from, which falls away once the copy has landed.
    A rune circle turns in the floor. Your figurine lands in
@@ -17,10 +17,11 @@
 
 /* look: { CAM (Scene.mount), D_ACT, D_FIG, D_FRONT: depths (plane y) of the plinths, you in the
    circle and the plane in front of you (pips, the chip's flight), pay: life pips drop into the
-   circle, consume: the giver falls away, build(sc, heat, opts): the place, returning its ground } */
+   circle, consume: the giver falls away, plinths: false for none (the Cracked Chip), float: an
+   ICONS name hovering over your head, build(sc, heat, opts): the place, returning its ground } */
 const sigilScene = (look) => {
   const { mx, GY } = Factory, U = 4;
-  const { CAM, D_ACT, D_FIG, D_FRONT } = look;
+  const { CAM, D_ACT, D_FIG, D_FRONT } = look, plinths = look.plinths !== false;
   const AX0 = -12, AW = 174;             // the upright planes' left edge and width (scene px), from the sky (y 0) to GY
   const FX = 75, CA = 26, CB = 114;      // where you stand, and the two plinths' left edges (scene x): your cards stand on them
   const PH = 4, MID_A = CA + 7, MID_B = CB + 7; // the plinths' height; their middles
@@ -88,7 +89,7 @@ const sigilScene = (look) => {
     const sc = Scene.mount(stage, CAM);
     EDGE = (Scene.span(sc, D_FIG, LAND.high * U)[0] - 720) / U + 75 - 24;
     const gnd = look.build(sc, heat, {
-      shadows: [[mx(CA) - 8, D_ACT - 6, mx(CA + 14) + 8, D_ACT + 12], [mx(CB) - 8, D_ACT - 6, mx(CB + 14) + 8, D_ACT + 12]],
+      shadows: plinths ? [[mx(CA) - 8, D_ACT - 6, mx(CA + 14) + 8, D_ACT + 12], [mx(CB) - 8, D_ACT - 6, mx(CB + 14) + 8, D_ACT + 12]] : [],
       over: { x0: 260, y0: 280, w: 460, h: 130 },
     });
     // The circle: a flat canvas on the floor, redrawn when a mark steps round or it flares.
@@ -117,12 +118,31 @@ const sigilScene = (look) => {
     const act = Scene.plane(sc, { left: mx(AX0), x0: AX0, depth: D_ACT, w: AW, h: GY });
     const fig = Scene.figure(sc, { s: U });
     const front = Scene.plane(sc, { left: mx(AX0), x0: AX0, depth: D_FRONT, w: AW, h: GY });
+    // The floating thing (look.float): its icon at 2 scene px a cell on an ink ground, on a standee
+    // just in front of you so it hangs over your head, bobbing a pixel 3 times a second.
+    let paintFloat = () => {};
+    if (look.float) {
+      const G = ICONS[look.float], CS = 2, gw = G[0].length * CS, gh = G.length * CS, w = gw + 4, h = gh + 30;
+      const cv = document.createElement('canvas'), { R } = Scene.pen(cv.getContext('2d'), sc.C);
+      cv.width = w; cv.height = h;
+      sc.stand(cv, mx(FX) - w * U / 2, D_FIG + 1, w * U, h * U);
+      let was = -1;
+      paintFloat = (bob) => {
+        if (bob === was) return;
+        was = bob;
+        cv.getContext('2d').clearRect(0, 0, w, h);
+        const x = 2, y = 2 + bob;
+        R(x - 1, y - 1, gw + 2, gh + 2, 1);
+        G.forEach((row, j) => [...row].forEach((ch, i) => { if (ch === '#') R(x + i * CS, y + j * CS, CS, CS, j ? 6 : 7); }));
+      };
+    }
     let spin = 0, st = -1, last = at(REST), shadowKey = '', top = null;
     const paint = () => {
       const S = last, bob = Math.floor(performance.now() / 333) % 2; // the badges bob 3 a second
       paintRing(spin, S.pulse);
       act.clear(); front.clear();
-      for (const x of [MID_A, MID_B]) { // the plinths: an ink edge, lit from the upper left
+      paintFloat(bob);
+      if (plinths) for (const x of [MID_A, MID_B]) { // the plinths: an ink edge, lit from the upper left
         act.p.R(x - 10, GY - PH, 20, PH, 1); act.p.R(x - 9, GY - PH + 1, 18, PH - 1, 3); act.p.R(x - 9, GY - PH + 1, 18, 1, 5); act.p.R(x + 6, GY - PH + 1, 3, PH - 1, 2);
       }
       if (top != null) {
@@ -150,8 +170,7 @@ const sigilScene = (look) => {
         gnd.clear();
         const r = Math.max(2.5, 6 - z / 80);
         gnd.shade(mx(S.fx) + 4, S.depth + 2, r * 1.3, r * 0.5);
-        gnd.shade(mx(CA + 7) + 4, D_ACT + 2, 8, 2.4);
-        gnd.shade(mx(CB + 7) + 4, D_ACT + 2, 8, 2.4);
+        if (plinths) { gnd.shade(mx(CA + 7) + 4, D_ACT + 2, 8, 2.4); gnd.shade(mx(CB + 7) + 4, D_ACT + 2, 8, 2.4); }
       }
       paint();
       fig.place({ x: mx(S.fx), y: S.depth, z, rot: S.rot, sx: S.sx, sy: S.sy });
@@ -186,4 +205,6 @@ const LOOKS = {
         [180, 200, 'spike', 96, 24], [27, 190, 'strata', 116, 32], [124, 200, 'strata', 124, 36]].map(([sx, d, k, h, w], i) => ({ k, x: Factory.mx(sx), d, h, w, l: 3, seed: 3 + i })),
       ...o }) },
 };
-const Rune = sigilScene(LOOKS.factory), Altar = sigilScene(LOOKS.graveyard);
+// The Cracked Chip: the Rune Circle's factory and circle, with the chip hanging over your head instead of plinths.
+LOOKS.cracked = { ...LOOKS.factory, pay: false, plinths: false, float: 'chip' };
+const Rune = sigilScene(LOOKS.factory), Altar = sigilScene(LOOKS.graveyard), Cracked = sigilScene(LOOKS.cracked);

@@ -6,7 +6,7 @@
      Scene.SPOTS     the standard places to stand things, by name (see below)
      Scene.placeProp(sc, prop, { spot, heat }) stands one in a scene; returns paint(t)
    Each event file keeps its own art and lists its pieces as PROPS (js/draft.js, js/dip.js,
-   js/shrine.js, js/handover.js, js/factory.js); the kit's own pieces (the slingshot, card backs)
+   js/shrine.js, js/handover.js, js/factory.js, js/casino.js); the kit's own pieces (the slingshot, card backs)
    are here. A prop is drawn in its own file's scene px: x0..x0 + w across,
    standing on its ground line gy (4 map units a px), with cx its middle. Load this after them.
    ============================================================ */
@@ -24,7 +24,7 @@
   const FROM = [
     ['Bone Draft', typeof Draft !== 'undefined' && Draft], ['Molten Pool', typeof Dip !== 'undefined' && Dip],
     ['Bone Shrine', typeof Shrine !== 'undefined' && Shrine], ['the hand scenes', typeof Handover !== 'undefined' && Handover],
-    ['the factory', typeof Factory !== 'undefined' && Factory], ['the kit', typeof Campfire !== 'undefined' && Campfire],
+    ['the factory', typeof Factory !== 'undefined' && Factory], ['the casino', typeof Casino !== 'undefined' && Casino], ['the kit', typeof Campfire !== 'undefined' && Campfire],
   ];
   const PROPS = KIT.concat(...FROM.map(([from, M]) => (M && M.PROPS ? M.PROPS.map((p) => ({ ...p, from })) : [])));
 

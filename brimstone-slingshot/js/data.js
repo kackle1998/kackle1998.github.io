@@ -433,6 +433,7 @@ const ICONS = {
   pack:      ['#.#.#.#', '#######', '#..#..#', '#.#.#.#', '#..#..#', '#.....#', '#######'],
   relic:     ['..###..', '.#.#.#.', '#.#.#.#', '#.#.#.#', '#.#.#.#', '#.#.#.#', '#######'],
   rack:      ['#.#.#.#', '.......', '.#.#.#.', '.......', '..#.#..', '.......', '...#...'], // ten pins from above
+  casino:    ['..###..', '.#.#.#.', '##...##', '#.....#', '##...##', '.#.#.#.', '..###..'], // a poker chip, its edge notched
 };
 
 const COLOR_KEYS = ['paw', 'bone', 'gem', 'hat'];
@@ -455,7 +456,7 @@ function iconSprite(name) {
   return px.map((r) => r.join(''));
 }
 for (const k of COLOR_KEYS) SPRITES['land_' + k] = iconSprite(COLORS[k].icon);
-for (const k of ['battle', 'fire', 'altar', 'arcana', 'event', 'chip', 'spring', 'pool', 'slots', 'wheel', 'pack', 'relic', 'rack']) SPRITES['ri_' + k] = iconSprite(k);
+for (const k of ['battle', 'fire', 'altar', 'arcana', 'event', 'chip', 'spring', 'pool', 'slots', 'wheel', 'pack', 'relic', 'rack', 'casino']) SPRITES['ri_' + k] = iconSprite(k);
 /* The slot machine's lever: a long cracked bone standing upright, lit from the left (16 wide, so not mirrored). */
 SPRITES.slot_bone = [
   '..####....####..', '.#wwww#..#www-#.', '#wwwwww##wwww-+#', '#wwwwwwwwwwww-+#', '#wwwwwwwwwww-++#',
