@@ -104,8 +104,10 @@ scene, which already has this shape:
     (`js/settings.js`), with the picks from `builder-picks.json`. `name` is the preset; each part
     can be swapped (`Scene.PARTS` lists them). The backdrop is what closes off the back (the
     orrery sky, the crypt wall, the factory hall). `features` is a list of natural feature sets
-    scattered on the floor together (spires, slots, vents, graves); before a wall they keep to its
-    open floor. `critters` and `effects` are lists of `Scene.CRITTERS` / `Scene.EFFECTS` names (the
+    scattered on the floor together (spires, slots, vents, graves, woods); before a wall they keep
+    to its open floor. `density` sets how many of each, 1 as standard (`{ woods: 1.6 }`), as the
+    builder's sliders save it. `clearing` sets the open ground left round the action: 'wide' (the
+    standard), 'tight' or 'none' (features up to the action's edges and nearer the camera). `critters` and `effects` are lists of `Scene.CRITTERS` / `Scene.EFFECTS` names (the
     preset's own if left out). `near` are big features placed by hand close to the action. Props
     are the events' own objects (the pack, the pool, the slingshot), not part of the setting: they
     live in `Scene.PROPS` (`js/props.js`), and the builder's Props checklist uses them. List a new

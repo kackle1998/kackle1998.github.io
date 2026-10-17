@@ -24,7 +24,7 @@
   const FROM = [
     ['Bone Draft', typeof Draft !== 'undefined' && Draft], ['Molten Pool', typeof Dip !== 'undefined' && Dip],
     ['Bone Shrine', typeof Shrine !== 'undefined' && Shrine], ['the hand scenes', typeof Handover !== 'undefined' && Handover],
-    ['the factory', typeof Factory !== 'undefined' && Factory],
+    ['the factory', typeof Factory !== 'undefined' && Factory], ['the kit', typeof Campfire !== 'undefined' && Campfire],
   ];
   const PROPS = KIT.concat(...FROM.map(([from, M]) => (M && M.PROPS ? M.PROPS.map((p) => ({ ...p, from })) : [])));
 

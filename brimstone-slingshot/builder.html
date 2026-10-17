@@ -40,6 +40,9 @@
     .bd-name { font: 12px 'Silkscreen', monospace; margin: 6px 0 0; display: flex; justify-content: space-between; gap: 8px; }
     .bd-desc { margin: 2px 0 0; color: var(--dark); }
     .bd-err { color: var(--ink); background: var(--accent); padding: 4px 8px; margin: 0 0 12px; display: none; }
+    .bd-dens { display: flex; align-items: center; gap: 6px; margin: 0 0 4px 22px; font-size: 16px; }
+    .bd-dens input[type=range] { flex: 1; }
+    .bd-dens button { padding: 0 4px; font-size: 14px; }
     .bd-prop select { width: 100%; margin: 0 0 4px 22px; width: calc(100% - 22px); }
     .bd-out { width: 100%; height: 120px; font: 14px monospace; margin-top: 6px; display: none; }
   </style>
@@ -62,6 +65,8 @@
       <h2>FEATURES</h2>
       <div id="bdFeat"></div>
       <label><input type="checkbox" id="bdNear" checked> big ones close to the action</label>
+      <h2>CLEARING</h2>
+      <select id="bdClear"></select>
       <h2>HORIZON</h2>
       <select id="bdSky"></select>
       <h2>ANTE</h2>
@@ -108,6 +113,7 @@
   <script src="js/dip.js"></script>
   <script src="js/shrine.js"></script>
   <script src="js/handover.js"></script>
+  <script src="js/campfire.js"></script>
   <script src="js/props.js"></script>
   <script>
   'use strict';
@@ -153,9 +159,9 @@
       factory: { name: 'Factory (Rune Circle, Crystal Forge)', rows: 700, top: 178 },
     };
     // The parts' names in the panel (Scene.PARTS has them all; a new one shows by its own name).
-    const NAMES = { ash: 'ash', flagstones: 'flagstones', felt: 'casino felt', cracks: 'cracked basalt', path: 'dirt path', grate: 'iron grate', cobbles: 'cobbles', planks: 'planks', checker: 'checker tiles', dunes: 'dune sand', columns: 'basalt columns', ossuary: 'ossuary',
+    const NAMES = { ash: 'ash', flagstones: 'flagstones', felt: 'casino felt', cracks: 'cracked basalt', path: 'dirt path', grate: 'iron grate', cobbles: 'cobbles', planks: 'planks', checker: 'checker tiles', dunes: 'dune sand', columns: 'basalt columns', ossuary: 'ossuary', forest: 'forest floor',
       sky: 'orrery sky', crypt: 'crypt wall', forge: 'factory hall',
-      spires: 'spires', slots: 'slot cabinets', vents: 'spikes and vents', graves: 'trees and headstones', none: 'none' };
+      spires: 'spires', slots: 'slot cabinets', vents: 'spikes and vents', graves: 'trees and headstones', woods: 'leafy trees',none: 'none' };
     const named = (k) => NAMES[k] || k;
     // Near props framing the action: the spire kinds, which each setting turns into its own.
     const NEAR = [[-30, 210, 'spike', 80, 22], [3, 170, 'spike', 92, 24], [14, 250, 'basalt', 44, 24], [112, 170, 'spike', 104, 26], [138, 240, 'basalt', 40, 24], [180, 200, 'spike', 96, 24], [27, 190, 'strata', 116, 32], [124, 200, 'strata', 124, 36]];
@@ -180,7 +186,7 @@
       },
     };
 
-    const st = { setting: 'ruins', ante: 0, cam: 'draft', floor: 'ash', backdrop: 'sky', features: ['spires'], horizon: 'wall', props: [], near: true, start: null, critters: [], effects: [], keep: null, speed: 1 };
+    const st = { setting: 'ruins', ante: 0, cam: 'draft', floor: 'ash', backdrop: 'sky', features: ['spires'], horizon: 'wall', clearing: 'wide', density: {}, props: [], near: true, start: null, critters: [], effects: [], keep: null, speed: 1 };
     const KEY = 'builder.v1.' + (new URLSearchParams(location.search).get('mockup') || 'none');
     try { Object.assign(st, JSON.parse(localStorage.getItem(KEY) || '{}')); } catch (e) { /* a private window: start fresh */ }
     // Parts saved under an older builder, or since renamed: back to the preset's own.
@@ -195,6 +201,8 @@
     delete st.life;
     if (!STARTERS[st.start]) st.start = null;
     if (!CAMS[st.cam]) st.cam = 'draft';
+    if (!st.density || typeof st.density !== 'object') st.density = {};
+    if (!Scene.CLEARINGS.includes(st.clearing)) st.clearing = 'wide';
     if (!Array.isArray(st.props)) st.props = [];
     st.props = st.props.map((e) => (typeof e === 'string' ? { id: e, spot: 'home' } : e)).filter((e) => Scene.PROPS.some((q) => q.id === e.id)); // ids alone: saved by an older builder
     if (!Scene.HORIZONS.includes(st.horizon)) st.horizon = 'wall';
@@ -209,7 +217,7 @@
       el.style.transform = `scale(${f.clientWidth / 1088})`;
       const cam = CAMS[st.cam], heat = st.ante, sc = Scene.mount(el, { rows: cam.rows, top: cam.top });
       const near = st.near ? NEAR.map(([sx, dd, k, h, w], i) => ({ k, x: mx(sx), d: dd, h, w, l: 3, seed: 3 + i })) : [];
-      const gnd = Scene.setting(sc, st.setting, { heat, near, floor: st.floor, backdrop: st.backdrop, features: st.features, critters: st.critters, effects: st.effects, horizon: st.horizon, over: { x0: 260, y0: 280, w: 460, h: 130 } });
+      const gnd = Scene.setting(sc, st.setting, { heat, near, floor: st.floor, backdrop: st.backdrop, features: st.features, density: st.density, clearing: st.clearing, critters: st.critters, effects: st.effects, horizon: st.horizon, over: { x0: 260, y0: 280, w: 460, h: 130 } });
       // The props ticked, each on its own plane at the next free spot around the action (scene x, depth).
       const paints = st.props.map((e) => Scene.placeProp(sc, Scene.PROPS.find((q) => q.id === e.id), { spot: e.spot, heat }));
       if (paints.length) sc.every(100, () => { const t = performance.now() / 1000; for (const p of paints) p(t); });
@@ -271,7 +279,7 @@
       opt($('bdStart'), [['', 'nothing (a blank stage)'], ...Object.entries(STARTERS).map(([k, v]) => [k, v.name])], st.start || '');
       $('bdStart').onchange = (e) => {
         const k = e.target.value, S = STARTERS[k];
-        if (S) { const { name, file, fig, ...parts } = S; Object.assign(st, JSON.parse(JSON.stringify(parts))); } // copies, so later changes don't touch the starter
+        if (S) { const { name, file, fig, ...parts } = S; Object.assign(st, { density: {} }, JSON.parse(JSON.stringify(parts))); } // copies, so later changes don't touch the starter
         st.start = k || null;
         save(); sync(); build();
       };
@@ -279,13 +287,15 @@
       // A preset sets every part, ticking its own features, critters and effects; each can then be changed on its own.
       $('bdSetting').onchange = (e) => {
         const P = Scene.PRESETS[e.target.value];
-        Object.assign(st, { setting: e.target.value, floor: P.floor, backdrop: P.backdrop, features: P.features.slice(), critters: P.critters.slice(), effects: P.effects.slice() });
+        Object.assign(st, { setting: e.target.value, floor: P.floor, backdrop: P.backdrop, features: P.features.slice(), density: {}, critters: P.critters.slice(), effects: P.effects.slice() });
         save(); sync(); build();
       };
       opt($('bdBack'), Scene.PARTS.backdrops.map((k) => [k, named(k)]), st.backdrop);
       $('bdBack').onchange = (e) => set('backdrop', e.target.value);
       opt($('bdSky'), [['wall', 'far off, tall far row'], ['low', 'nearer, low far row'], ['open', 'nearer, open middle']], st.horizon);
       $('bdSky').onchange = (e) => set('horizon', e.target.value);
+      opt($('bdClear'), [['wide', 'wide (the standard)'], ['tight', 'tight, features nearer'], ['none', 'none, up to the action']], st.clearing);
+      $('bdClear').onchange = (e) => set('clearing', e.target.value);
 
       $('bdAnte').innerHTML = [0, 1, 2].map((h) => `<button data-h="${h}">${h + 1}</button>`).join('');
       $('bdAnte').querySelectorAll('button').forEach((b) => (b.onclick = () => set('ante', +b.dataset.h)));
@@ -298,8 +308,17 @@
         el.innerHTML = names.map((n) => `<label><input type="checkbox" value="${n}"> ${n}</label>`).join('');
         el.querySelectorAll('input').forEach((c) => (c.onchange = () => set(key, [...el.querySelectorAll('input:checked')].map((x) => x.value))));
       };
-      boxes($('bdFeat'), Scene.PARTS.features, 'features');
-      $('bdFeat').querySelectorAll('label').forEach((l) => { const c = l.querySelector('input'); l.lastChild.textContent = ' ' + named(c.value); });
+      // Each feature set: a box, and once ticked a density slider (20%..300%, 100% standard) with a reset.
+      $('bdFeat').innerHTML = Scene.PARTS.features.map((k) => `<div class="bd-feat"><label><input type="checkbox" value="${k}"> ${named(k)}</label>`
+        + `<div class="bd-dens" data-dens="${k}"><input type="range" min="20" max="300" step="10" value="100"><span>100%</span><button title="Back to the standard density">DEFAULT</button></div></div>`).join('');
+      $('bdFeat').querySelectorAll('input[type=checkbox]').forEach((c) => (c.onchange = () => set('features', [...$('bdFeat').querySelectorAll('input[type=checkbox]:checked')].map((x) => x.value))));
+      $('bdFeat').querySelectorAll('.bd-dens').forEach((row) => {
+        const k = row.dataset.dens, r = row.querySelector('input'), out = row.querySelector('span');
+        const put = (v) => { const d = { ...st.density }; if (v === 100) delete d[k]; else d[k] = v / 100; set('density', d); };
+        r.oninput = () => (out.textContent = r.value + '%'); // the number follows the drag; the stage rebuilds on release
+        r.onchange = () => put(+r.value);
+        row.querySelector('button').onclick = () => put(100);
+      });
       // Each prop: a box, and once ticked a spot picker (home, or a standard spot).
       const spotOpts = [['home', 'home (its own event\'s spot)'], ...Object.keys(Scene.SPOTS).map((k) => [k, k])];
       $('bdProps').innerHTML = Scene.PROPS.map((q) => `<div class="bd-prop"><label><input type="checkbox" value="${q.id}"> ${q.name} (${q.from})</label><select data-spot="${q.id}">${spotOpts.map(([v, n]) => `<option value="${v}">${n}</option>`).join('')}</select></div>`).join('');
@@ -326,12 +345,20 @@
       $('bdStartNote').textContent = st.start ? `Copied from ${STARTERS[st.start].name} (${STARTERS[st.start].file}). Change anything; the new event starts from its code.` : "Copy an existing event's stage, then change anything.";
       $('bdCam').value = st.cam;
       $('bdSetting').value = st.setting; $('bdFloor').value = st.floor; $('bdBack').value = st.backdrop;
-      $('bdFeat').querySelectorAll('input').forEach((c) => (c.checked = st.features.includes(c.value)));
+      $('bdFeat').querySelectorAll('.bd-feat').forEach((row) => {
+        const k = row.querySelector('input').value, on = st.features.includes(k), v = Math.round((st.density[k] || 1) * 100), dens = row.querySelector('.bd-dens');
+        row.querySelector('input').checked = on;
+        dens.style.display = on ? '' : 'none';
+        dens.querySelector('input').value = v; dens.querySelector('span').textContent = v + '%';
+        dens.querySelector('button').disabled = v === 100;
+      });
       $('bdNear').checked = st.near;
       const wall = Scene.PARTS.walls.includes(st.backdrop), bare = !st.features.length; // the big close ones are features: none without them
       $('bdNear').disabled = bare;
       $('bdNear').parentElement.classList.toggle('off', bare);
       $('bdSky').value = st.horizon;
+      $('bdClear').value = st.clearing;
+      $('bdClear').disabled = bare; // no features, nothing to clear
       $('bdSky').disabled = wall; // a wall stands in front of the sky: the features stop at it
       $('bdProps').querySelectorAll('.bd-prop').forEach((row) => {
         const e = st.props.find((x) => x.id === row.querySelector('input').value), sel = row.querySelector('select');
@@ -342,7 +369,7 @@
       $('bdCritters').querySelectorAll('input').forEach((c) => (c.checked = st.critters.includes(c.value)));
       $('bdEffects').querySelectorAll('input').forEach((c) => (c.checked = st.effects.includes(c.value)));
     }
-    const picks = () => ({ mockup: new URLSearchParams(location.search).get('mockup') || null, keep: st.keep, startFrom: st.start ? { event: STARTERS[st.start].name, file: STARTERS[st.start].file } : null, setting: st.setting, floor: st.floor, backdrop: st.backdrop, features: st.features, horizon: st.horizon, props: st.props, ante: st.ante + 1, camera: st.cam, bigFeaturesClose: st.near, critters: st.critters, effects: st.effects });
+    const picks = () => ({ mockup: new URLSearchParams(location.search).get('mockup') || null, keep: st.keep, startFrom: st.start ? { event: STARTERS[st.start].name, file: STARTERS[st.start].file } : null, setting: st.setting, floor: st.floor, backdrop: st.backdrop, features: st.features, density: st.density, clearing: st.clearing, horizon: st.horizon, props: st.props, ante: st.ante + 1, camera: st.cam, bigFeaturesClose: st.near, critters: st.critters, effects: st.effects });
     async function savePicks() {
       try {
         const r = await fetch('/builder/picks', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(picks(), null, 2) });

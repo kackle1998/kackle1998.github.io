@@ -6,7 +6,9 @@
    orrery sky and the Pit Boss's two floating hands (the run map's encore art, RunMap.handArt) slide
    in from either side, fingers pointing at you, one with a card pinched in its fingertips.
      give    the right hand's card floats over to your head and turns over     (Offer, Bone Pile)
-     swap    you raise your weakest card, the left hand takes it, the right hand hands over a new one
+     swap    you hold up your weakest card and the right hand holds the one you'd get, both face up
+             (real faces, Scene.cardStandee; hover either for its text); the left hand takes yours,
+             the right hand hands theirs over                                  (Lost Spellslinger)
      relic   a card in each hand behind a portcullis; you pay 6 life (hearts), both gates rise and
              both cards float to you to choose from
      pile    (Bone Pile) heaps of bones lie on the ground under the hovering hands
@@ -44,7 +46,7 @@ const Handover = (() => {
      takes over (the real card opens in its place) and the hands leave. */
   const TL = {
     give: { take: 2.8, fly: 0.6, turn: 3.4 },
-    swap: { a: 2.65, aTake: 3.3, take: 3.9, fly: 0.6, turn: 4.5 },
+    swap: { aTake: 2.8, take: 3.4, fly: 0.6, turn: 4.0 }, // face up already: `turn` is when theirs reaches your head
     relic: { hearts: 2.6, gate: 3.2, take: 3.8, fly: 0.6, turn: 4.4 },
   };
   for (const T of Object.values(TL)) { T.turned = T.turn + TURN_S; T.end = T.turned + 1.2; }
@@ -55,7 +57,8 @@ const Handover = (() => {
      at(t) is the scene's whole state at t seconds, with no DOM:
        { t, hero: { fx, feet, depth, rot, sx, sy }, eyes: { open, lx, ly }, bob (the hands hover),
          hands: [{ side (-1 left, 1 right), x, y: the anchor, a: 0 gone .. 1 arrived }],
-         cards: [{ on: 'L' | 'R' } held in that hand, or { x, y, f: turn frame 0..2, head } free; each with r: its rarity and k: which dealt card it is],
+         cards: [{ on: 'L' | 'R' } held in that hand, or { x, y, f: turn frame 0..2, head } free; each with r: its rarity, k: which dealt card it is
+           and face: 'mine' | 'gain' when it's face up (draw.hold gives the real cards)],
          hearts: [[x, y]], gates: [left, right] raised 0..1 or null } */
   function make({ mode, pile = false, rarity = 'common' }) {
     const T = TL[mode], { turned: TURNED, end: END } = T;
@@ -88,14 +91,16 @@ const Handover = (() => {
         if (t < T.take) S.cards.push({ on: 'R', r: rarity, k: 0 });
         else head(fly(ease(cl((t - T.take) / T.fly)), 10, FROM.R, HEAD), turn(T.turn), 0);
       } else if (mode === 'swap') {
-        // Your weakest card (a plain back) rises over your head, goes to the left hand; the right hand's card comes to you.
-        stoop(T.a - 0.15, T.a); hop(T.turn);
+        // Both cards are face up (face: which one, for draw.hold): your weakest rises over your head
+        // as you land and stays there while you choose, as at the Bone Shrine; the right hand holds
+        // the one you'd get. Yours goes to the left hand, theirs comes to you.
+        stoop(T.aTake - 0.15, T.aTake); hop(T.take + T.fly);
         const uA = ease(cl((t - T.aTake) / T.fly));
-        if (t >= T.a && t < T.aTake) S.cards.push({ x: HEAD.x, y: HEAD.y + (1 - Math.floor(cl((t - T.a) / 0.5) * 3) / 3) * 14, f: 0, r: 'common' });
-        else if (t >= T.aTake && uA < 1) S.cards.push({ ...fly(uA, -9, HEAD, FROM.L), f: 0, r: 'common' });
-        else if (t >= T.aTake) S.cards.push({ on: 'L', r: 'common' });
-        if (t < T.take) S.cards.push({ on: 'R', r: rarity, k: 0 });
-        else S.cards.push({ ...fly(ease(cl((t - T.take) / T.fly)), 10, FROM.R, HEAD), f: turn(T.turn), r: rarity, k: 0, head: true });
+        if (t >= LANDED && t < T.aTake) S.cards.push({ x: HEAD.x, y: HEAD.y + (1 - Math.floor(cl((t - LANDED) / 0.5) * 3) / 3) * 14, f: 0, r: 'common', face: 'mine' });
+        else if (t >= T.aTake && uA < 1) S.cards.push({ ...fly(uA, -9, HEAD, FROM.L), f: 0, r: 'common', face: 'mine' });
+        else if (t >= T.aTake) S.cards.push({ on: 'L', r: 'common', face: 'mine' });
+        if (t < T.take) S.cards.push({ on: 'R', r: rarity, k: 0, face: 'gain' });
+        else S.cards.push({ ...fly(ease(cl((t - T.take) / T.fly)), 10, FROM.R, HEAD), f: 0, r: rarity, k: 0, head: true, face: 'gain' });
       } else {
         // Pay (hearts leave you), both gates rise, both cards float to you.
         stoop(T.hearts, T.hearts + 0.15); hop(T.turn);
@@ -211,8 +216,14 @@ const Handover = (() => {
     const watch = Scene.plane(sc, { left: mx(CX) - EYES.w * EYES.u / 2, x0: CX - EYES.w / 2, depth: FAR - 20, w: EYES.w, h: EYES.h, u: EYES.u });
     const hands = { 1: document.createElement('canvas'), '-1': document.createElement('canvas') };
     for (const [side, cv] of Object.entries(hands)) { cv.width = HAND.w; cv.height = HAND.h; handArt(cv, sc.C, 'open', side < 0); }
-    let shadowKey = '', last = null, dealt = [];
+    let shadowKey = '', last = null, dealt = [], up = {};
     const rar = (c) => (c.k != null && dealt[c.k]) || c.r; // a dealt card shows its own rarity once it's known
+    // A card drawn where it is: face up (its real face standing there, from draw.hold) or a back.
+    // In a hand it stands just behind the hand's plane, so the fingers pinch over it.
+    const card = (c, pln, x, y, dz) => {
+      const st = c.face && up[c.face];
+      if (st) { st.at(pln, Math.round(x), Math.round(y), dz); st.used = true; } else Scene.cardArt(pln.p, Math.round(x), Math.round(y), rar(c), CARD.TURN[c.f || 0]);
+    };
 
     function draw(S) {
       if (!sc.alive()) return;
@@ -235,11 +246,13 @@ const Handover = (() => {
       const p = act.p, g = act.g, held = (c) => { const h = hs[c.on === 'L' ? 0 : 1]; return { x: c.on === 'L' ? h.x + 30 : h.x - 45, y: h.y - 10 }; };
       eyes(watch.p, CX, EYES.y, S.eyes.open, S.eyes.lx, S.eyes.ly);
       if (pile) { heap(p, LX + 10); heap(p, RX - 10); } // the bones lie on the ground; the hands float over them
-      for (const c of S.cards) if (c.on) { const at = held(c); Scene.cardArt(p, Math.round(at.x), Math.round(at.y), rar(c)); }
+      for (const st of Object.values(up)) st.used = false;
+      for (const c of S.cards) if (c.on) { const at = held(c); card(c, act, at.x, at.y, -2); }
       for (const h of hs) act.art(hands[h.side], Math.round(h.x - HAND.ax), Math.round(h.y - HAND.ay), U / 2);
       if (S.gates) { gate(p, GATE.l, S.gates[0]); gate(p, GATE.r, S.gates[1]); }
       // In front of you: the cards over your head, the hearts leaving you.
-      for (const c of S.cards) if (!c.on) Scene.cardArt(front.p, Math.round(c.x), Math.round(c.y), rar(c), CARD.TURN[c.f]);
+      for (const c of S.cards) if (!c.on) card(c, front, c.x, c.y, 1);
+      for (const st of Object.values(up)) if (!st.used) st.hide();
       for (const [x, y] of S.hearts) heart(front.p, x, y);
       fig.place({ x: mx(S.hero.fx), y: S.hero.depth, z, rot: S.hero.rot, sx: S.hero.sx, sy: S.hero.sy });
     }
@@ -249,6 +262,14 @@ const Handover = (() => {
     draw.toFront = (x, y) => Scene.toStage(sc, front, x, y); // where the cards over your head are drawn
     // The dealt cards, in hand order (the left hand's first), so their backs show what they are.
     draw.deal = (defs) => { dealt = defs.map(rarityOf); if (last) draw(last); };
+    // The face-up cards ({ mine, gain }: .card elements, Run.cardGrid's, so hovering one shows its
+    // text), standing in the scene wherever at() puts that card.
+    draw.hold = (els) => {
+      for (const st of Object.values(up)) st.el.remove();
+      up = {};
+      for (const [k, el] of Object.entries(els)) if (el) up[k] = Scene.cardStandee(sc, el);
+      if (last) draw(last);
+    };
     return draw;
   }
 

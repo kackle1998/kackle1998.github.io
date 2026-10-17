@@ -141,17 +141,20 @@ const Shrine = (() => {
     const act = plane(D_ACT), front = plane(D_FRONT), fig = Scene.figure(sc, { s: U });
     let shadowKey = '';
     // The offered card itself: the game's own card face over the scene, moved and narrowed to the
-    // card's rectangle on its plane each frame (as the card turns, only its width changes).
-    let face = null, fw = 1, fh = 1;
+    // card's rectangle on its plane each frame (as the card turns, only its width changes). It's
+    // moved by a holder round it, so the card's own hover pop (render.js) stays in place.
+    let face = null, box = null, fw = 1, fh = 1;
     if (def) {
+      box = document.createElement('div');
+      Object.assign(box.style, { position: 'absolute', left: '0', top: '0', transformOrigin: '50% 50%', zIndex: '3' });
       face = document.createElement('div');
       face.className = `card ${def.type}${def.token ? ' token' : ''} still`;
       face.innerHTML = cardInnerHTML(def);
-      Object.assign(face.style, { position: 'absolute', left: '0', top: '0', margin: '0', transformOrigin: '0 0', pointerEvents: 'none', zIndex: '3', boxShadow: 'none' });
-      face.style.transformOrigin = '50% 50%';
-      stage.appendChild(face);
+      Object.assign(face.style, { margin: '0', boxShadow: 'none' });
+      box.appendChild(face);
+      stage.appendChild(box);
       fw = face.offsetWidth || 1; fh = face.offsetHeight || 1; // its natural size, measured while it shows
-      face.style.display = 'none';
+      box.style.display = 'none';
     }
     // Where the face goes is read off the screen, so perspective is already in it. Held over your head
     // it is anchored to your own rectangle (so it is over you wherever you stand); on the slab, to an
@@ -168,7 +171,7 @@ const Shrine = (() => {
     const lerpA = (p, q, k) => p.map((v, i) => lerp(v, q[i], k));
     function placeFace(c) {
       if (!face) return;
-      face.style.display = c ? '' : 'none';
+      box.style.display = c ? '' : 'none';
       if (!c) return;
       const b = stage.getBoundingClientRect(), z = b.width / stage.offsetWidth, F = fig.el.getBoundingClientRect(), R = ruler.getBoundingClientRect();
       const lx = (x) => (x - b.left) / z - stage.clientLeft, ly = (y) => (y - b.top) / z - stage.clientTop;
@@ -179,7 +182,7 @@ const Shrine = (() => {
       if (c.hop != null) a = [a[0], a[1] - LOB * 4 * c.hop * (1 - c.hop) * uy, a[2]]; // the map's lob: 4H k (1 - k)
       const [cx, bottom, s] = a, sq = c.sq ? Scene.SQUASH : { sx: 1, sy: 1 }, sy = s * sq.sy;
       // About its middle, so the tumble turns it in place; a squash keeps its foot down.
-      face.style.transform = `translate(${cx - fw / 2}px, ${bottom - fh * sy / 2 - fh / 2}px) rotate(${(c.rot || 0) * 90}deg) scale(${s * c.w * sq.sx}, ${sy})`;
+      box.style.transform = `translate(${cx - fw / 2}px, ${bottom - fh * sy / 2 - fh / 2}px) rotate(${(c.rot || 0) * 90}deg) scale(${s * c.w * sq.sx}, ${sy})`;
     }
 
     function draw(S) {
@@ -209,6 +212,7 @@ const Shrine = (() => {
       placeFace(S.card);
     }
     draw.alive = sc.alive;
+    draw.face = face; // the held card's real face (null without one), for Run to show its text on hover
     return draw;
   }
 

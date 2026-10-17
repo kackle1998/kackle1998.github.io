@@ -928,6 +928,10 @@ body[data-crt="off"] .rm-fig img, .rm-fig.hopping img { animation: none; }
 .sc-face { position: absolute; left: 0; top: 0; transform-origin: 0 0; pointer-events: none; }
 .sc-face.sc-ready { pointer-events: auto; }
 .sc-face .card { margin: 0; box-shadow: none; }
+/* A real card standing in the scene (Scene.cardStandee): held in a hand or over your head. Hover it for its text. */
+.bw-st.sc-held { pointer-events: auto; }
+.sc-held > div { transform-origin: 0 0; }
+.sc-held .card { margin: 0; box-shadow: none; }
 /* The Rune Circle's two real cards on their plinths (Run.rune); rc-lit while the circle copies from or onto one. */
 .rc-real.rc-lit .card { outline: 3px solid var(--accent); outline-offset: -3px; }
 .rc-real.rc-gone .card { animation: rcGone .43s steps(3, jump-none) both; } /* the Sigil Altar's sacrifice narrows away */

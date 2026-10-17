@@ -288,9 +288,16 @@ const RUN_EVENTS = [
     choices: [
       { label: 'TRADE', ok: (run) => run.s.deck.length > 0, need: 'You have no card to trade.',
         see: (run) => run.cards().sort((a, b) => costTotal(a.cost) - costTotal(b.cost))[0],
+        // The card you'd get: rolled once and kept on the stop (node.gain), so their hand holds it
+        // while you choose and a reload shows the same one.
+        gain: (run, out) => {
+          const node = run.s.node;
+          if (!CARDS[node.gain]) { node.gain = runOffer(Math.random, run.s.colors, 1, { row: run.row(), skip: out ? [out.base] : [] })[0].id; run.save(); }
+          return CARDS[node.gain];
+        },
         act: (run, _, ch) => {
           const out = ch.see(run);
-          const c = runOffer(Math.random, run.s.colors, 1, { row: run.row(), skip: [out.base] })[0];
+          const c = ch.gain(run, out);
           run.remove(out.rid);
           const rc = run.add(c.id);
           return { text: `You gave up ${out.name} and got ${c.name}.`, cards: [out, run.card(rc.rid)] };
@@ -421,7 +428,7 @@ const BOWL_STAR = { high: 240, ms: 140 };
 const Run = {
   s: null,           // the saved run, or null
   ids: [],           // CARDS ids registered for the current run
-  debugRoll: null,   // console, dev account only: force the 25% death rolls (0 = the bad outcome)
+  debugRoll: null,   // console, dev account only: force the death rolls (the dip's 25%, the campfire's burnOdds) (0 = the bad outcome)
   debugEvent: null,  // console, dev account only: force the next ? stop's event id
   bench: null,       // a scene test bench's state while one is open (Run.sceneTest), or null
 
@@ -862,39 +869,111 @@ const Run = {
     };
   },
 
-  /* ---------- campfire: push your luck ---------- */
-  campfire() {
-    const node = this.s.node;
-    if (node.rid != null && !this.rc(node.rid)) node.rid = null;
-    if (node.rid == null) {
-      const mons = this.creatures();
-      this.screen('ri_fire', 'CAMPFIRE', mons.length ? 'Pick a creature to warm by the fire.' : 'You have no creatures to warm.',
-        '', '<button class="btn" id="rnLeave">LEAVE</button>');
-      this.cardGrid($('#rnBody'), mons, (d) => { node.rid = d.rid; node.n = 0; this.save(); this.campfire(); }, mons.length > 7);
-    } else {
-      const d = this.card(node.rid), k = node.n || 0;
-      this.screen('ri_fire', 'CAMPFIRE',
-        k ? `It has taken the heat ${k} time${k > 1 ? 's' : ''}. Again? There's a 25% chance the fire takes it.` : 'The first warmth is free. After that, each boost risks the fire taking it.',
-        '', `<button class="btn" id="rnAtk">+1 ATTACK</button><button class="btn" id="rnHp">+2 HEALTH</button><button class="btn" id="rnLeave">LEAVE</button>`);
-      this.cardGrid($('#rnBody'), [d], null);
-      const boost = (stat, by) => {
-        if (k >= 1 && ((isDev() ? this.debugRoll : null) ?? Math.random()) < 0.25) {
-          sfx('die');
-          CRT.pulse(0.8, true);
-          this.remove(d.rid);
-          return this.finishStop('ri_fire', 'CAMPFIRE', `The fire took your ${d.name}. It burns a little brighter.`, [d]);
-        }
-        this.rc(d.rid)[stat] += by;
-        node.n = k + 1;
-        this.register();
+  /* ---------- campfire: push your luck (js/fire.js) ----------
+     You land beside the fire in the woods (the entrance, once per stop: node.cf.landed). HOLD A
+     CREATURE asks, over the scene, which one (as the Forge and the Moth do), saves node.rid and
+     raises it on a stick over the flames. Each boost decides first: the stats are given and saved
+     before the card dips and heats, or the card is removed and node.cf.burnt saved before it chars
+     and drops into the fire, so a reload shows where things ended. The first boost is free; after
+     that each one risks the fire taking it, a little more each time (burnOdds). Input does nothing while anything moves. */
+  /* The chance the fire takes a creature that has already taken the heat k times (k >= 1): 25%, then 5% more each time. */
+  burnOdds(k) { return Math.min(0.9, 0.25 + (k - 1) * 0.05); },
+  campfire(n) {
+    const node = this.s.node, cf = node.cf || (node.cf = {}), test = this.bench;
+    const burnt = (d) => this.finishStop('ri_fire', 'CAMPFIRE', `The fire took your ${d.name}. It burns a little brighter.`, [d]);
+    if (cf.burnt && !test) return burnt(cf.burnt);
+    if (node.rid != null && !test && !this.rc(node.rid)) node.rid = null;
+    const ante = test ? test.ante : Math.min(this.s.circuit || 1, RunMap.SPIRE_ANTES.length);
+    // The bench holds a stand-in creature, as often as you like.
+    const stand = test && (test.fire || (test.fire = { def: Object.values(CARDS).find((c) => c.type === 'creature' && SPRITES[c.sprite]), held: false, n: 0 }));
+    const held = () => (test ? (stand.held ? stand.def : null) : node.rid != null ? this.card(node.rid) : null);
+    const mons = test ? [stand.def] : this.creatures();
+    const subFor = (d) => {
+      if (!d) return mons.length ? 'Pick a creature to warm by the fire.' : 'You have no creatures to warm.';
+      const k = test ? stand.n : node.n || 0;
+      return k ? `It has taken the heat ${k} time${k > 1 ? 's' : ''}. Again? There's a ${Math.round(this.burnOdds(k) * 100)}% chance the fire takes it.` : 'The first warmth is free. After that, each boost risks the fire taking it.';
+    };
+    const stage = this.sceneScreen('ri_fire', 'CAMPFIRE', subFor(held()),
+      '<button class="btn" id="cfHold">HOLD A CREATURE</button><button class="btn" id="cfAtk">+1 ATTACK</button><button class="btn" id="cfHp">+2 HEALTH</button>' +
+      (test ? `<button class="btn" id="cfBurn">BURN</button><button class="btn" id="cfAnte">ANTE ${ante}</button><button class="btn" id="rnLeave">DONE</button>` : '<button class="btn" id="rnLeave">LEAVE</button>'));
+    const draw = Fire.mount(stage, RunMap.SPIRE_ANTES[ante - 1].heat), lk = this.sceneLock();
+    let lvl = 0;
+    draw.hit.onmouseenter = () => { const d = held(); if (d) this.tip(draw.hit, d); };
+    draw.hit.onmouseleave = () => this.tip(null);
+    // Where things stand: HOLD until a creature is over the fire, then the boosts.
+    const rest = () => {
+      const d = held();
+      draw.face(d);
+      lvl = test ? stand.n : node.n || 0; // the fire burns a level higher for each heat taken
+      draw.grow(lvl);
+      draw(d ? Fire.at(0, 'hold', 0, lvl) : Fire.at(Fire.REST));
+      draw.hold(!!d);
+      lk.unlock();
+      $('.rn-sub').textContent = subFor(d);
+      $('#cfHold').style.display = d ? 'none' : '';
+      $('#cfHold').disabled = !mons.length;
+      for (const id of ['#cfAtk', '#cfHp', '#cfBurn']) if ($(id)) $(id).style.display = d ? '' : 'none';
+    };
+    const play = (mode, to, cues, done, chip = 0) => {
+      draw.hold(false);
+      this.tip(null);
+      if (FAST) return done();
+      lk.lock();
+      Scene.play({ draw, at: (t) => Fire.at(t, mode, chip, lvl), from: 0, to, cues, done });
+    };
+    rest();
+    lk.lock();
+    this.sceneEnter(test ? { landed: !!test.fireLanded } : cf, { draw, at: Fire.at, to: Fire.REST, cues: Fire.ENTER_CUES, done: rest });
+    if (test) test.fireLanded = true;
+    const take = (d) => {
+      if (test) stand.held = true; else { node.rid = d.rid; node.n = 0; this.save(); }
+      draw.face(d);
+      play('raise', Fire.RAISE, Fire.RAISE_CUES, rest);
+    };
+    // Which creature: picked over the scene; BACK puts the question away.
+    $('#cfHold').onclick = () => {
+      if (lk.busy() || !mons.length) return;
+      sfx('select');
+      if (test) return take(stand.def);
+      const wrap = document.createElement('div');
+      wrap.className = 'rn-deckwrap';
+      wrap.innerHTML = `<div class="rn panel slot-see"><div class="rn-sub">Pick a creature to hold over the fire.</div><div class="rn-body" id="cfBody"></div>
+        <div class="rn-btns"><button class="btn" id="cfBack">BACK</button></div></div>`;
+      $('#screen').appendChild(wrap);
+      this.cardGrid($('#cfBody'), mons, (d) => { wrap.remove(); take(d); }, mons.length > 7);
+      $('#cfBack').onclick = () => { sfx('select'); wrap.remove(); };
+    };
+    const boost = (stat, by, force = false) => {
+      const d = held();
+      if (lk.busy() || !d) return;
+      sfx('select');
+      if (test) {
+        if (force) return play('burn', Fire.BURN, Fire.BURN_CUES, () => { test.fire = null; this.campfire(n); });
+        stand.n++;
+        return play('warm', Fire.WARM, Fire.WARM_CUES, rest, stat === 'hp' ? 1 : 0);
+      }
+      const k = node.n || 0;
+      if (k >= 1 && ((isDev() ? this.debugRoll : null) ?? Math.random()) < this.burnOdds(k)) {
+        cf.burnt = { ...d };
+        this.remove(d.rid);
         this.save();
-        sfx('heal');
-        this.campfire();
-      };
-      $('#rnAtk').onclick = () => boost('atk', 1);
-      $('#rnHp').onclick = () => boost('hp', 2);
+        return play('burn', Fire.BURN, Fire.BURN_CUES, () => { CRT.pulse(0.8, true); burnt(cf.burnt); });
+      }
+      this.rc(d.rid)[stat] += by;
+      node.n = k + 1;
+      this.register();
+      this.save();
+      play('warm', Fire.WARM, Fire.WARM_CUES, rest, stat === 'hp' ? 1 : 0);
+    };
+    $('#cfAtk').onclick = () => boost('atk', 1);
+    $('#cfHp').onclick = () => boost('hp', 2);
+    if (test) {
+      $('#cfBurn').onclick = () => boost(null, 0, true);
+      $('#cfAnte').onclick = () => { if (lk.busy()) return; sfx('select'); test.ante = test.ante % RunMap.SPIRE_ANTES.length + 1; this.campfire(n); };
+      $('#rnLeave').onclick = () => { if (lk.busy()) return; sfx('select'); this.sceneTestEnd(); };
+      return;
     }
-    $('#rnLeave').onclick = () => { sfx('select'); this.leave(); };
+    $('#rnLeave').onclick = () => { if (lk.busy()) return; sfx('select'); this.leave(); };
   },
 
   /* ---------- sigils: the altar (sacrifice) and the rune circle (copy) ---------- */
@@ -1541,6 +1620,7 @@ const Run = {
      bench's own state: the bowling lane's throws, Bone Draft's ante and the colors it deals from. */
   SCENE_BENCHES: {
     bowl: (run) => run.bowl(null, BOWL_STOP),
+    fire: (run) => run.campfire(null),
     draft: (run) => run.draft(null, RUN_EVENTS.find((e) => e.id === 'pack')),
     dip: (run) => run.dip(null, RUN_EVENTS.find((e) => e.id === 'pool')),
     mirror: (run) => run.dip(null, RUN_EVENTS.find((e) => e.id === 'mirror')),
@@ -1887,15 +1967,16 @@ const Run = {
     const [offerCh, leaveCh] = ev.choices, ok = test || this.canChoose(offerCh);
     if (sh.res && !test) return this.finishStop(ev.art, ev.title, sh.res.text, sh.res.cards);
     const ante = test ? test.ante : Math.min(this.s.circuit || 1, RunMap.SPIRE_ANTES.length);
-    const seeable = !test && offerCh.see && offerCh.see(this);
     const stage = this.sceneScreen(ev.art, ev.title, escapeHTML(ev.text),
       test ? `<button class="btn" id="shOffer">${escapeHTML(offerCh.label)}</button><button class="btn" id="shAnte">ANTE ${ante}</button><button class="btn" id="rnLeave">DONE</button>`
         : `<button class="btn" id="shOffer" ${ok ? '' : 'disabled'}>${escapeHTML(offerCh.label)}</button>` +
-          (seeable ? '<button class="btn" id="shSee">SEE CARD</button>' : '') + `<button class="btn" id="rnLeave">${escapeHTML(leaveCh.label)}</button>` +
+          `<button class="btn" id="rnLeave">${escapeHTML(leaveCh.label)}</button>` +
           (ok ? '' : `<div class="rn-need">${escapeHTML(offerCh.need)}</div>`));
-    // The card on offer is the real one (the bench uses a stand-in creature).
+    // The card on offer is the real one (the bench uses a stand-in creature), held over your head:
+    // hover it for its text.
     const def = test ? Object.values(CARDS).find((c) => c.type === 'creature') : offerCh.see && offerCh.see(this);
     const draw = Shrine.mount(stage, RunMap.SPIRE_ANTES[ante - 1].heat, def), lk = this.sceneLock();
+    if (draw.face) { draw.face.onmouseenter = () => this.tip(draw.face, def); draw.face.onmouseleave = () => this.tip(null); }
     const rest = () => { draw(Shrine.at(Shrine.REST)); lk.unlock(); if (!ok) $('#shOffer').disabled = true; };
     const play = (done) => {
       if (FAST) return done();
@@ -1906,7 +1987,7 @@ const Run = {
     this.sceneEnter(sh, { draw, at: Shrine.at, to: Shrine.REST, cues: Shrine.ENTER_CUES, done: rest });
     if (test) {
       // The bench offers a stand-in card as often as you like.
-      $('#shOffer').onclick = () => { if (lk.busy()) return; sfx('select'); play(rest); };
+      $('#shOffer').onclick = () => { if (lk.busy()) return; sfx('select'); this.tip(null); play(rest); };
       $('#shAnte').onclick = () => { if (lk.busy()) return; sfx('select'); test.ante = test.ante % RunMap.SPIRE_ANTES.length + 1; this.s.node = { sh: { landed: true } }; this.shrine(n, ev); };
       $('#rnLeave').onclick = () => { if (lk.busy()) return; sfx('select'); this.sceneTestEnd(); };
       return;
@@ -1914,12 +1995,12 @@ const Run = {
     $('#shOffer').onclick = () => {
       if (lk.busy() || !ok) return;
       sfx('select');
+      this.tip(null);
       const [text, cards] = this.result(offerCh.act(this, null, offerCh)); // the offering, taken now and saved before it is shown
       sh.res = { text, cards: cards.map((c) => ({ ...c })) };
       this.save();
       play(() => this.finishStop(ev.art, ev.title, sh.res.text, sh.res.cards));
     };
-    if (seeable) $('#shSee').onclick = () => { if (lk.busy()) return; sfx('select'); this.seeCard(offerCh.see(this)); };
     $('#rnLeave').onclick = () => { if (lk.busy()) return; sfx('select'); this.finishStop(ev.art, ev.title, ...this.result(leaveCh.act(this, null, leaveCh))); };
   },
 
@@ -1995,17 +2076,29 @@ const Run = {
     const stage = this.sceneScreen(ev.art, ev.title, escapeHTML(paid ? go.prompt : ev.text),
       test ? `<button class="btn" id="hoGo">${escapeHTML(go.label)}</button><button class="btn" id="hoAnte">ANTE ${ante}</button><button class="btn" id="rnLeave">DONE</button>`
         : paid ? leave
-          : `<button class="btn" id="hoGo" ${ok ? '' : 'disabled'}>${escapeHTML(go.label)}</button>` + (go.see && go.see(this) ? '<button class="btn" id="hoSee">SEE CARD</button>' : '') +
+          : `<button class="btn" id="hoGo" ${ok ? '' : 'disabled'}>${escapeHTML(go.label)}</button>` +
             `<button class="btn" id="hoOther">${escapeHTML(other.label)}</button>` + (ok ? '' : `<div class="rn-need">${escapeHTML(go.need || '')}</div>`));
     const draw = H.mount(stage, RunMap.SPIRE_ANTES[ante - 1].heat), lk = this.sceneLock();
     const idle = () => { draw(H.at(H.REST)); lk.unlock(); if (!ok) $('#hoGo').disabled = true; };
+    // A swap's two cards are face up in the scene, the real ones (hover either for its text): your
+    // weakest over your head, and the one you'd get (rolled and kept on the stop) in the right hand.
+    // A bench uses stand-ins.
+    let gain = null;
+    if (ev.hands.mode === 'swap') {
+      const mine = test ? runPool(test.colors)[0] : go.see(this);
+      gain = test ? runOffer(Math.random, test.colors, 1)[0] : mine && go.gain(this, mine);
+      const el = (d) => { if (!d) return null; const box = document.createElement('div'); this.cardGrid(box, [d], null); return box.firstElementChild; };
+      draw.hold({ mine: el(mine), gain: el(gain) });
+      if (gain) draw.deal([gain]);
+    }
     // The outcome is dealt and saved before anything moves (the stop is finished; its screen is not shown yet).
     const settle = (r, cards) => {
       const [text, list] = this.result(r, cards);
       return { text, see: this.finishStop(ev.art, ev.title, text, list, false) };
     };
-    // The real card faces open over the scene where the backs turned over your head, as Bone Draft's do.
-    const faces = (defs, onPick, now = false) => this.sceneFaces(stage, defs, onPick, H.HEADS, draw.toFront, { now: now || FAST });
+    // The real card faces open over the scene where the backs turned over your head, as Bone Draft's do
+    // (a swap's card was face up already: it only grows). Hover one for its text.
+    const faces = (defs, onPick, now = false) => this.sceneFaces(stage, defs, onPick, H.HEADS, draw.toFront, { now: now || FAST, open: ev.hands.mode !== 'swap' });
     // The stop is done: its outcome shows in the header, and CONTINUE leaves.
     const finish = (text) => {
       $('.rn-sub').textContent = text || ev.text;
@@ -2066,14 +2159,13 @@ const Run = {
         return play(H.REST, H.TURNED, () => {}, () => { lk.unlock(); pick(defs); });
       }
       // Dealt and saved first; a bench deals a stand-in card that goes nowhere.
-      const got = test ? { text: '', see: [ev.id === 'bones' ? CARDS.skeleton : runOffer(Math.random, test.colors, 1, { least: ev.id === 'offer' ? 'rare' : 'common' })[0]] }
+      const got = test ? { text: '', see: [gain || (ev.id === 'bones' ? CARDS.skeleton : runOffer(Math.random, test.colors, 1, { least: ev.id === 'offer' ? 'rare' : 'common' })[0])] }
         : settle(go.act(this, null, go));
       if (FAST) return this.outcome(ev.art, ev.title, got.text, got.see);
       const card = got.see[got.see.length - 1];
       draw.deal([card]);
       play(H.REST, H.END, () => faces([card], null), () => finish(got.text));
     };
-    if (go.see && !test) $('#hoSee').onclick = () => { sfx('select'); this.seeCard(go.see(this)); };
     if (test) {
       $('#hoAnte').onclick = () => { if (lk.busy()) return; sfx('select'); this.tip(null); test.ante = test.ante % RunMap.SPIRE_ANTES.length + 1; this.s.node = { ho: { landed: true } }; this.handover(n, ev); };
       $('#rnLeave').onclick = () => { if (lk.busy()) return; sfx('select'); this.sceneTestEnd(); };

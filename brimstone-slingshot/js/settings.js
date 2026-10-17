@@ -26,8 +26,9 @@
   /* ---------- background life ---------- */
   /* Motes drifting through a band of air at `depth`, across plane x x0..x1, h px tall: `dir` -1
      rises (embers), 1 falls (ash, dust). They step a pixel at a time, `fps` a second, swaying a
-     pixel left and right; ks are their ramp colors. */
-  function motes(sc, { x0 = -1200, x1 = 2400, depth = -300, h = 140, n = 30, dir = -1, ks = [8, 7], fps = 6, seed = 9 }) {
+     pixel left and right; ks are their ramp colors, `size` their px square (2, so they survive the
+     CRT's scanlines and read at a distance). Give each layer its own `seed`, or they overlap. */
+  function motes(sc, { x0 = -1200, x1 = 2400, depth = 150, h = 170, n = 60, dir = -1, ks = [8, 7], fps = 6, seed = 9, size = 2 }) {
     const R = mulberry32(seed), w = Math.round((x1 - x0) / 2), cv = document.createElement('canvas');
     cv.width = w; cv.height = h;
     sc.stand(cv, x0, depth, w * 2, h * 2);
@@ -40,7 +41,7 @@
       g.clearRect(0, 0, w, h);
       for (const q of m) {
         const y = pmod(q.y + dir * Math.floor(st * q.v / 2), h), x = q.x + [0, 1, 0, -1][(st + q.p) % 4];
-        g.fillStyle = sc.C[q.k]; g.fillRect(x, y, 1, 1);
+        g.fillStyle = sc.C[q.k]; g.fillRect(x, y, size, size);
       }
     });
   }
@@ -132,6 +133,50 @@
       if (heat) { glow(cx - 1, top + Math.round(h * 0.23)); glow(cx + 1, top + Math.round(h * 0.23)); }
       if (heat === 2) seams(glow, cx, top + Math.round(h * 0.3), Math.round(h * 0.7), 2);
     },
+  };
+
+  /* ---------- the woods: tiered pines, big firs and leafy bushes ---------- */
+  /* Leaves are three tones across (lit from the left), broken up with Bayer dither, so the edges
+     between them read as clumps of needles and leaves rather than bands. */
+  const leafTone = (C, l, x, y, p) => {
+    const t = p + (bay(x, y) / 16 - 0.5) * 0.45;
+    return t < 0.36 ? C[l + 1] : t < 0.7 ? C[Math.max(1, l)] : dk(C, l);
+  };
+  // A trunk w px wide from y0 down to the base at y1, bark lit from the left.
+  function bark(fill, C, l, cx, w, y0, y1) {
+    const x = Math.round(cx - w / 2);
+    for (let y = y0; y < y1; y++) { fill(x, y, Math.ceil(w / 2), C[Math.max(1, l - 1)]); fill(x + Math.ceil(w / 2), y, Math.floor(w / 2), C[Math.max(0, l - 2)]); }
+  }
+  // Round clumps [dx, dy, r] as fractions of the width, filled with leafTone and a darker underside.
+  function clumps(fill, C, l, cx, cy, w, list) {
+    const R = list.map(([dx, dy, r]) => [cx + dx * w, cy + dy * w, r * w]), x0 = Math.floor(cx - w), y0 = Math.floor(cy - w);
+    for (let y = y0; y < cy + w; y++) for (let x = x0; x < cx + w; x++) {
+      const c = R.find(([a, b, r]) => (x + 0.5 - a) ** 2 + (y + 0.5 - b) ** 2 <= r * r);
+      if (!c) continue;
+      const [a, b, r] = c, under = (y + 0.5 - b) / r > 0.6;
+      fill(x, y, 1, under ? dk(C, l) : leafTone(C, l, x, y, 0.5 + ((x - a) + (y - b) * 0.8) / (r * 2.4)));
+    }
+  }
+  ART.woods = function (fill, glow, C, l, k, cx, top, w, h, seed, heat) {
+    if (k === 'pine' || k === 'fir') {
+      // Tiers of boughs, each wider than the one above, over a short trunk: four on a pine, six on a big fir.
+      const crown = Math.round(h * 0.86), tiers = k === 'fir' ? 6 : 4;
+      const half = (i, g) => w * (0.14 + 0.36 * i / (tiers - 1)) * (0.35 + 0.65 * g) + 0.5; // tier i's half-width, g down the tier
+      bark(fill, C, l, cx, Math.max(2, Math.round(w * 0.14)), top + crown - 2, top + h);
+      for (let r = 0; r < crown; r++) {
+        const f = r / crown, i = Math.min(tiers - 1, Math.floor(f * tiers)), g = f * tiers - i;
+        const hw = half(i, g), a = Math.round(cx - hw), b = Math.round(cx + hw);
+        for (let x = a; x < b; x++) fill(x, top + r, 1, g > 0.86 ? dk(C, l) : leafTone(C, l, x, top + r, (x - a) / Math.max(1, b - a) - (1 - g) * 0.12));
+      }
+      if (k === 'fir' && heat) for (let i = 1; i < tiers; i += 3 - heat) { // embers on the bough tips, more each ante
+        const y = top + Math.round(crown * (i + 0.8) / tiers), hw = Math.round(half(i, 0.8));
+        glow(cx - hw + 1, y); glow(cx + hw - 2, y);
+      }
+      if (heat === 2) glow(cx, top);
+      return;
+    }
+    // bush: two or three low clumps sitting on the ground
+    clumps(fill, C, l, cx, top + h - w * 0.28, w, [[-0.18, 0.02, 0.26], [0.16, 0.04, 0.24], [0, -0.1, 0.24]]);
   };
 
   /* ---------- the crypt: a damp stone wall with sagging arches, lit by candles ---------- */
@@ -284,12 +329,13 @@
     chip: (sc, heat, o = {}) => crosser(sc, { depth: 120, w: 8, h: 8, period: 6, frames: 4, fps: 8, draw: CHIP, ...o }),
   };
   const EFFECTS = {
-    embers: (sc, heat, o = {}) => motes(sc, { n: 15 + 20 * heat, ...o }),
-    ash: (sc, heat, o = {}) => motes(sc, { n: 25, dir: 1, ks: [4], fps: 4, ...o }),
-    dust: (sc, heat, o = {}) => motes(sc, { n: 24, dir: 1, ks: [6], fps: 3, depth: -100, h: 200, ...o }),
-    glints: (sc, heat, o = {}) => motes(sc, { n: 12 + 10 * heat, ks: [8, 7], fps: 3, ...o }),
-    cinders: (sc, heat, o = {}) => (heat ? motes(sc, { n: 15 + 25 * heat, ...o }) : motes(sc, { n: 20, dir: 1, ks: [5], fps: 4, ...o })), // pale ash, embers once the spires heat up
-    sparks: (sc, heat, o = {}) => motes(sc, { n: 10 + 10 * heat, depth: 60, h: 80, seed: 3, ...o }), // embers low and near
+    // In front of the spires (depth 150 and nearer), behind the action plane (380); tones that show on pale ground.
+    embers: (sc, heat, o = {}) => motes(sc, { n: 120 + 60 * heat, ks: [8, 8, 7], seed: 11, ...o }),
+    ash: (sc, heat, o = {}) => motes(sc, { n: 140, dir: 1, ks: [3, 4], fps: 4, seed: 23, ...o }),
+    dust: (sc, heat, o = {}) => motes(sc, { n: 120, dir: 1, ks: [4, 5], fps: 3, depth: 250, h: 150, seed: 37, ...o }),
+    glints: (sc, heat, o = {}) => motes(sc, { n: 60 + 30 * heat, ks: [8, 7], fps: 3, depth: 200, seed: 41, ...o }),
+    cinders: (sc, heat, o = {}) => (heat ? motes(sc, { n: 100 + 60 * heat, ks: [8, 8, 7], seed: 53, ...o }) : motes(sc, { n: 120, dir: 1, ks: [3, 4], fps: 4, seed: 53, ...o })), // ash, embers once the spires heat up
+    sparks: (sc, heat, o = {}) => motes(sc, { n: 50 + 30 * heat, depth: 330, h: 70, ks: [8, 8, 7], seed: 67, ...o }), // embers low and near
   };
 
   /* ---------- the parts: floors, backdrops, features ---------- */
@@ -386,6 +432,60 @@
       return heat === 2 && fh(Math.floor(X / 10), Math.floor(Y / 10), 17) < 0.08 && pmod(X, 10) < 4 && pmod(Y, 10) < 2 ? 8 : -1; // embers
     };
   };
+  // The forest floor, after a campfire clearing: big roots arching across the ground (a curved band
+  // that tapers at both ends, lit along its upper-left edge and casting a shadow to the lower right),
+  // cracked dry dirt with dark patches of mud, and dithered moss. Low contrast, so the action
+  // reads over it. From ante 2 the roots are charred along their tops; at ante 3 embers glow in the cracks.
+  const forest = (heat) => {
+    const S = 280, at = cells((i, j) => {
+      if (fh(i, j, 18) < 0.45) return null;
+      const a0 = fh(i, j, 19) * Math.PI * 2;
+      const c = { cx: (i + 0.5) * S + (fh(i, j, 20) - 0.5) * 120, cy: (j + 0.5) * S + (fh(i, j, 21) - 0.5) * 120, R: 90 + fh(i, j, 22) * 60, a0, span: 1.1 + fh(i, j, 23) * 0.9, th: 12 + fh(i, j, 24) * 6 };
+      c.lo2 = Math.max(0, c.R - c.th - 1) ** 2; c.hi2 = (c.R + c.th + 1) ** 2; // the ring a point must be in to touch it, squared (a quick test)
+      return c;
+    });
+    // How far inside a root (X, Y) is: > 0 inside, or 0.
+    // The roots that can reach into a cell: those of it and its 8 neighbors, listed once per cell.
+    const near = cells((ci, cj) => { const l = []; for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) { const c = at(ci + a, cj + b); if (c) l.push(c); } return l; });
+    const root = (X, Y) => {
+      for (const c of near(Math.floor(X / S), Math.floor(Y / S))) {
+        const dx = X - c.cx, dy = (Y - c.cy) * 1.6, d2 = dx * dx + dy * dy; // flattened, lying on the ground
+        if (d2 < c.lo2 || d2 > c.hi2) continue;
+        const d = Math.sqrt(d2);
+        const s = ((Math.atan2(dy, dx) - c.a0) % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI);
+        if (s > c.span) continue;
+        const k = s / c.span, w = c.th * Math.sqrt(Math.sin(k * Math.PI)); // tapers to a point at each end
+        if (Math.abs(d - c.R) < w) return w - Math.abs(d - c.R);
+      }
+      return 0;
+    };
+    const crack = (X0, Y0) => { // how close (X, Y) is to a crack in the dried dirt: the wobbly edges between irregular cells (about 40 across)
+      const C = 40, X = X0 + Math.sin(Y0 * 0.11) * 3, Y = Y0 + Math.sin(X0 * 0.13) * 3, ci = Math.floor(X / C), cj = Math.floor(Y / C);
+      let d1 = 1e18, d2 = 1e18; // squared, so only the nearest two take a square root
+      for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) {
+        const p = pt(ci + a, cj + b), u = X - p[0], v = Y - p[1], d = u * u + v * v;
+        if (d < d1) { d2 = d1; d1 = d; } else if (d < d2) d2 = d;
+      }
+      return Math.sqrt(d2) - Math.sqrt(d1);
+    };
+    const pt = cells((i, j) => [(i + 0.15 + 0.7 * fh(i, j, 26)) * C_CRACK, (j + 0.15 + 0.7 * fh(i, j, 27)) * C_CRACK]), C_CRACK = 40; // each crack cell's point, worked out once
+    return (X, Y) => {
+      const r = root(X, Y);
+      if (r) {
+        if (!root(X - 3, Y - 3)) return heat ? 3 : 6; // lit upper-left edge, charred from ante 2
+        if (!root(X + 3, Y + 3)) return 2;
+        if (heat === 2 && r > 2 && fh(Math.floor(X / 6), Math.floor(Y / 6), 25) < 0.1) return 8; // embers in the bark
+        return pmod(Math.floor((X + Y) / 5), 3) === 0 && r > 1.5 ? 3 : 4; // bark grain
+      }
+      if (root(X - 5, Y - 5)) return 3; // the root's shadow, to the lower right
+      const m = Math.sin(X * 0.009 + Math.sin(Y * 0.013) * 1.7) + Math.sin(Y * 0.011 - X * 0.004); // moss
+      if (m > 0.7 && bay(X >> 1, Y >> 1) < (m - 0.7) * 20) return 4;
+      const mud = Math.sin(X * 0.017 - Math.sin(Y * 0.02) * 2) + Math.sin(Y * 0.023 + X * 0.007); // dark wet mud between the moss
+      if (mud > 1.25 && m < 0.3) return bay(X >> 1, Y >> 1) < (mud - 1.25) * 40 ? 3 : 4;
+      // cracks in the dried dirt, gone under the moss and mud (the cheap tests first: the crack's is the costly one)
+      return m < 0.4 && mud < 1 && bay(X >> 1, Y >> 1) < 11 && crack(X, Y) < 2 ? 3 : -1;
+    };
+  };
   // Floors: Scene.ground options for the heat, or build(sc, heat, opts) for a floor with more to it.
   const FLOORS = {
     ash: () => ({}),
@@ -400,6 +500,7 @@
     dunes: (heat) => ({ seed: 47, grit: 2000, pattern: dunes(heat) }),
     columns: (heat) => ({ seed: 53, grit: 1000, pattern: columns(heat) }),
     ossuary: (heat) => ({ seed: 59, grit: 1200, pattern: ossuary(heat) }),
+    forest: (heat) => ({ seed: 61, grit: 1000, pattern: forest(heat) }),
   };
   // Backdrops: the sky stays open (the horizon is wherever the floor ends); a wall builds itself in
   // its place at depth `front`, where the floor stops. `open` is where open floor begins in front
@@ -416,6 +517,7 @@
     slots: { draw: ART.casino, kinds: { spike: 'slot', basalt: 'chips', strata: 'tower' }, size: { slot: [0.45, 1.3], chips: [0.5, 0.6], tower: [0.6, 1.2] } },
     vents: { draw: ART.lava, kinds: { strata: 'vent' }, size: { vent: [0.6, 1.4] } },
     graves: { draw: ART.graveyard, kinds: { spike: 'tree', basalt: 'stone', strata: 'cross' }, size: { tree: [0.6, 1.6], stone: [0.45, 0.9], cross: [0.55, 0.8] } },
+    woods: { draw: ART.woods, kinds: { spike: 'pine', basalt: 'bush', strata: 'fir' }, size: { pine: [0.7, 1.6], bush: [0.6, 0.5], fir: [0.8, 1.9] } },
   };
   // The presets: each place's floor, backdrop, features (any number), and the critters and effects
   // moving in its background. The forge's motion is its machines, part of its backdrop.
@@ -431,6 +533,16 @@
      standard: the floor runs far off and a tall row hides the horizon), 'low' (as the hand scenes:
      the floor ends nearer, at `far`, with a low row there) or 'open' (the same, the middle kept
      clear at every depth). The sky shows where the floor ends, so pulling `far` in lowers it. */
+  /* `clearing` sets how much open ground the features leave round the action: 'wide' (the standard:
+     nothing in the middle nearer than the far ground, and nothing nearer the camera than depth 300),
+     'tight' (a smaller clearing, features reaching nearer the camera at the sides) or 'none'
+     (features up to the action's edges, only your own spot kept clear). The count grows with the
+     ground they cover, so the density stays the same. */
+  const CLEARINGS = {
+    wide: { clear: CLEAR, y1: 300 },
+    tight: { clear: { x0: 500, x1: 940, y: 150 }, y1: 520 },
+    none: { clear: { x0: 620, x1: 820, y: 300 }, y1: 560 },
+  };
   const HORIZONS = {
     wall: { far: -1000 },
     low: { far: -380, ruins: { wall: 0.3, count: 150 } },
@@ -444,7 +556,9 @@
      defaults to the preset's; `life: false` leaves the preset's motion out). `near` props are big
      features placed by hand near the action, in the spire kinds, drawn as the first feature set's
      own. Features in front of a wall stop short of it, with no tall far row. */
-  function setting(sc, name, { heat = 0, floor, backdrop, features, critters, effects, life = true, horizon = 'wall', area = AREA, clear = CLEAR, near = [], light = LIGHT, rubble = [], shards = [], shadows = [], over, ...more } = {}) {
+  // density: { feature set: how many, 1 as standard }, e.g. { woods: 1.6 } for thicker woods.
+  // band: how deep a slice of features shares one canvas (Scene.ruins): deeper for thick features, so the browser draws fewer.
+  function setting(sc, name, { heat = 0, floor, backdrop, features, critters, effects, life = true, band = 32, horizon = 'wall', density = {}, clearing = 'wide', area = AREA, clear, near = [], light = LIGHT, rubble = [], shards = [], shadows = [], over, ...more } = {}) {
     const P = SETTINGS[name];
     if (!P) throw new Error('No scene setting called ' + name + ' - try ' + Object.keys(SETTINGS).join(', '));
     const fs = [].concat(features || P.features).filter((k) => k !== 'none'), F = FLOORS[floor || P.floor], B = BACKDROPS[backdrop || P.backdrop];
@@ -457,7 +571,9 @@
     // Each feature set takes a share of the props, from its own random stream; the near props go with the first.
     // Before a wall they start where its open floor begins (Scene.ruins starts 40 past area.y0).
     const count = Math.round((H.ruins && H.ruins.count || 380) / Math.max(1, fs.length)), y0 = H.from ? from - 40 : far;
-    fs.forEach((k, i) => Scene.ruins(sc, { area: { ...area, y0 }, clear: H.clearMiddle ? { ...clear, y: far } : clear, near: i ? [] : near, heat, ...FEATURES[k], ...H.ruins, count, seed: 5 + i * 7 }));
+    // A denser set packs closer too (the gap shrinks with the square root), or the spacing would cap it.
+    const CL = CLEARINGS[clearing] || CLEARINGS.wide, cl0 = clear || CL.clear, y1 = Math.max(area.y1, CL.y1), more2 = (y1 - y0) / (area.y1 - y0); // more ground, more props
+    fs.forEach((k, i) => { const d = Math.max(0.05, density[k] || 1) * more2; Scene.ruins(sc, { area: { ...area, y0, y1 }, clear: H.clearMiddle ? { ...cl0, y: Math.min(far, cl0.y) } : cl0, near: i ? [] : near, heat, ...FEATURES[k], ...H.ruins, count: Math.round(count * d), gap: Math.min(1, 1 / Math.sqrt(d)), seed: 5 + i * 7, band }); });
     const gnd = F.build ? F.build(sc, heat, { rubble, shards, shadows, over, y0: far })
       : Scene.ground(sc, { x0: -1200, y0: far, w: 1920, h: Math.round((820 - far) / 2), light, rubble, shards, shadows: B.wall ? [[-1200, far, 2640, far + 18], ...shadows] : shadows, over, ...F(heat), ...more }); // a wall's foot in shade
     for (const k of cs) CRITTERS[k](sc, heat);
@@ -468,7 +584,7 @@
   Object.assign(Scene, {
     setting, motes, crosser, CRITTERS, EFFECTS,
     SETTINGS: Object.keys(SETTINGS), PRESETS: SETTINGS,
-    HORIZONS: Object.keys(HORIZONS),
+    HORIZONS: Object.keys(HORIZONS), CLEARINGS: Object.keys(CLEARINGS),
     PARTS: { floors: Object.keys(FLOORS), backdrops: Object.keys(BACKDROPS), features: Object.keys(FEATURES), walls: Object.keys(BACKDROPS).filter((k) => BACKDROPS[k].wall) },
   });
 })();

@@ -185,19 +185,44 @@ const Scene = (() => {
   /* Other settings (js/settings.js) scatter their own props the same way: `draw` has propArt's
      signature, `kinds` renames 'spike' / 'basalt' / 'strata' to the setting's own kinds, and
      `size` { kind: [h, w] } scales each kind's height and width. */
-  function ruins(sc, { area, clear, near = [], heat = 0, count = 380, seed = 5, wall = 1, draw = RunMap.propArt, kinds = {}, size = {} }) { // wall: how tall the far row is, 1 as the other scenes
+  const LIFT = 1 / Math.tan(46 * Math.PI / 180);
+  function ruins(sc, { area, clear, near = [], heat = 0, count = 380, seed = 5, wall = 1, gap = 1, draw = RunMap.propArt, kinds = {}, size = {}, band = 32 }) { // band: how deep a slice of props shares one canvas (map units; deeper is fewer canvases for the browser to draw, each prop drawn a little further back) // wall: how tall the far row is, 1 as the other scenes; gap: how far apart props keep (1 as the map)
     const { C, stand, every } = sc, RS = mulberry32(seed), hot = [];
-    const art = (x, p, cx, top) => {
-      const fill = (u, v, n, c) => { if (n > 0) { x.fillStyle = c; x.fillRect(u, v, n, 1); } }, mine = [];
+    /* A slice's props are drawn into a pixel buffer (`buf`, from bufFor) rather than through the canvas,
+       one fill call at a time: much faster for thick features. A fill off the pixel grid would be
+       blended by the canvas, so it goes through the canvas itself, the buffer flushed around it. */
+    const RGBA = new Map(C.map((c, i) => [c, sc.RGB[i]]));
+    const bufFor = (x, w, h) => ({ x, w, h, img: x.createImageData(w, h), dirty: false });
+    const flush = (b) => { if (b.dirty) { b.x.putImageData(b.img, 0, 0); b.dirty = false; } };
+    const art = (x, p, cx, top, buf) => {
+      const fill = (u, v, n, c) => {
+        if (n <= 0) return;
+        const rgb = buf && RGBA.get(c);
+        if (!rgb || !Number.isInteger(u) || !Number.isInteger(v) || !Number.isInteger(n)) {
+          if (buf) flush(buf);
+          x.fillStyle = c; x.fillRect(u, v, n, 1);
+          if (buf) buf.img = x.getImageData(0, 0, buf.w, buf.h);
+          return;
+        }
+        if (v < 0 || v >= buf.h) return;
+        const d = buf.img.data;
+        for (let i = Math.max(0, u), e = Math.min(buf.w, u + n); i < e; i++) { const o = (v * buf.w + i) * 4; d[o] = rgb[0]; d[o + 1] = rgb[1]; d[o + 2] = rgb[2]; d[o + 3] = 255; }
+        buf.dirty = true;
+      }, mine = [];
       const glow = (u, v) => { u = Math.round(u); v = Math.round(v); fill(u, v, 1, C[8]); mine.push([u, v]); };
       draw(fill, glow, C, p.l, p.k, cx, top, Math.round(p.w), Math.round(p.h), p.seed || 0, heat);
       if (mine.length) hot.push({ x, px: mine });
     };
-    const field = [];
+    const field = [], GX = 22 * gap, GD = 16 * gap, grid = new Map(); // props keep GX apart across or GD in depth; grid finds the neighbors to test
+    const crowded = (x, d) => {
+      const i = Math.floor(x / GX), j = Math.floor(d / GD);
+      for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) for (const p of grid.get((i + a) * 65536 + j + b) || []) if (Math.abs(p.x - x) < GX && Math.abs(p.d - d) < GD) return true;
+      return false;
+    };
     for (let t = 0; t < count * 10 + 200 && field.length < count; t++) {
       const x = area.x0 + RS() * (area.x1 - area.x0), d = area.y0 + 40 + RS() * (area.y1 - area.y0);
       if (d > clear.y && x > clear.x0 && x < clear.x1) continue;
-      if (field.some((p) => Math.abs(p.x - x) < 22 && Math.abs(p.d - d) < 16)) continue;
+      if (crowded(x, d)) continue;
       const big = RS(), far = cl(-d / 600);
       let h = 30 + big * big * big * 220 + RS() * 30 + far * RS() * 140; // map units
       if (d < area.y0 + 160) h += (160 + RS() * 160) * wall;
@@ -206,15 +231,26 @@ const Scene = (() => {
       k = kinds[k] || k;
       const [sh, sw] = size[k] || [1, 1];
       field.push({ k, x, d, h: Math.max(8, Math.round(h * sh / 2)), w: Math.max(4, Math.round(w * sw / 2)), l: d < -650 ? 1 : d < -200 ? 2 : 3 });
+      const key = Math.floor(x / GX) * 65536 + Math.floor(d / GD);
+      if (!grid.has(key)) grid.set(key, []);
+      grid.get(key).push({ x, d });
     }
     const bands = new Map();
-    for (const p of field) { const b = Math.floor(p.d / 32); if (!bands.has(b)) bands.set(b, []); bands.get(b).push(p); }
+    for (const p of field) { const b = Math.floor(p.d / band); if (!bands.has(b)) bands.set(b, []); bands.get(b).push(p); }
     for (const list of bands.values()) {
       const left = Math.floor(Math.min(...list.map((p) => p.x / 2 - p.w))) - 2, right = Math.ceil(Math.max(...list.map((p) => p.x / 2 + p.w))) + 2;
-      const tall = Math.max(...list.map((p) => p.h)), back = Math.max(...list.map((p) => p.d)), cv = document.createElement('canvas');
+      // The slice stands at its nearest prop's depth. A slice deeper than the standard 32 lifts the props
+      // further back on it by the extra depth, so they land about where a 32 slice would put them
+      // (1 / tan 46deg, the ground's tilt in .bw-pl: map units up a unit back), not in rows.
+      const back = Math.max(...list.map((p) => p.d)), sub = new Map();
+      for (const p of list) { const k = Math.floor(p.d / 32); sub.set(k, Math.max(sub.get(k) ?? -Infinity, p.d)); }
+      const lift = (p) => Math.round((back - sub.get(Math.floor(p.d / 32))) * LIFT / 2);
+      const tall = Math.max(...list.map((p) => p.h + lift(p))), cv = document.createElement('canvas');
       cv.width = right - left; cv.height = tall;
       const x = cv.getContext('2d');
-      for (const p of list.sort((a, b) => a.d - b.d)) art(x, p, p.x / 2 - left, tall - p.h);
+      const buf = bufFor(x, cv.width, cv.height);
+      for (const p of list.sort((a, b) => a.d - b.d)) art(x, p, p.x / 2 - left, tall - p.h - lift(p), buf);
+      flush(buf);
       stand(cv, left * 2, back, cv.width * 2, tall * 2);
     }
     for (const q of near) {
@@ -354,11 +390,12 @@ const Scene = (() => {
      back's top left in scene px, as cardArt was given it, on the plane whose Scene.toStage is
      `to(x, y)`. Each face opens from narrow at its back's size (OPEN, after the back's TURN), then
      grows in GROW steps to READ of its own size: as a group, up from its foot (`grow: 'group'`, a
-     fan stays a fan) or each standing on its own foot ('foot'), kept inside the stage. 7 frames a
-     second; `now` skips to the end; they take no clicks until then. Returns the faces' holders
-     (class sc-face), each with its card inside; done(boxes): each one's [left, top, w, h] in stage px. */
+     fan stays a fan) or each standing on its own foot ('foot'), kept inside the stage. A card that
+     was face up already (a cardStandee) passes `open: false`: it only grows. 7 frames a second;
+     `now` skips to the end; they take no clicks until then. Returns the faces' holders (class
+     sc-face), each with its card inside; done(boxes): each one's [left, top, w, h] in stage px. */
   const FACE = { READ: 0.74, OPEN: [0.2, 0.6, 1], GROW: 3, FPS: 7, PAD: 6 };
-  function faces(host, cards, rects, to, { grow = 'group', now = false, done = () => {} } = {}) {
+  function faces(host, cards, rects, to, { grow = 'group', now = false, open = true, done = () => {} } = {}) {
     const stage = host.parentElement;
     const ws = cards.map((c) => { const w = document.createElement('div'); w.className = 'sc-face'; c.replaceWith(w); w.appendChild(c); return w; });
     const fw = cards[0]?.offsetWidth || 1, fh = cards[0]?.offsetHeight || 1, s1 = FACE.READ;
@@ -385,7 +422,7 @@ const Scene = (() => {
       w.style.transform = `translate(${Math.round(x - fw * s * sx / 2)}px, ${Math.round(y - fh * s / 2)}px) scale(${s * sx}, ${s})`;
     };
     const frames = FACE.OPEN.length + FACE.GROW;
-    let f = now ? frames - 1 : 0;
+    let f = now ? frames - 1 : open ? 0 : FACE.OPEN.length - 1;
     const step = () => {
       if (!ws.every((w) => w.isConnected)) return;
       ws.forEach((w, i) => {
@@ -400,6 +437,31 @@ const Scene = (() => {
     step();
     return ws;
   }
+  /* A real card face standing in the scene, CARD sized: a card that is held or carried face up
+     before you read it (in a hand, over your head). It's a standee like your figurine, so what's
+     nearer the camera draws over it (a hand's fingers on the plane in front). `card`: a .card
+     element (Run.cardGrid made it; hovering it shows its text). Returns { el, at(pln, x, y, dz):
+     stand it with its top left at scene (x, y) on plane `pln` (a Scene.plane), dz map units
+     nearer the camera than the plane; hide() }. */
+  function cardStandee(sc, card) {
+    const st = document.createElement('div'), inner = document.createElement('div');
+    sc.stand(st, 0, 0, 1, 1);
+    st.classList.add('sc-held');
+    st.style.display = 'none';
+    inner.appendChild(card);
+    st.appendChild(inner);
+    return {
+      el: st,
+      at(pln, x, y, dz = 0) {
+        st.style.display = '';
+        const u = pln.u, w = CARD.W * u, s = w / (card.offsetWidth || 1), h = card.offsetHeight * s;
+        inner.style.transform = `scale(${s})`;
+        Object.assign(st.style, { left: pln.left + (x - pln.x0) * u + 'px', top: pln.depth + dz - h + 'px', width: w + 'px', height: h + 'px' });
+        st.style.transform = `translateZ(${(pln.h - y - CARD.H) * u}px) rotateX(-90deg)`;
+      },
+      hide() { st.style.display = 'none'; },
+    };
+  }
 
-  return { mount, figure, land, SQUASH, play, ground, ruins, span, plane, toStage, slingshot, CARD, FACE, cardArt, cardFace, spriteArt, faces, pen, bay, lvl, cl, rgb };
+  return { mount, figure, land, SQUASH, play, ground, ruins, span, plane, toStage, slingshot, CARD, FACE, cardArt, cardFace, spriteArt, faces, cardStandee, pen, bay, lvl, cl, rgb };
 })();
