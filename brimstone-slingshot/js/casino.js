@@ -139,8 +139,11 @@ const Casino = (() => {
     R(X - 2, 47, W + 4, 2, 1);
     const ly = Math.floor(t * 4) % 8 < 2 ? 24 : 10;
     R(X + W + 1, 26, 3, 5, 1); R(X + W + 2, 27, 2, 3, 3);
-    R(X + W + 3, ly + 2, 2, 28 - ly, 1); R(X + W + 3, ly + 2, 1, 28 - ly, ante > 2 ? 6 : 4);
-    R(X + W + 2, ly - 1, 4, 4, 1); R(X + W + 3, ly, 2, 2, ante > 1 ? 8 : 6); P(X + W + 3, ly, 7);
+    const bx = X + W + 1; // the bone lever: a shaft with a two-lobed knuckle on top, like slot_bone
+    R(bx + 1, ly + 1, 4, 28 - ly, 1); R(bx + 2, ly + 1, 1, 27 - ly, 7); R(bx + 3, ly + 1, 1, 27 - ly, 4);
+    P(bx + 1, ly - 2, 1); P(bx + 4, ly - 2, 1);
+    R(bx, ly - 1, 6, 2, 1); P(bx + 1, ly - 1, 7); P(bx + 4, ly - 1, 7); R(bx + 1, ly, 4, 1, 7); P(bx + 4, ly, 4);
+    if (ante > 1) P(bx + 1, ly - 1, 8);
   }
 
   /* PROPS: this scene's objects for other scenes and the builder (js/props.js). */
