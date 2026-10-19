@@ -1303,6 +1303,7 @@ const RunMap = (() => {
   function show(opts = {}) {
     const run = Run.s;
     if (!run) return showTitle();
+    Music.play('menu'); // back from a stop (the casino and bowling lane play their own)
     walking = false;
     const C = ramp(), R = mulberry32((run.seed ^ 0x5eed) >>> 0);
     const nodes = run.map.nodes;

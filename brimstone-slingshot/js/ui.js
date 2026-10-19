@@ -147,14 +147,21 @@ function sfx(name, n = 1) {
 // Each file is pre-cut so its end flows straight into its start; looping the decoded
 // buffer is sample-accurate, unlike <audio loop> which leaves a gap.
 const Music = {
-  files: { menu: 'moonlit-circuit-loop', battle: 'battle-loop' },
+  files: { menu: 'moonlit-circuit-loop', battle: 'battle-loop', event: 'pixel-meadow-loop' }, // event: casino and bowling lane
+  // Where in its loop (seconds) each track begins when it fades in. Pixel Meadow's loop opens
+  // on a loud downbeat, and its quiet bars are too sparse to fade in over (a hole, then a jolt
+  // when the next section hits), so it comes in on its steadiest stretch: 48.4-52s holds near
+  // the song's usual level with no dips.
+  starts: { event: 48.44 },
   ext: new Audio().canPlayType('audio/ogg; codecs="vorbis"') ? 'ogg' : 'mp3',
   volume: 0.04,
   // Its own setting since sound effects and music were split; until it's first set,
   // it follows the old combined sound setting.
   muted: Store.read(MUSIC_KEY, Store.read(SOUND_KEY, 'on')) === 'off',
+  FADE: 2,      // seconds for a crossfade between tracks
   want: 'menu', // the track the current screen calls for
-  cur: null,    // the playing (or loading) track: { name, src, gain, level }
+  cur: null,    // the track asked for last (it may still be decoding): { name, src, gain, r }
+  live: [],     // tracks that are sounding and not yet fading out
   unlocked: false, bytes: {}, buffers: {},
   // Browsers block audio until the first click/keypress, but downloading isn't blocked,
   // so fetch the files at page load and the music can begin the moment input arrives.
@@ -170,39 +177,51 @@ const Music = {
   start() {
     if (this.unlocked || !Sfx.ctx) return;
     this.unlocked = true;
-    this.switchTo(this.want, 1.5);
+    this.switchTo(this.want, this.FADE);
   },
-  /* Ask for a track: the current one fades out while the new one fades in from its start. */
-  play(name, fade = 1.5) {
+  /* Ask for a track: the current one fades out while the new one fades in. */
+  play(name, fade = this.FADE) {
     this.want = name;
     if (this.unlocked) this.switchTo(name, fade);
   },
   async switchTo(name, fade) {
     if (this.cur && this.cur.name === name) return;
-    const old = this.cur, t = { name, level: 0 };
+    const t = { name };
     this.cur = t;
-    if (old && old.src) { this.ramp(old, 0, fade); old.src.stop(Sfx.ctx.currentTime + fade + 0.05); }
     let buf;
     try { buf = await this.buffer(name); } catch (e) { return; /* music is optional */ }
     if (this.cur !== t) return; // switched again while this one was decoding
+    // Only now fade the old track out, so both fades run together: fading it while the new
+    // one was still decoding left a quiet gap between them.
     const ctx = Sfx.ctx;
+    for (const o of this.live) { this.ramp(o, 0, fade); o.src.stop(ctx.currentTime + fade + 0.1); }
     t.src = ctx.createBufferSource();
     t.src.buffer = buf; t.src.loop = true;
     t.gain = ctx.createGain();
-    t.gain.gain.setValueAtTime(0, ctx.currentTime);
+    t.gain.gain.value = 0;
     t.src.connect(t.gain).connect(ctx.destination);
-    t.src.start();
+    t.src.start(0, (this.starts[name] || 0) % buf.duration);
+    this.live = [t];
     this.ramp(t, this.muted ? 0 : this.volume, fade);
   },
-  // Ramp from wherever the gain is now. gain.value isn't reliable mid-ramp (or right after
-  // the node is made, when it reports 1.0), so hold the curve where the browser can and
-  // otherwise start from the last level we set ourselves.
+  // The gain at time `at` along the last ramp set on track t. Worked out from the ramp itself:
+  // gain.value isn't reliable mid-ramp (or right after the node is made, when it reports 1.0).
+  levelAt(t, at) {
+    const r = t.r;
+    if (!r) return 0;
+    const x = Math.min(1, Math.max(0, (at - r.t0) / r.dur));
+    // Equal-power shapes (a sine rise, a cosine fall), so two tracks crossfading keep the
+    // overall loudness steady; straight-line fades sag in the middle.
+    return r.from + (r.to - r.from) * (r.to > r.from ? Math.sin(x * Math.PI / 2) : 1 - Math.cos(x * Math.PI / 2));
+  },
   ramp(t, to, fade) {
-    const g = t.gain.gain, now = Sfx.ctx.currentTime;
-    if (g.cancelAndHoldAtTime) g.cancelAndHoldAtTime(now);
-    else { g.cancelScheduledValues(now); g.setValueAtTime(t.level, now); }
-    t.level = to;
-    g.linearRampToValueAtTime(to, now + fade);
+    const g = t.gain.gain, ctx = Sfx.ctx, now = ctx.currentTime, at = now + 0.01; // curves can't start in the past
+    const from = this.levelAt(t, at);
+    t.r = { from, to, t0: at, dur: fade };
+    const curve = Float32Array.from({ length: 64 }, (_, i) => this.levelAt(t, at + (fade * i) / 63));
+    g.cancelScheduledValues(0);
+    g.setValueAtTime(from, now);
+    g.setValueCurveAtTime(curve, at, fade);
   },
   setMuted(muted, fade = 0.4) {
     this.muted = muted;

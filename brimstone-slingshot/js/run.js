@@ -1227,6 +1227,7 @@ const Run = {
   },
 
   slots(n, ev, spinning = false) {
+    Music.play('event'); // only the casino opens it
     const s = this.s, node = s.node;
     if (node.spin && node.spin.k === 'buff' && !this.rc(node.spin.rid)) node.spin = null;
     const t = node.spin, faces = t && !spinning ? this.slotFaces(t) : null;
@@ -1349,6 +1350,7 @@ const Run = {
   },
 
   wheel(n, ev, spinFrom = null) {
+    Music.play('event'); // only the casino opens it
     const s = this.s, node = s.node, spinning = spinFrom != null;
     if (!node.segs) { node.segs = this.wheelSegs(); node.rot = Math.floor(Math.random() * 360); this.save(); }
     const segs = node.segs, k = node.hit != null ? segs[node.hit] : null;
@@ -1438,6 +1440,7 @@ const Run = {
      saved as it is set, and the throw (node.bw.res) is rolled and saved before the ball rolls,
      so a reload picks up where you were and shows the same pins falling. */
   bowl(n, ev, animate = false) {
+    Music.play('event');
     const node = this.s.node, bw = node.bw || (node.bw = { step: 0 }), test = this.bench;
     const res = bw.res, down = res ? res.at.filter((a) => a >= 0).length : 0, strike = down === Bowl.PINS.length;
     const pay = down * BOWL_PER_PIN + (strike ? BOWL_STRIKE_BONUS : 0);
@@ -1599,6 +1602,7 @@ const Run = {
      machine Bone Slots (Run.slots), each on this stop's node, and leaving either ends the stop.
      Input does nothing while the figurine is moving. The bench lands you back in the slingshot. */
   casino(n) {
+    Music.play('event');
     const node = this.s.node, cs = node.cs || (node.cs = {}), test = this.bench, ev = CASINO_STOP;
     const game = (id) => RUN_EVENTS.find((e) => e.id === Casino.GAMES[id].ev);
     if (cs.game && !test) { const g = game(cs.game); return this[g.screen](n, g); }
