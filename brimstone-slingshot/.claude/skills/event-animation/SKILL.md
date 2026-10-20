@@ -133,7 +133,8 @@ scene, which already has this shape:
 - **Load it:** add it to `FILES` in the loader at the end of `index.html`, after `js/scene.js`.
 
 **Run side, in `js/run.js`** (see `Run.draft`):
-- **The screen:** `const stage = this.sceneScreen(icon, title, sub, buttons)`, then
+- **The screen:** every event screen is in the cabinet (CLAUDE.md, "Event screens"). For a scene,
+  `const stage = this.sceneScreen(icon, title, sub, buttons)`, then
   `const draw = X.mount(stage, ...)`.
 - **The input lock:** `const lk = this.sceneLock()`. Call `lk.lock()` while anything moves and check
   `lk.busy()` in every click handler.

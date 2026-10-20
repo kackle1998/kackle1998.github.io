@@ -34,6 +34,14 @@ Every scene a stop opens (the bowling lane, Bone Draft, and any new one) is buil
 and `?scenetest=<id>`. Follow `.claude/skills/event-animation/SKILL.md` to mock up, build and check
 one. It includes the mockup template for the chat widgets.
 
+## Event screens: the cabinet
+
+Every event (every ? stop, special stop and the screens inside one) plays in the same cabinet: the
+panel at its full event size (`.rn-slots`, 680 px tall), with the skull and crossbones pillars either
+side of the main area. Build every event screen with `Run.eventScreen(icon, title, sub, inner, btns)`
+(`sceneScreen` for a 3D scene, `eventCardScreen` for cards to pick), never a bare `Run.screen`, so
+they all keep the same size, layout and frame.
+
 ## Event entrances: landing from the slingshot
 
 On the Dealer's Run map, the slingshot flings your figurine to the stop you pick. Any stop that opens
