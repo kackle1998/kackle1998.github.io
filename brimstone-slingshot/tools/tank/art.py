@@ -5,7 +5,7 @@
 # drawn by the game, so it can sway).
 import json, math, os
 HERE = os.path.dirname(os.path.abspath(__file__))
-W, H = 384, 216
+W, H = 384, 160                                      # wide and short, so it fills the event panel at 3x
 BAY = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5]
 dith = lambda x, y: (BAY[(x & 3) + (y & 3) * 4] + 0.5) / 16
 def tone(b, x, y, lo, hi):
@@ -18,8 +18,8 @@ def seg(px, py, ax, ay, bx, by):
   dx, dy = bx - ax, by - ay; t = max(0, min(1, ((px - ax) * dx + (py - ay) * dy) / (dx * dx + dy * dy or 1)))
   return math.hypot(px - ax - t * dx, py - ay - t * dy)
 
-SAND = 178                                           # where things settle (coins, food, the crab's feet)
-sand_top = lambda x: 166 + 3 * math.sin(x / 41) + 2 * math.sin(x / 13 + 1)
+SAND = 130                                           # where things settle (coins, food, the crab's feet)
+sand_top = lambda x: 118 + 3 * math.sin(x / 41) + 2 * math.sin(x / 13 + 1)
 
 # ---------- the background ----------
 g = [[9] * W for _ in range(H)]
@@ -28,11 +28,11 @@ for y in range(H):
     # water: a column of light from above, brighter in the middle, a soft vignette, shimmer bands up top
     cx = (x - W * 0.55) / W
     rays = sum(math.exp(-((cx + k * 0.12 - (y / H) * k * 0.18) ** 2) / 0.004) for k in (-2, -1, 0, 1, 2)) * 0.12
-    shimmer = 0.1 if y < 70 and math.sin(x / 9 + math.sin(y / 5) * 2 + y / 3) > 0.75 else 0
+    shimmer = 0.1 if y < 50 and math.sin(x / 9 + math.sin(y / 5) * 2 + y / 3) > 0.75 else 0
     b = 0.74 - 1.7 * cx * cx - 0.3 * (y / H) + rays * 1.6 + shimmer
     g[y][x] = tone(b, x, y, 1, 5)
 # the sand: a wavy back edge, lighter dunes, darker toward the front, pebbles
-pebbles = [(30, 200, 4, 2), (120, 205, 5, 2), (200, 196, 3, 2), (330, 207, 6, 3), (360, 190, 4, 2), (170, 211, 4, 2), (95, 186, 3, 1.5)]
+pebbles = [(30, 152, 4, 2), (120, 156, 5, 2), (200, 148, 3, 2), (330, 155, 6, 3), (360, 143, 4, 2), (170, 157, 4, 2), (95, 138, 3, 1.5)]
 def sand_b(x, y):
   st = sand_top(x); d = (y - st) / (H - st)
   return 0.85 - 0.45 * d + 0.12 * math.sin(x / 23 + d * 4) * (1 - d)
@@ -46,15 +46,15 @@ for y in range(H):
       if e <= 1: g[y][x] = 1 if e > 0.55 or (x - px) + (y - py) > 0 else 2
 # the rock arch on the left, cobbled and lit from the upper left, a dark cave in it
 def rock(x, y):
-  return ell(x, y, 66, 166, 58, 52) <= 1 and y < sand_top(x) + 3
+  return ell(x, y, 66, 118, 58, 50) <= 1 and y < sand_top(x) + 3
 for y in range(H):
   for x in range(W):
     if not rock(x, y): continue
-    cave = ell(x, y, 70, 158, 22, 21)
+    cave = ell(x, y, 70, 110, 22, 21)
     if cave <= 1:
       g[y][x] = 0 if cave < 0.75 else tone(0.35, x, y, 0, 2); continue
     cob = abs(math.sin(x / 7 + math.sin(y / 6)) * math.sin(y / 6 + math.cos(x / 9))) # cobbles
-    lit = 0.62 - ((x - 66) * 0.6 + (y - 140) * 0.8) / 120
+    lit = 0.62 - ((x - 66) * 0.6 + (y - 92) * 0.8) / 120
     b = lit - (0.35 if cob < 0.12 else 0) + (0.12 if cob > 0.85 else 0)
     g[y][x] = tone(b, x, y, 0, 4)
 # corals on the rock: branching coral (mid, outlined), fans (dithered), little tufts (light)
@@ -65,26 +65,26 @@ def branch(x0, y0, ang, ln, depth, t, out):
     for da in (-0.45, 0.4):
       branch(x1, y1, ang + da, ln * 0.72, depth - 1, max(1, t - 0.4), out)
 cor = []
-for (bx, by, a, ln) in ((30, 132, 1.75, 16), (52, 118, 1.5, 14), (96, 124, 1.35, 15), (112, 140, 1.2, 12), (18, 150, 1.95, 12)):
+for (bx, by, a, ln) in ((30, 84, 1.75, 15), (52, 72, 1.5, 13), (96, 78, 1.35, 14), (112, 92, 1.2, 12), (18, 102, 1.95, 12)):
   branch(bx, by, a, ln, 3, 2.2, cor)
 for y in range(H):
   for x in range(W):
     d = min((seg(x + .5, y + .5, *c[:4]) - c[4] / 2 for c in cor), default=9)
     if d <= 0: g[y][x] = 2 if (x + y) % 5 else 3
     elif d <= 1 and g[y][x] >= 2 and not rock(x, y): g[y][x] = 0
-for (fx, fy, r) in ((74, 116, 11), (40, 120, 9)):                               # fan corals
+for (fx, fy, r) in ((74, 70, 11), (40, 74, 9)):                               # fan corals
   for y in range(H):
     for x in range(W):
       if fy - r <= y <= fy and ell(x, y, fx, fy, r, r) <= 1:
         ring = math.hypot(x - fx, y - fy)
         g[y][x] = 0 if ring > r - 1 else (1 if (round(math.atan2(y - fy, x - fx) * 5) % 2 and ring > 3) else 2)
-for (tx, ty) in ((60, 112), (88, 118), (24, 136), (104, 132)):                   # tufts
+for (tx, ty) in ((60, 66), (88, 72), (24, 88), (104, 84)):                   # tufts
   for i, (dx, dy) in enumerate(((0, 0), (-2, -3), (2, -3), (0, -5), (-3, -6), (3, -6))):
     for a in (0, 1):
       g[ty + dy][tx + dx + a] = 5 if i > 2 else 3
 # the diving helmet on the right: a brass-rimmed sphere half sunk in the sand, a curved neck ring round
 # its base, sand drifted over it, its shadow falling to the lower right
-HX, HY, HR = 262, 150, 34
+HX, HY, HR = 262, 102, 34
 for y in range(H):
   for x in range(W):
     e = ell(x, y, HX, HY, HR, HR)
@@ -92,29 +92,29 @@ for y in range(H):
     lit = 0.8 - ((x - HX) * 0.55 + (y - HY) * 0.75) / (HR * 1.5)
     edge = e > 0.94
     g[y][x] = (0 if y < HY else 1) if edge else tone(lit - 0.1 * ((x * 3 + y * 5) % 7 == 0), x, y, 1, 4)
-    for (px, py, pr) in ((250, 152, 13), (229, 140, 7), (285, 146, 7), (262, 126, 8)):
+    for (px, py, pr) in ((250, 104, 13), (229, 92, 7), (285, 98, 7), (262, 78, 8)):
       d = math.hypot(x - px, y - py)
       if d <= pr - 3: g[y][x] = 5 if (x - px) - (y - py) < -pr * 0.7 and d > pr - 6 else (0 if (x + y) % 3 else 1)   # dark glass, a streak of light
       elif d <= pr:                                                                                            # the rim: light, gold where lit
         g[y][x] = 0 if d > pr - 0.9 else 6 if (x - px) + (y - py) < -pr * 0.3 and d < pr - 1.8 else 3
-    if ell(x, y, 283, 129, 5, 5) <= 1: g[y][x] = 0 if ell(x, y, 283, 129, 5, 5) > 0.7 else 3                    # a plate
+    if ell(x, y, 283, 81, 5, 5) <= 1: g[y][x] = 0 if ell(x, y, 283, 81, 5, 5) > 0.7 else 3                    # a plate
 # the neck ring: a curved brass band round the base, gold where the light catches it
 for y in range(H):
   for x in range(W):
-    o, i = ell(x, y, HX, 170, 33, 7), ell(x, y, HX, 167, 33, 7)
-    if o <= 1 and i > 1 and y >= 164 and abs(x - HX) <= 30:
+    o, i = ell(x, y, HX, 122, 33, 7), ell(x, y, HX, 119, 33, 7)
+    if o <= 1 and i > 1 and y >= 116 and abs(x - HX) <= 30:
       g[y][x] = 0 if o > 0.86 or i < 1.12 else 6 if x < HX - 8 and (x + y) % 2 else 3
 # sand drifted over the base: in the floor's own shading, so it shows only where it covers the helmet
 for y in range(H):
   for x in range(W):
-    m = ell(x, y, HX - 2, 182, 46, 12)
+    m = ell(x, y, HX - 2, 134, 46, 12)
     if m <= 1 and y >= sand_top(x) + 1:
       if m > 0.82 and (x * 7 + y * 3) % 3: continue                  # a ragged, dithered rim over the ring
       g[y][x] = tone(sand_b(x, y), x, y, 2, 5)
 # its shadow, falling to the lower right, fading out at its edges
 for y in range(H):
   for x in range(W):
-    e = ell(x, y, HX + 30, 180, 44, 8)
+    e = ell(x, y, HX + 30, 132, 44, 8)
     if e <= 1 and y >= sand_top(x) + 2 and ell(x, y, HX, HY, HR, HR) > 1:
       g[y][x] = tone(sand_b(x, y) - 0.38 * (1 - e) ** 0.7, x, y, 2, 5)
 

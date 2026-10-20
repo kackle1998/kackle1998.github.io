@@ -1784,15 +1784,17 @@ const Run = {
     if (tk.offer) return this.tankPick(n, tk);
     if (tk.started) return this.tankOffer(n, tk);
     this.save();
-    this.screen(STOPS.tank.icon, STOPS.tank.name, 'Fish drift in a tank of sulfur water. Fed fish grow, and grown fish drop coins.',
-      `<div class="tank-wrap"><canvas class="tank-cv" id="tkCv"></canvas>
-        <div class="tank-read" id="tkRead">CLICK THE WATER TO DROP FOOD · CLICK COINS TO CATCH THEM · CLICK WHAT COMES FOR THE FISH</div></div>`,
+    this.screen(STOPS.tank.icon, STOPS.tank.name, 'Click the water to drop food. Grown fish drop coins: click them. Click whatever comes for the fish.',
+      `<div class="tank-wrap"><canvas class="tank-cv" id="tkCv"></canvas><div class="tank-hud" id="tkRead"></div></div>`,
       '<button class="btn" id="tkGo">START</button><button class="btn" id="rnLeave">LEAVE</button>');
     $('.rn').classList.add('rn-tank');
+    // the tank at the largest whole scale the panel's body has room for
+    const body = $('#rnBody'), cv = $('#tkCv'), k = Math.max(1, Math.floor(Math.min((body.clientWidth - 6) / Tank.W, (body.clientHeight - 6) / Tank.H))); // 6: the border
+    cv.style.width = `${Tank.W * k}px`; cv.style.height = `${Tank.H * k}px`;
     const read = $('#tkRead');
-    const game = this.tankGame = Tank.mount($('#tkCv'), { // (kept on Run for checking: Run.tankGame.peek())
+    const game = this.tankGame = Tank.mount(cv, { // (kept on Run for checking: Run.tankGame.peek())
       invader: tk.inv,
-      onTick: (left, score) => { read.textContent = `${Math.ceil(left)} SECONDS · ${score} ARCANA`; },
+      onTick: (left, score) => { read.innerHTML = `${Math.ceil(left)}s &nbsp; ${ico('arcana')} ${score}`; },
       onCoin: (score) => { tk.score = score; this.save(); },
       onEnd: (score) => { tk.score = score; this.tankOffer(n, tk); },
     });
@@ -1801,7 +1803,7 @@ const Run = {
       tk.started = true;
       this.save();
       $('#tkGo').disabled = $('#rnLeave').disabled = true;
-      $('.rn-sub').textContent = 'Feed them. Catch the coins. Something is coming.';
+      $('.rn-sub').textContent = 'Feed them. Catch the coins. Something is coming...';
       game.start();
     };
     $('#rnLeave').onclick = () => { sfx('select'); if (test) this.sceneTestEnd(); else this.leave(); };

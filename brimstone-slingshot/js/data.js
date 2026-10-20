@@ -632,9 +632,9 @@ creature('djinn',     'Storm Djinn','3H',   4, 5, ['airborne', 'quick'], { rarit
 creature('phoenix',   'Phoenix',    '2HH',  4, 4, ['airborne', 'haste', 'undying'], { rarity: 'mythical', flavor: 'It has died a thousand times. It is not tired of it.' });
 // The Brimstone Tank's fish (Run.tank): generic cost only, so any deck can take one. Only the tank
 // offers them (`tank` keeps them out of every other pool). Prego keeps a Guppy (a 1/1 token) at your side.
-creature('prego',     'Prego',      '2',    1, 2, ['prego'], { tank: true, flavor: 'Always expecting. Always hungry.' });
-creature('carnivore', 'Carnivore',  '3',    3, 2, ['snipe'], { snipe: 3, tank: true, flavor: 'It only eats the little ones. At first.' });
-creature('zorf',      'Zorf',       '2',    1, 2, ['zorf'], { tank: true, flavor: 'It feeds the others. Nobody asked it to.' });
+creature('prego',     'Prego',      '2',    1, 2, ['prego'], { rarity: 'mythical', tank: true, flavor: 'Always expecting. Always hungry.' });
+creature('carnivore', 'Carnivore',  '3',    3, 2, ['snipe', 'bloodlust'], { snipe: 1, rarity: 'mythical', tank: true, flavor: 'It only eats the little ones. At first.' });
+creature('zorf',      'Zorf',       '2',    1, 2, ['zorf'], { rarity: 'mythical', tank: true, flavor: 'It feeds the others. Nobody asked it to.' });
 CARDS.guppy = { id: 'guppy', name: 'Guppy', type: 'creature', cost: parseCost('0'), atk: 1, hp: 1, sigils: [], sprite: 'guppy', token: true, flavor: 'Small, orange, and somebody\'s lunch.' };
 
 for (const k of COLOR_KEYS) {
