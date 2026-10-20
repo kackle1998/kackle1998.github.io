@@ -1013,27 +1013,27 @@ const Run = {
 
     if (node.from == null) {
       const givers = this.givers();
-      this.screen(o.icon, o.title,
+      const grid = this.eventCardScreen(o.icon, o.title,
         givers.length ? (o.consume ? 'Pick a creature to sacrifice. One of its sigils will pass to another.' : 'Pick a creature whose sigil you want to copy.')
-          : 'None of your creatures can pass on a sigil.', '', leaveBtn);
-      this.cardGrid($('#rnBody'), givers, (d) => { node.from = d.rid; node.sigil = null; this.save(); this.transfer(o); }, givers.length > 7);
+          : 'None of your creatures can pass on a sigil.', leaveBtn);
+      this.cardGrid(grid, givers, (d) => { node.from = d.rid; node.sigil = null; this.save(); this.transfer(o); }, givers.length > 7);
       return wire();
     }
     const from = this.card(node.from);
     if (node.sigil == null) {
       const ks = from.sigils.filter((k) => mons.some((r) => this.canTake(r, k, from.rid)));
-      this.screen(o.icon, o.title, `Which of ${escapeHTML(from.name)}'s sigils?`,
-        `<div class="rn-sigils">${ks.map((k) => `
+      this.eventScreen(o.icon, o.title, `Which of ${escapeHTML(from.name)}'s sigils?`,
+        `<div class="ev-center"><div class="rn-sigils">${ks.map((k) => `
           <button class="rn-sig" data-k="${k}">${ico(SIGILS[k].icon)}<span><b>${escapeHTML(sigilName(k, from))}</b>${escapeHTML(SIGILS[k].text(from))}</span></button>`).join('')}
-        </div>`, `<button class="btn" id="rnBack">BACK</button>${leaveBtn}`);
+        </div></div>`, `<button class="btn" id="rnBack">BACK</button>${leaveBtn}`);
       $$('.rn-sig').forEach((b) => (b.onclick = () => { sfx('select'); node.sigil = b.dataset.k; this.save(); this.transfer(o); }));
       $('#rnBack').onclick = () => { sfx('select'); node.from = null; this.save(); this.transfer(o); };
       return wire();
     }
     const k = node.sigil, takers = mons.filter((r) => this.canTake(r, k, from.rid));
-    this.screen(o.icon, o.title, `Which creature receives ${escapeHTML(sigilName(k, from))}?${o.consume ? ` ${escapeHTML(from.name)} will be sacrificed.` : ` It costs ${o.cost} life.`}`,
-      '', `<button class="btn" id="rnBack">BACK</button>${leaveBtn}`);
-    this.cardGrid($('#rnBody'), takers, (d) => {
+    const grid = this.eventCardScreen(o.icon, o.title, `Which creature receives ${escapeHTML(sigilName(k, from))}?${o.consume ? ` ${escapeHTML(from.name)} will be sacrificed.` : ` It costs ${o.cost} life.`}`,
+      `<button class="btn" id="rnBack">BACK</button>${leaveBtn}`);
+    this.cardGrid(grid, takers, (d) => {
       const rc = this.rc(d.rid);
       rc.sigils.push(k);
       if (k === 'snipe' || k === 'mend') rc[k] = from[k];
@@ -1145,14 +1145,14 @@ const Run = {
       const ch = ev.choices[node.choice];
       if (ch.transfer) return this.transfer({ icon: ev.art, title: ev.title, consume: false, cost: ch.cost });
       if (ch.cards) return this.eventCards(ev, ch);
-      this.screen(ev.art, ev.title, 'Pick a creature.', '', '<button class="btn" id="rnBack">BACK</button>');
+      const grid = this.eventCardScreen(ev.art, ev.title, 'Pick a creature.', '<button class="btn" id="rnBack">BACK</button>');
       const mons = this.creatures().filter(ch.pick);
-      this.cardGrid($('#rnBody'), mons, (d) => this.finishStop(ev.art, ev.title, ...this.result(ch.act(this, d), [d])), mons.length > 7);
+      this.cardGrid(grid, mons, (d) => this.finishStop(ev.art, ev.title, ...this.result(ch.act(this, d), [d])), mons.length > 7);
       $('#rnBack').onclick = () => { sfx('select'); node.choice = null; this.save(); this.event(n); };
       return;
     }
-    this.screen(ev.art, ev.title, '',
-      `<div class="rn-event"><img class="rn-art" src="${spriteURL(ev.art)}" alt=""><p>${escapeHTML(ev.text)}</p></div>`,
+    this.eventScreen(ev.art, ev.title, '',
+      `<div class="ev-center"><div class="rn-event"><img class="rn-art" src="${spriteURL(ev.art)}" alt=""><p>${escapeHTML(ev.text)}</p></div></div>`,
       ev.choices.map((ch, i) => {
         const ok = this.canChoose(ch);
         return `<button class="btn" data-ch="${i}" ${ok ? '' : `disabled`}>${escapeHTML(ch.label)}</button>` +
@@ -1184,8 +1184,8 @@ const Run = {
      the stop, so a reload shows the same ones, and there is no going back to choose something else. */
   eventCards(ev, ch) {
     const defs = (this.s.node.cards || []).map((id) => CARDS[id]).filter(Boolean);
-    this.screen(ev.art, ev.title, ch.prompt || 'Take one card for your deck.', '', '<button class="btn" id="rnLeave">LEAVE</button>');
-    this.cardGrid($('#rnBody'), defs, (c) => this.finishStop(ev.art, ev.title, ...this.result(ch.take(this, c), [c])));
+    const grid = this.eventCardScreen(ev.art, ev.title, ch.prompt || 'Take one card for your deck.', '<button class="btn" id="rnLeave">LEAVE</button>');
+    this.cardGrid(grid, defs, (c) => this.finishStop(ev.art, ev.title, ...this.result(ch.take(this, c), [c])));
     $('#rnLeave').onclick = () => { sfx('select'); this.leave(); };
   },
 
@@ -1242,25 +1242,17 @@ const Run = {
     if (node.spin && node.spin.k === 'buff' && !this.rc(node.spin.rid)) node.spin = null;
     const t = node.spin, faces = t && !spinning ? this.slotFaces(t) : null;
     const reel = (i) => `<div class="slot-reel"><div class="slot-band"></div><div class="slot-face"><img class="slot-sym" src="${faces ? faces[i] : iconURL(SLOT_FILL[i])}" alt=""></div><div class="slot-band"></div></div>`;
-    const pillar = `<div class="slot-pillar">${Array.from({ length: 8 }, (_, i) => `<img src="${iconURL(i % 2 ? 'crossbones' : 'skull', PAL['+'])}" alt="">`).join('')}</div>`;
     const skull = `<img src="${iconURL('skull', Palette.cur.accent)}" alt="">`;
     const price = `${SLOT_REROLL} ${ico('arcana', '', Palette.onDarkHi)}`;
-    this.screen(ev.art, ev.title,
+    this.eventScreen(ev.art, ev.title,
       spinning ? 'The reels spin...' : t ? `It pays out. Take it, leave it, or pull again for ${SLOT_REROLL} arcana.`
         : 'A one-armed machine rattles in the dark. Every pull pays out.',
-      `<div class="slot-mach">
-        <div class="slot-cab">${pillar}
-          <div class="slot-main">
-            <div class="slot-top">${skull}BONE SLOTS${skull}</div>
-            <div class="slot-reels">${[0, 1, 2].map(reel).join('')}</div>
-            <div class="slot-readout" id="slRead"></div>
-          </div>${pillar}
-        </div>
-        <button class="slot-lever${spinning ? ' pulled' : ''}" id="slLever"><img class="slot-bone" src="${spriteURL('slot_bone')}" alt=""></button>
-      </div>`,
+      `<div class="slot-top">${skull}BONE SLOTS${skull}</div>
+      <div class="slot-reels">${[0, 1, 2].map(reel).join('')}</div>
+      <div class="slot-readout" id="slRead"></div>`,
       t ? `<button class="btn" id="slTake" ${spinning ? 'disabled' : ''}>TAKE IT</button><button class="btn" id="slPull" ${spinning ? 'disabled' : ''}>REROLL (${price})</button><button class="btn" id="rnLeave" ${spinning ? 'disabled' : ''}>LEAVE</button>`
-        :`<button class="btn" id="slPull" ${spinning ? 'disabled' : ''}>PULL THE LEVER</button><button class="btn" id="rnLeave" ${spinning ? 'disabled' : ''}>LEAVE</button>`);
-    $('.rn').classList.add('rn-slots');
+        :`<button class="btn" id="slPull" ${spinning ? 'disabled' : ''}>PULL THE LEVER</button><button class="btn" id="rnLeave" ${spinning ? 'disabled' : ''}>LEAVE</button>`,
+      `<button class="slot-lever${spinning ? ' pulled' : ''}" id="slLever"><img class="slot-bone" src="${spriteURL('slot_bone')}" alt=""></button>`);
     this.slotReadout(t, spinning);
     if (spinning) return;
 
@@ -1368,15 +1360,15 @@ const Run = {
     const wire = () => { if ($('#rnLeave')) $('#rnLeave').onclick = () => { sfx('select'); this.leave(); }; };
 
     if (!segs.length) {
-      this.screen(ev.art, ev.title, 'None of your creatures can bear another sigil.',
-        `<div class="rn-event"><img class="rn-art" src="${spriteURL(ev.art)}" alt=""><p>${escapeHTML(ev.text)}</p></div>`, leaveBtn);
+      this.eventScreen(ev.art, ev.title, 'None of your creatures can bear another sigil.',
+        `<div class="ev-center"><div class="rn-event"><img class="rn-art" src="${spriteURL(ev.art)}" alt=""><p>${escapeHTML(ev.text)}</p></div></div>`, leaveBtn);
       return wire();
     }
     if (k && node.pick) { // the sigil is won: pick who bears it
       const name = escapeHTML(SIGILS[k].name), takers = this.wheelTakers(k);
-      this.screen(ev.art, ev.title, takers.length ? `Which creature receives ${name}?` : `None of your creatures can bear ${name}.`,
-        '', `<button class="btn" id="rnBack">BACK</button>${leaveBtn}`);
-      this.cardGrid($('#rnBody'), takers, (d) => {
+      const grid = this.eventCardScreen(ev.art, ev.title, takers.length ? `Which creature receives ${name}?` : `None of your creatures can bear ${name}.`,
+        `<button class="btn" id="rnBack">BACK</button>${leaveBtn}`);
+      this.cardGrid(grid, takers, (d) => {
         this.rc(d.rid).sigils.push(k);
         sfx('spell');
         this.finishStop(ev.art, ev.title, `${d.name} gained ${SIGILS[k].name}.`, [d]);
@@ -1386,24 +1378,16 @@ const Run = {
     }
 
     const skull = `<img src="${iconURL('skull', Palette.cur.accent)}" alt="">`;
-    const pillar = `<div class="slot-pillar">${Array.from({ length: 8 }, (_, i) => `<img src="${iconURL(i % 2 ? 'crossbones' : 'skull', PAL['+'])}" alt="">`).join('')}</div>`;
     const landed = k && !spinning;
-    this.screen(ev.art, ev.title,
+    this.eventScreen(ev.art, ev.title,
       spinning ? 'The wheel turns...' : landed ? `It lands on ${escapeHTML(SIGILS[k].name)}: ${escapeHTML(SIGILS[k].text({}))}` : escapeHTML(ev.text),
-      `<div class="slot-mach">
-        <div class="slot-cab">${pillar}
-          <div class="slot-main">
-            <div class="slot-top">${skull}SIGIL WHEEL${skull}</div>
-            <div class="wh-stage"><canvas class="wh-disk${k ? '' : ' live'}" id="whDisk" width="${WHEEL_PX}" height="${WHEEL_PX}"></canvas><div class="wh-pin"></div></div>
-            <div class="slot-readout"><span class="slot-text">${spinning ? '. . .' : landed
-              ? `<img class="wh-got" src="${iconURL(SIGILS[k].icon, Palette.onDarkHi)}" alt="">${escapeHTML(SIGILS[k].name.toUpperCase())}`
-              : 'ONE SPIN. NO SECOND CHANCES.'}</span></div>
-          </div>${pillar}
-        </div>
-      </div>`,
+      `<div class="slot-top">${skull}SIGIL WHEEL${skull}</div>
+      <div class="wh-stage"><canvas class="wh-disk${k ? '' : ' live'}" id="whDisk" width="${WHEEL_PX}" height="${WHEEL_PX}"></canvas><div class="wh-pin"></div></div>
+      <div class="slot-readout"><span class="slot-text">${spinning ? '. . .' : landed
+        ? `<img class="wh-got" src="${iconURL(SIGILS[k].icon, Palette.onDarkHi)}" alt="">${escapeHTML(SIGILS[k].name.toUpperCase())}`
+        : 'ONE SPIN. NO SECOND CHANCES.'}</span></div>`,
       landed ? `<button class="btn" id="whGive">GIVE ${escapeHTML(SIGILS[k].name.toUpperCase())}</button>${leaveBtn}`
         : `<button class="btn" id="whSpin" ${k ? 'disabled' : ''}>SPIN THE WHEEL</button>${leaveBtn}`);
-    $('.rn').classList.add('rn-slots');
     const cv = $('#whDisk');
     this.wheelDraw(cv, segs, spinning ? spinFrom : node.rot, landed ? node.hit : null);
     wire();
@@ -1652,13 +1636,23 @@ const Run = {
   },
 
   /* ---------- event scenes (js/scene.js): what every one of them shares ---------- */
-  /* The cabinet an event scene plays in: the slot machine's skull pillars either side of a stage
-     (sized by CSS). Returns the stage, for the scene's own mount (Bowl.mount, Draft.mount). */
-  sceneScreen(icon, title, sub, btns) {
+  /* The cabinet every event plays in, the house style: the panel at its full event size, with skull
+     and crossbones pillars either side of the event's main area (.slot-main, which gets `inner`).
+     `side` goes beside the cabinet (the slot machine's lever). */
+  eventScreen(icon, title, sub, inner, btns, side = '') {
     const pillar = `<div class="slot-pillar">${Array.from({ length: 8 }, (_, i) => `<img src="${iconURL(i % 2 ? 'crossbones' : 'skull', PAL['+'])}" alt="">`).join('')}</div>`;
     this.screen(icon, title, sub,
-      `<div class="slot-mach"><div class="slot-cab">${pillar}<div class="slot-main"><div class="bw-stage" id="scStage"></div></div>${pillar}</div></div>`, btns);
+      `<div class="slot-mach"><div class="slot-cab">${pillar}<div class="slot-main">${inner}</div>${pillar}</div>${side}</div>`, btns);
     $('.rn').classList.add('rn-slots');
+  },
+  /* An event's cards to pick from, in the cabinet; returns where cardGrid puts them. */
+  eventCardScreen(icon, title, sub, btns) {
+    this.eventScreen(icon, title, sub, '<div class="ev-cards"><div id="evCards"></div></div>', btns);
+    return $('#evCards');
+  },
+  /* The cabinet with a scene's stage in it. Returns the stage, for the scene's own mount (Bowl.mount, Draft.mount). */
+  sceneScreen(icon, title, sub, btns) {
+    this.eventScreen(icon, title, sub, '<div class="bw-stage" id="scStage"></div>', btns);
     return $('#scStage');
   },
   /* While a scene moves, clicks and keys do nothing: lock() disables the screen's buttons (and
@@ -1747,10 +1741,9 @@ const Run = {
     const steppers = PIECES.map(([k, label]) => stepper('', label, parts[k].toUpperCase(), `data-piece="${k}"`)).join('') +
       stepper('idolSpeed', 'SPEED', fpsLabel(Idol.FPS));
     const cells = SCALES.map(([, label]) => `<div class="idol-cell"><canvas class="idol-turn"></canvas><span class="idol-scale">${label}</span></div>`).join('');
-    this.screen(ev.art, ev.title, escapeHTML(ev.text),
-      `<div class="idol-stage">${cells}</div><div class="idol-pick">${steppers}</div>`,
+    this.eventScreen(ev.art, ev.title, escapeHTML(ev.text),
+      `<div class="idol-row"><div class="idol-stage">${cells}</div><div class="idol-pick">${steppers}</div></div>`,
       '<button class="btn" id="rnLeave">LEAVE</button>');
-    $('.rn').classList.add('rn-idol');
     // Full scale: the largest whole scale at which all four fit side by side, labels and gaps included.
     const stage = $('.idol-stage'), { w, h } = Idol.size(), GAP = 24, LABEL = 28;
     const sum = SCALES.reduce((a, [f]) => a + f, 0);
@@ -1784,12 +1777,11 @@ const Run = {
     if (tk.offer) return this.tankPick(n, tk);
     if (tk.started) return this.tankOffer(n, tk);
     this.save();
-    this.screen(STOPS.tank.icon, STOPS.tank.name, 'Click the water to drop food. Grown fish drop coins: click them. Click whatever comes for the fish.',
-      `<div class="tank-wrap"><canvas class="tank-cv" id="tkCv"></canvas><div class="tank-hud" id="tkRead"></div></div>`,
+    this.eventScreen(STOPS.tank.icon, STOPS.tank.name, 'Click the water to drop food. Grown fish drop coins: click them. Click whatever comes for the fish.',
+      `<div class="tank-box" id="tkBox"><div class="tank-wrap"><canvas class="tank-cv" id="tkCv"></canvas><div class="tank-hud" id="tkRead"></div></div></div>`,
       '<button class="btn" id="tkGo">START</button><button class="btn" id="rnLeave">LEAVE</button>');
-    $('.rn').classList.add('rn-tank');
-    // the tank at the largest whole scale the panel's body has room for
-    const body = $('#rnBody'), cv = $('#tkCv'), k = Math.max(1, Math.floor(Math.min((body.clientWidth - 6) / Tank.W, (body.clientHeight - 6) / Tank.H))); // 6: the border
+    // the tank as big as the cabinet has room for (not a whole scale: the screen itself scales on a phone anyway)
+    const body = $('#tkBox'), cv = $('#tkCv'), k = Math.max(1, Math.min((body.clientWidth - 6) / Tank.W, (body.clientHeight - 6) / Tank.H)); // 6: the border
     cv.style.width = `${Tank.W * k}px`; cv.style.height = `${Tank.H * k}px`;
     const read = $('#tkRead');
     const game = this.tankGame = Tank.mount(cv, { // (kept on Run for checking: Run.tankGame.peek())
@@ -1818,10 +1810,10 @@ const Run = {
   },
   tankPick(n, tk) {
     const test = this.bench, one = tk.offer.length === 1;
-    this.screen(STOPS.tank.icon, STOPS.tank.name,
-      `You caught ${tk.score} arcana. ${one ? 'One fish swims up to the glass.' : `Pick one of ${tk.offer.length} fish for your deck.`}`, '',
+    const grid = this.eventCardScreen(STOPS.tank.icon, STOPS.tank.name,
+      `You caught ${tk.score} arcana. ${one ? 'One fish swims up to the glass.' : `Pick one of ${tk.offer.length} fish for your deck.`}`,
       (test ? '<button class="btn" id="tkAgain">PLAY AGAIN</button>' : '') + '<button class="btn" id="rnLeave">LEAVE</button>');
-    this.cardGrid($('#rnBody'), tk.offer.map((id) => CARDS[id]), (c) => {
+    this.cardGrid(grid, tk.offer.map((id) => CARDS[id]), (c) => {
       if (test) return toast(`${c.name} would join your deck.`);
       this.finishStop(STOPS.tank.icon, STOPS.tank.name, `${c.name} joins your deck.`, [this.add(c.id)]);
     });
