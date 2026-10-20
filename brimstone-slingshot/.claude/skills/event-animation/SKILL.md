@@ -130,7 +130,7 @@ scene, which already has this shape:
     (pass the card's sprite from `Scene.spriteArt`). Gold means rarity only; give other states
     (heat, a curse) a look of their own.
   - `Scene.toStage(...)`: places HTML (such as labels) over the scene.
-- **Load it** with a `<script>` in `index.html` after `js/scene.js`.
+- **Load it:** add it to `FILES` in the loader at the end of `index.html`, after `js/scene.js`.
 
 **Run side, in `js/run.js`** (see `Run.draft`):
 - **The screen:** `const stage = this.sceneScreen(icon, title, sub, buttons)`, then
