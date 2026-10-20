@@ -7,7 +7,8 @@
    piece has its own.
    Assembly: the vessel stays put; the mask's neck lands on the vessel's neck and the pedestal's
    waist on its waist. Drawn back to front: pedestal, vessel, mask, then any vessel `front` area
-   (a raised hand), which never covers the mask's `face`.
+   (a raised hand), which never covers the mask's `face`. Last, ink left with no color around it (the
+   outline of something hidden) is cleared.
    Creatures so far: alien, lion, robot, golem. For now only the test event shows an idol
    (Run.idolTest, ?scenetest=idol; add &idol=LRG to pick the mask, vessel and pedestal by initial).
    ============================================================ */
@@ -465,6 +466,17 @@ const Idol = (() => {
     };
     draw(p, at.pedestal); draw(v, at.vessel); draw(m, at.mask);
     draw(v, at.vessel, (x, y) => inFront(x, y) && !onFace(x, y));
+    // A piece mostly hidden behind another can leave a sliver of its outline poking out (a body's
+    // shoulder beside a wide head). Ink with no color around it outlines nothing visible, so clear it.
+    const ink = (x, y) => C[y] && C[y][x] && C[y][x] !== '.' && C[y][x] !== '#';
+    const bare = [];
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      if (C[y][x] !== '#') continue;
+      let lit = false;
+      for (let dy = -1; dy <= 1 && !lit; dy++) for (let dx = -1; dx <= 1; dx++) if (ink(x + dx, y + dy)) { lit = true; break; }
+      if (!lit) bare.push([x, y]);
+    }
+    for (const [x, y] of bare) C[y][x] = '.';
     return C;
   }
 

@@ -1,0 +1,23 @@
+<!doctype html><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><title>Idol Icons</title>
+<style>body{background:#12160e;color:#d9dfb3;font:14px monospace;margin:16px}.g{display:flex;flex-wrap:wrap;gap:18px}
+.c{background:#a9b47e;padding:10px;text-align:center;color:#1f2418;width:150px}canvas{width:128px;height:128px;image-rendering:pixelated;background:#cdd4a4}
+h2{font-size:15px;color:#b0953a}small{display:block}</style>
+<h2>IDOL icons, Moss palette, drawn the way iconSprite() does (16×16, 2× pixels and a drop shadow)</h2>
+<div class=g id=new></div><h2>Existing stop icons, for comparison</h2><div class=g id=old></div>
+<script>
+const I={
+hierophant:[['...#...','..###..','.#.#.#.','.#####.','.#.#.#.','.#####.','#######'],'The Hierophant: a three-tier tiara'],
+idol:[['.#.#.#.','.#####.','.#.#.#.','..###..','.#####.','..###..','#######'],'Idol: the whole pole'],
+mask:[['.#####.','#######','#..#..#','#######','##.#.##','.#...#.','..###..'],'Mask: eye holes and teeth'],
+vessel:[['.#####.','..###..','.#####.','#######','#.#.#.#','.#####.','..###..'],'Vessel: an urn'],
+pedestal:[['.......','.#####.','..###..','..###..','..###..','.#####.','#######'],'Pedestal: a plinth'],
+hermit:[['...#...','..###..','.#...#.','.#.#.#.','.#...#.','..###..','...#...'],'The Hermit: a lantern'],
+tower:[['#.#.#.#','#######','.#...#.','.#.#.#.','.#...#.','.#...#.','#######'],'The Tower: battlements'],
+};
+const O={relic:['..###..','.#.#.#.','#.#.#.#','#.#.#.#','#.#.#.#','#.#.#.#','#######'],arcana:['..###..','.##..#.','##.....','##.....','##.....','.##..#.','..###..'],altar:['...#...','..###..','...#...','..###..','..###..','#######','#.#.#.#'],event:['.####..','#....#.','....#..','...#...','...#...','.......','...#...']};
+function draw(rows,host,name,txt){const c=document.createElement('div');c.className='c';const cv=document.createElement('canvas');cv.width=cv.height=16;const x=cv.getContext('2d');
+const each=f=>rows.forEach((r,y)=>[...r].forEach((ch,i)=>{if(ch==='#')for(let dy=0;dy<2;dy++)for(let dx=0;dx<2;dx++)f(1+i*2+dx,1+y*2+dy)}));
+x.fillStyle='#a9b47e';each((a,b)=>{if(a+1<16&&b+1<16)x.fillRect(a+1,b+1,1,1)});x.fillStyle='#1f2418';each((a,b)=>x.fillRect(a,b,1,1));
+c.append(cv);c.insertAdjacentHTML('beforeend',`<b>${name}</b><small>${txt||''}</small>`);host.append(c)}
+for(const k in I)draw(I[k][0],document.getElementById('new'),k,I[k][1]);for(const k in O)draw(O[k],document.getElementById('old'),k);
+</script>

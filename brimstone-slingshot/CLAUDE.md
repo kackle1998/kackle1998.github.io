@@ -92,3 +92,11 @@ entrances, and reuse it rather than inventing a new one.
 ## Writing
 
 Use US spelling (color, armor, gray) in code, comments and text.
+
+## Idols (the alien, lion, robot and golem)
+
+The four creature idols, their art and the tools that made them live in `tools/idols/` (see its
+README): the user's grid mockups, the cleaned pieces, the turn-frame generator, the stray and
+outline checks, and the totem mockups. `js/idol.js` holds what the game uses; the idol test event
+(`index.html?scenetest=idol`) shows them. These characters matter to the user: keep them, even if
+the Idol feature changes direction.
