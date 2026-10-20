@@ -9,7 +9,7 @@
    ============================================================ */
 
 const Tank = (() => {
-  const W = 384, H = 216, SAND = 196;                // the tank in art pixels; the sand's top
+  const W = 384, H = 216, SAND = TANK_ART.sand;      // the tank in art pixels; where things settle on the sand
   const DUR = 30;                                    // seconds a round lasts
   const FISH = 3;                                    // guppies at the start
   const HUNGER = 10;                                 // seconds a fed fish lasts; hungry below half; dies at 0
@@ -24,45 +24,28 @@ const Tank = (() => {
   const SPEED = { alien: 34, lion: 48, robot: 24, golem: 20 }; // how fast each invader hunts (px a second)
   const STEP = 1 / 30;
 
-  // Guppies by size (small, medium, large): a round body over a pale belly, a big eye up front, a
-  // fanned tail and a dorsal fin (the fins pink, so mid tone). Drawn facing left; flipped when facing right.
-  const FISH_ART = [10, 14, 19].map((len) => {
-    const h = Math.round(len * 0.62), top = 2, cx = len * 0.45, cy = top + h / 2, rx = len * 0.43, ry = h * 0.5;
-    const big = len >= 14, ex = Math.round(len * 0.24), ey = Math.round(cy - h * 0.18), g = [];
-    for (let y = 0; y < h + top; y++) {
-      let r = '';
-      for (let x = 0; x < len + 3; x++) {
-        const X = x + 0.5, Y = y + 0.5;
-        const body = ((X - cx) / rx) ** 2 + ((Y - cy) / ry) ** 2 <= 1;
-        const tail = X > len * 0.78 && Math.abs(Y - cy) <= (X - len * 0.78) * 0.95 + 0.6;
-        const fin = Y < cy - ry * 0.55 && X > len * 0.32 && X < len * 0.6 && Y > top - 2 + (X - len * 0.32) * 0.5;
-        const eye = big ? Math.abs(x - ex) <= 1 && Math.abs(y - ey) <= 1 : (x === ex || x === ex + 1) && y === ey;
-        const pupil = big ? x === ex - 1 && y === ey : x === ex && y === ey;
-        r += body ? (pupil ? '#' : eye ? 'w' : Y > cy + ry * 0.55 ? 'w' : '-') : tail || fin ? '+' : '.';
-      }
-      g.push(r);
-    }
-    return g;
-  });
-  // The Guppymuncher: a crab on the sand, pincers raised, eyes on stalks; two walking poses.
-  const CRAB = [0, 1].map((step) => {
-    const g = [];
-    for (let y = 0; y < 13; y++) {
-      let r = '';
-      for (let x = 0; x < 17; x++) {
-        const X = x + 0.5, Y = y + 0.5, side = X < 8.5 ? -1 : 1, ax = Math.abs(X - 8.5);
-        const shell = ((X - 8.5) / 5.6) ** 2 + ((Y - 8.6) / 3) ** 2 <= 1;
-        const claw = ax > 4.2 && ax < 7.4 && Y < 5.4 && !(ax > 5.2 && ax < 6.4 && Y < 3);      // a pincer, open at the top
-        const arm = ax > 5 && ax < 6.6 && Y >= 5.4 && Y < 7.4;
-        const stalk = ax > 1.2 && ax < 2.4 && Y > 3.4 && Y < 6;
-        const eye = ax > 1 && ax < 2.6 && Y > 2.4 && Y <= 3.4;
-        const leg = Y > 10.4 && ((x % 3 === (step ? 1 : 2)) && ax > 1.5 && ax < 7.5);
-        r += shell ? (Y < 7.6 ? '-' : '+') : claw ? '+' : arm || stalk ? '+' : eye ? 'w' : leg ? '#' : '.';
-      }
-      g.push(r);
-    }
-    return g;
-  });
+  // The art (js/tank-art.js, made by tools/tank/art.py): the guppies by size and the crab's two
+  // walking poses, outlined, facing left (a guppy is flipped to face right); the background below.
+  const FISH_ART = TANK_ART.guppy, CRAB = TANK_ART.crab;
+  // The background, decoded once from its run-length pairs into tone indexes, then painted per palette.
+  const BG = (() => {
+    const a = new Uint8Array(W * H), s = TANK_ART.bg;
+    for (let i = 0, o = 0; i < s.length; i += 2) { const v = +s[i], n = s.charCodeAt(i + 1) - 48; a.fill(v, o, o + n); o += n; }
+    return a;
+  })();
+  const TONES = (p) => [p.ink, p.dark, p.mid, p.light, p.paper, p.white, p.accent];
+  const bgCache = {};
+  function background(p) {
+    const key = TONES(p).join();
+    if (bgCache[key]) return bgCache[key];
+    const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+    const x = cv.getContext('2d'), img = x.createImageData(W, H), rgb = TONES(p).map((h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16)));
+    for (let i = 0; i < W * H; i++) { const c = rgb[BG[i]] || rgb[4]; img.data.set([...c, 255], i * 4); }
+    x.putImageData(img, 0, 0);
+    return (bgCache[key] = cv);
+  }
+  // Kelp, swaying in steps: tall ribbons rising from the sand on both sides (x, height, phase).
+  const KELP = [[120, 92, 0], [206, 70, 2], [318, 140, 1], [338, 118, 3], [358, 150, 2], [14, 80, 1]];
   const CRAB_SPEED = 12, CRAB_REACH = 30;            // how fast it walks; how near the sand a small guppy has to swim to be caught
 
   /* mount(canvas, { invader, onTick(t, score), onCoin(score), onEnd(score) }) sets up the tank; it
@@ -91,24 +74,17 @@ const Tank = (() => {
 
     function draw() {
       const p = P(), step = Math.floor(anim * 5);               // stepped motion, 5 a second
-      g.fillStyle = p.paper; g.fillRect(0, 0, W, H);            // the water
-      g.fillStyle = p.white;                                    // light from the surface, in bands
-      for (let y = 0; y < 18; y += 6) g.fillRect(0, y, W, 2);
-      for (let x = 0; x < W; x++) {                             // the sand, dithered, with pebbles
-        for (let y = SAND; y < H; y++) {
-          const d = (x * 7 + y * 13) % 5;
-          g.fillStyle = y === SAND ? p.ink : d === 0 ? p.mid : p.light;
-          g.fillRect(x, y, 1, 1);
-        }
-      }
-      for (const [x0, h] of [[30, 34], [72, 22], [300, 40], [344, 26]]) {   // weeds, swaying in steps
+      g.drawImage(background(p), 0, 0);
+      for (const [x0, h, ph] of KELP) {                         // kelp: a dark-edged ribbon with a light midrib and leaf bulges
         for (let i = 0; i < h; i++) {
-          const sway = Math.round(Math.sin((i / 6) + step * 0.6 + x0) * 2);
-          g.fillStyle = p.mid; g.fillRect(x0 + sway, SAND - i, 2, 1);
-          if (i % 7 === 3) { g.fillStyle = p.dark; g.fillRect(x0 + sway + (i % 14 === 3 ? 2 : -2), SAND - i, 2, 1); }
+          const y = Math.round(SAND - 4 - i), sway = Math.round(Math.sin(i / 14 + (step + ph * 3) * 0.35) * (i / h) * 6);
+          const w = 4 + (Math.floor((i + ph * 5) / 9) % 2 ? 2 : 0), x = x0 + sway - (w >> 1);
+          g.fillStyle = p.dark; g.fillRect(x - 1, y, w + 2, 1);
+          g.fillStyle = p.mid; g.fillRect(x, y, w, 1);
+          g.fillStyle = p.light; g.fillRect(x + (w >> 1), y, 1, 1);
         }
       }
-      for (const b of bubbles) { g.fillStyle = p.white; g.fillRect(Math.round(b.x), Math.round(b.y), 2, 2); g.fillStyle = p.mid; g.fillRect(Math.round(b.x) + 2, Math.round(b.y) + 1, 1, 1); }
+      for (const b of bubbles) { g.fillStyle = p.ink; g.fillRect(Math.round(b.x) - 1, Math.round(b.y), 4, 2); g.fillRect(Math.round(b.x), Math.round(b.y) - 1, 2, 4); g.fillStyle = p.white; g.fillRect(Math.round(b.x), Math.round(b.y), 2, 2); }
       for (const f of pellets) { g.fillStyle = p.dark; g.fillRect(Math.round(f.x), Math.round(f.y), 2, 2); }
       for (const c of coins) {                                  // coins: silver, or gold for the big ones
         const x = Math.round(c.x), y = Math.round(c.y);
@@ -122,20 +98,10 @@ const Tank = (() => {
         const hungry = f.hunger < HUNGER / 2;                   // a hungry fish goes dark
         const rows = hungry ? a.map((r) => r.replace(/-/g, '+')) : a;
         const x = Math.round(f.x - a[0].length / 2), y = Math.round(f.y - a.length / 2 + Math.sin(f.wob + step) * 0.6);
-        // ink outline round the fish, then the fish
-        rows.forEach((r, yy) => [...r].forEach((ch, xx) => {
-          if (ch === '.') return;
-          const X = x + (flip ? r.length - 1 - xx : xx), Y = y + yy;
-          g.fillStyle = p.ink; g.fillRect(X - 1, Y, 3, 1); g.fillRect(X, Y - 1, 1, 3);
-        }));
         art(rows, x, y, flip);
       }
       {                                                          // the Guppymuncher, walking in steps
-        const rows = CRAB[crab.snap > 0 ? 0 : step % 2], x = Math.round(crab.x - 8), y = SAND - rows.length + 1;
-        rows.forEach((r, yy) => [...r].forEach((ch, xx) => {
-          if (ch === '.') return;
-          g.fillStyle = p.ink; g.fillRect(x + xx - 1, y + yy, 3, 1); g.fillRect(x + xx, y + yy - 1, 1, 3);
-        }));
+        const rows = CRAB[crab.snap > 0 ? 0 : step % 2], x = Math.round(crab.x - rows[0].length / 2), y = SAND - rows.length + 3;
         art(rows, x, y, false);
       }
       if (inv) {
@@ -156,7 +122,10 @@ const Tank = (() => {
       if (live) t += dt;                                        // the round's clock only once started
       const clock = live ? t : 0;
       // bubbles rise in steps from the weeds
-      if (Math.random() < dt * 2) bubbles.push({ x: [30, 72, 300, 344][Math.floor(Math.random() * 4)] + rnd(-3, 3), y: SAND - 4 });
+      if (Math.random() < dt * 2) {                              // bubbles from the helmet's top and the kelp tops
+        const [bx, by] = [[262, 108], [120, SAND - 94], [338, SAND - 120]][Math.floor(Math.random() * 3)];
+        bubbles.push({ x: bx + rnd(-3, 3), y: by });
+      }
       bubbles = bubbles.filter((b) => (b.y -= dt * 20) > 4);
       for (const f of pellets) f.y = Math.min(SAND - 2, f.y + dt * 14);
       pellets = pellets.filter((f) => !f.gone && (f.rest = f.y >= SAND - 2 ? (f.rest || 0) + dt : 0) < 2);
