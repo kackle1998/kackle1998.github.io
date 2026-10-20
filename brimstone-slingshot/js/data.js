@@ -355,6 +355,28 @@ const SPRITES = {
     '........', '.......#', '......##', '....####', '...#wwww', '..#w----', '..#w----', '..#w----',
     '..#w----', '.#w-----', '.#w-----', '#w------', '########', '......##', '......##', '........',
   ],
+  /* ---------- the Brimstone Tank's fish (Run.tank): full 16x16, facing left ---------- */
+  // A round yellow fish in a spotted cap, one wide eye, red lips, pink tail fins.
+  prego: [
+    '......######....', '....##---+++#...', '...#www#-+w++#..', '..#wwwww#++++#..',
+    '..#w#www#w++w+#.', '..#w#www#+++++#.', '###wwwww#----#..', '+++#www#-----#..',
+    '#+#----------#..', '.#-----------+#.', '.#----------++#.', '.#---------++#+#',
+    '.#--------++#++#', '..#------++#++#.', '...##---++#++#..', '.....#####++#...',
+  ],
+  // A heavy piranha: dark back, red belly, a yellow eye and an underbite of teeth.
+  carnivore: [
+    '..........##....', '........##++#...', '.......#++++#...', '....###++++#..##',
+    '..##++++++++##+#', '.#++ww+++++++++#', '#++w#w+++++++++#', '#+++w++++++++++#',
+    '#-----------+++#', '.#####-------++#', '.#w-w--------++#', '..##---++---##+#',
+    '....###++###..##', '.....#++#.......', '.....#++#.......', '......##........',
+  ],
+  // A green seahorse: one big eye, a long snout, a spiky pink crest, a curled tail.
+  zorf: [
+    '...........###..', '......#####+++#.', '.....#----+++#..', '...##-www-+++#..',
+    '.##---w#w-++++#.', '#-----w#w-+++#..', '#---##----+++#..', '.###..#---++++#.',
+    '......#---+++#..', '......#---+++#..', '......#---+++#..', '.......#--++#...',
+    '......#---++#...', '......#---##....', '......#---+#....', '.......##-+#....',
+  ],
 };
 
 /* 7x7 one-color icons */
@@ -434,6 +456,7 @@ const ICONS = {
   relic:     ['..###..', '.#.#.#.', '#.#.#.#', '#.#.#.#', '#.#.#.#', '#.#.#.#', '#######'],
   rack:      ['#.#.#.#', '.......', '.#.#.#.', '.......', '..#.#..', '.......', '...#...'], // ten pins from above
   casino:    ['..###..', '.#.#.#.', '##...##', '#.....#', '##...##', '.#.#.#.', '..###..'], // a poker chip, its edge notched
+  tank:      ['.......', '..###.#', '.#.####', '#######', '.######', '..###.#', '.......'], // a fish
   idol:      ['.#.#.#.', '.#####.', '.#.#.#.', '..###..', '.#####.', '..###..', '#######'], // mask, vessel and pedestal stacked
 };
 
@@ -457,7 +480,7 @@ function iconSprite(name) {
   return px.map((r) => r.join(''));
 }
 for (const k of COLOR_KEYS) SPRITES['land_' + k] = iconSprite(COLORS[k].icon);
-for (const k of ['battle', 'fire', 'altar', 'arcana', 'event', 'chip', 'spring', 'pool', 'slots', 'wheel', 'pack', 'relic', 'rack', 'casino', 'idol']) SPRITES['ri_' + k] = iconSprite(k);
+for (const k of ['battle', 'fire', 'altar', 'arcana', 'event', 'chip', 'spring', 'pool', 'slots', 'wheel', 'pack', 'relic', 'rack', 'casino', 'idol', 'tank']) SPRITES['ri_' + k] = iconSprite(k);
 /* The slot machine's lever: a long cracked bone standing upright, lit from the left (16 wide, so not mirrored). */
 SPRITES.slot_bone = [
   '..####....####..', '.#wwww#..#www-#.', '#wwwwww##wwww-+#', '#wwwwwwwwwwww-+#', '#wwwwwwwwwww-++#',
@@ -596,6 +619,11 @@ creature('crane',     'Paper Crane','1H',   1, 1, ['airborne', 'scholar'], { fla
 creature('monk',      'Thunder Monk','2H',   2, 3, ['shockwave'], { flavor: 'Every prayer ends in thunder.' });
 creature('djinn',     'Storm Djinn','3H',   4, 5, ['airborne', 'quick'], { rarity: 'rare', flavor: 'It grants three wishes. All of them are lightning.' });
 creature('phoenix',   'Phoenix',    '2HH',  4, 4, ['airborne', 'haste', 'undying'], { rarity: 'mythical', flavor: 'It has died a thousand times. It is not tired of it.' });
+// The Brimstone Tank's fish (Run.tank): generic cost only, so any deck can take one. Only the tank
+// offers them (`tank` keeps them out of every other pool). Their sigils are stand-ins for now.
+creature('prego',     'Prego',      '2',    1, 2, ['grow'], { tank: true, flavor: 'Always expecting. Always hungry.' });
+creature('carnivore', 'Carnivore',  '3',    3, 2, ['bloodlust'], { tank: true, flavor: 'It only eats the little ones. At first.' });
+creature('zorf',      'Zorf',       '2',    1, 2, ['rally'], { tank: true, flavor: 'It feeds the others. Nobody asked it to.' });
 
 for (const k of COLOR_KEYS) {
   CARDS['land_' + k] = { id: 'land_' + k, name: COLORS[k].land, type: 'land', color: k, cost: parseCost('0'), sigils: [], sprite: 'land_' + k };
