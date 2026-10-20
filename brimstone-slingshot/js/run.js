@@ -424,6 +424,10 @@ const ALTAR_STOP = { title: 'SIGIL ALTAR', art: 'ri_altar', consume: true,
     { label: 'SACRIFICE', ok: (run) => run.givers().length > 0, need: 'None of your creatures can pass on a sigil.' },
     { label: 'LEAVE', act: () => 'The altar waits for another.' },
   ] };
+/* The Idol's test event: an idol turning in the plain event screen. It isn't in RUN_EVENTS, so no ?
+   stop rolls it; only its test bench opens it (Run.idolTest, ?scenetest=idol). */
+const IDOL_TEST = { title: 'THE IDOL', art: 'ri_idol', parts: { mask: 'alien', vessel: 'alien', pedestal: 'alien' },
+  text: 'An idol of three pieces turns slowly on the spot.' };
 const BOWL_PER_PIN = 1;
 const BOWL_STRIKE_BONUS = 3;
 const BOWL_SLIDE_HZ = 0.35;                              // the ball sliding along the foul line, sweeps a second
@@ -1665,7 +1669,7 @@ const Run = {
     this.save();
     RunMap.cleared().then(() => Scene.play({ draw, at, from: 0, to, cues, done }));
   },
-  /* The test benches: Run.sceneTest(id) in the console, or index.html?scenetest=<id> (bowl, draft, dip, mirror, spring, moth, rune, altar, forge, shrine, offer, ghost, relic, bones;
+  /* The test benches: Run.sceneTest(id) in the console, or index.html?scenetest=<id> (bowl, draft, dip, mirror, spring, moth, rune, altar, forge, shrine, offer, ghost, relic, bones, idol;
      ?bowltest and ?drafttest too). The scene plays as often as you like on a stand-in run: nothing
      is saved (save() checks this.bench) or paid, and DONE puts your run back. this.bench holds the
      bench's own state: the bowling lane's throws, Bone Draft's ante and the colors it deals from. */
@@ -1687,6 +1691,7 @@ const Run = {
     ghost: (run) => run.handover(null, RUN_EVENTS.find((e) => e.id === 'ghost')),
     relic: (run) => run.handover(null, RUN_EVENTS.find((e) => e.id === 'reliquary')),
     bones: (run) => run.handover(null, RUN_EVENTS.find((e) => e.id === 'bones')),
+    idol: (run) => run.idolTest(IDOL_TEST),
   },
   sceneTest(id) {
     if (!this.SCENE_BENCHES[id]) return console.warn('No scene bench called', id, '- try', Object.keys(this.SCENE_BENCHES).join(', '));
@@ -1706,6 +1711,15 @@ const Run = {
     this.s = this.bench.real;
     this.bench = null;
     showTitle();
+  },
+  /* The Idol's test event (IDOL_TEST): the plain event screen, the idol turning left to right and
+     back over most of it (Idol.play, js/idol.js). LEAVE puts your run back. */
+  idolTest(ev) {
+    this.screen(ev.art, ev.title, escapeHTML(ev.text), '<canvas class="idol-turn" id="idolTurn"></canvas>', '<button class="btn" id="rnLeave">LEAVE</button>');
+    const body = $('#rnBody');
+    $('.rn').classList.add('rn-idol');
+    Idol.play($('#idolTurn'), ev.parts, { w: body.clientWidth, h: body.clientHeight });
+    $('#rnLeave').onclick = () => { sfx('select'); this.sceneTestEnd(); };
   },
   bowlTest() { this.sceneTest('bowl'); },
   draftTest() { this.sceneTest('draft'); },
