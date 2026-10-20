@@ -447,22 +447,30 @@ const Idol = (() => {
   }
 
   /* Turn an idol on a canvas: left to right and back, a frame every FRAME_MS, at the largest whole
-     scale that fits `box` (CSS px). The frame is the box around every facing, so it doesn't jump.
+     scale that fits `box` (CSS px). The frame is the box around every facing of every combination,
+     so the idol neither jumps as it turns nor changes size when a piece is swapped (set()).
      Stops on its own once the canvas leaves the page. */
   const FRAME_MS = 200;
-  function play(canvas, parts, box) {
-    const frames = TURN.map((f) => compose(parts, f));
+  let bounds = null;
+  function allBounds() {
+    if (bounds) return bounds;
+    const names = Object.keys(IDOL_PARTS);
     let x0 = W, x1 = 0, y0 = H, y1 = 0;
-    for (const C of frames) C.forEach((r, y) => r.forEach((c, x) => {
-      if (c !== '.') { x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); }
-    }));
+    for (const mask of names) for (const vessel of names) for (const pedestal of names) for (const f of TURN) {
+      compose({ mask, vessel, pedestal }, f).forEach((r, y) => r.forEach((c, x) => {
+        if (c !== '.') { x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); }
+      }));
+    }
+    return (bounds = { x0, x1, y0, y1 });
+  }
+  function play(canvas, parts, box) {
+    const { x0, x1, y0, y1 } = allBounds();
     const w = x1 - x0 + 1, h = y1 - y0 + 1, s = Math.max(1, Math.floor(Math.min(box.w / w, box.h / h)));
     canvas.width = w * s; canvas.height = h * s;
     const g = canvas.getContext('2d'), seq = [...TURN.keys(), ...[3, 2, 1]];
-    let i = 0;
-    const step = () => {
-      if (!canvas.isConnected) return;
-      const C = frames[seq[i++ % seq.length]];
+    let frames = TURN.map((f) => compose(parts, f)), i = 0, cur = 0;
+    const draw = () => {
+      const C = frames[seq[cur]];
       g.clearRect(0, 0, canvas.width, canvas.height);
       for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
         const c = C[y][x];
@@ -470,9 +478,16 @@ const Idol = (() => {
         g.fillStyle = PAL[c];
         g.fillRect((x - x0) * s, (y - y0) * s, s, s);
       }
+    };
+    const step = () => {
+      if (!canvas.isConnected) return;
+      cur = i++ % seq.length;
+      draw();
       setTimeout(step, FRAME_MS);
     };
     step();
+    // Swap pieces mid-turn: the new idol shows at once, facing the same way.
+    return { set(p) { frames = TURN.map((f) => compose(p, f)); draw(); } };
   }
 
   return { TURN, compose, play };
