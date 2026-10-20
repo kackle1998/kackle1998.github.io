@@ -9,7 +9,7 @@
    ============================================================ */
 
 const Tank = (() => {
-  const W = 384, H = 216, SAND = TANK_ART.sand;      // the tank in art pixels; where things settle on the sand
+  const W = 384, H = 160, SAND = TANK_ART.sand;      // the tank in art pixels (shown at 3x); where things settle on the sand
   const DUR = 30;                                    // seconds a round lasts
   const FISH = 3;                                    // guppies at the start
   const HUNGER = 10;                                 // seconds a fed fish lasts; hungry below half; dies at 0
@@ -45,7 +45,7 @@ const Tank = (() => {
     return (bgCache[key] = cv);
   }
   // Kelp, swaying in steps: tall ribbons rising from the sand on both sides (x, height, phase).
-  const KELP = [[120, 92, 0], [206, 70, 2], [318, 140, 1], [338, 118, 3], [358, 150, 2], [14, 80, 1]];
+  const KELP = [[120, 70, 0], [206, 54, 2], [318, 104, 1], [338, 90, 3], [358, 112, 2], [14, 62, 1]];
   const CRAB_SPEED = 12, CRAB_REACH = 30;            // how fast it walks; how near the sand a small guppy has to swim to be caught
 
   /* mount(canvas, { invader, onTick(t, score), onCoin(score), onEnd(score) }) sets up the tank; it
@@ -57,7 +57,7 @@ const Tank = (() => {
     const rnd = (a, b) => a + Math.random() * (b - a);
     let fish = [], coins = [], pellets = [], bubbles = [], inv = null, score = 0, t = 0, anim = 0, live = false, over = false, came = false, last = 0;
     const crab = { x: W * 0.7, vx: -CRAB_SPEED, snap: 0 };
-    for (let i = 0; i < FISH; i++) fish.push({ x: rnd(60, W - 60), y: rnd(50, SAND - 40), vx: rnd(-1, 1) < 0 ? -18 : 18, vy: 0, size: 0, meals: 0, hunger: HUNGER, coin: COIN_EVERY * rnd(0.5, 1), alive: true, wob: rnd(0, 6) });
+    for (let i = 0; i < FISH; i++) fish.push({ x: rnd(60, W - 60), y: rnd(30, SAND - 30), vx: rnd(-1, 1) < 0 ? -18 : 18, vy: 0, size: 0, meals: 0, hunger: HUNGER, coin: COIN_EVERY * rnd(0.5, 1), alive: true, wob: rnd(0, 6) });
 
     // The invader's frames, one per facing, from the idol's own pieces: drawn once to small canvases.
     const parts = { mask: opts.invader, vessel: opts.invader, pedestal: opts.invader };
@@ -85,12 +85,16 @@ const Tank = (() => {
         }
       }
       for (const b of bubbles) { g.fillStyle = p.ink; g.fillRect(Math.round(b.x) - 1, Math.round(b.y), 4, 2); g.fillRect(Math.round(b.x), Math.round(b.y) - 1, 2, 4); g.fillStyle = p.white; g.fillRect(Math.round(b.x), Math.round(b.y), 2, 2); }
-      for (const f of pellets) { g.fillStyle = p.dark; g.fillRect(Math.round(f.x), Math.round(f.y), 2, 2); }
-      for (const c of coins) {                                  // coins: silver, or gold for the big ones
+      for (const f of pellets) { g.fillStyle = p.ink; g.fillRect(Math.round(f.x) - 1, Math.round(f.y) - 1, 4, 4); g.fillStyle = p.mid; g.fillRect(Math.round(f.x), Math.round(f.y), 2, 2); }
+      for (const c of coins) {                                  // coins: round, silver or gold, the arcana crescent on each
         const x = Math.round(c.x), y = Math.round(c.y);
-        g.fillStyle = p.ink; g.fillRect(x - 2, y - 3, 5, 7); g.fillRect(x - 3, y - 2, 7, 5);
-        g.fillStyle = c.v > 1 ? p.accent : p.white; g.fillRect(x - 2, y - 2, 5, 5);
-        g.fillStyle = p.light; g.fillRect(x, y - 1, 1, 3);
+        for (let dy = -6; dy <= 6; dy++) for (let dx = -6; dx <= 6; dx++) {
+          const d = Math.hypot(dx, dy);
+          if (d > 6.2) continue;
+          const moon = Math.hypot(dx + 0.5, dy) <= 3.4 && Math.hypot(dx - 1.3, dy - 0.8) > 2.6;   // the crescent, as on the arcana icon
+          g.fillStyle = d > 5.1 ? p.ink : moon ? p.ink : c.v > 1 ? (dx + dy < -3 ? p.white : p.accent) : (dx + dy < -3 ? p.white : p.paper);
+          g.fillRect(x + dx, y + dy, 1, 1);
+        }
       }
       for (const f of fish) {
         if (!f.alive) continue;
@@ -123,14 +127,14 @@ const Tank = (() => {
       const clock = live ? t : 0;
       // bubbles rise in steps from the weeds
       if (Math.random() < dt * 2) {                              // bubbles from the helmet's top and the kelp tops
-        const [bx, by] = [[262, 108], [120, SAND - 94], [338, SAND - 120]][Math.floor(Math.random() * 3)];
+        const [bx, by] = [[262, 62], [120, SAND - 72], [338, SAND - 92]][Math.floor(Math.random() * 3)];
         bubbles.push({ x: bx + rnd(-3, 3), y: by });
       }
       bubbles = bubbles.filter((b) => (b.y -= dt * 20) > 4);
       for (const f of pellets) f.y = Math.min(SAND - 2, f.y + dt * 14);
       pellets = pellets.filter((f) => !f.gone && (f.rest = f.y >= SAND - 2 ? (f.rest || 0) + dt : 0) < 2);
       for (const c of coins) {
-        if (c.y < SAND - 4) c.y = Math.min(SAND - 4, c.y + dt * 10);
+        if (c.y < SAND - 6) c.y = Math.min(SAND - 6, c.y + dt * 10);
         else c.rest += dt;
       }
       coins = coins.filter((c) => c.rest < COIN_LIFE && !c.got);
@@ -231,7 +235,7 @@ const Tank = (() => {
         }
         return;
       }
-      const c = coins.find((c) => Math.abs(c.x - x) < 6 && Math.abs(c.y - y) < 6);
+      const c = coins.find((c) => Math.hypot(c.x - x, c.y - y) < 9);
       if (c) { c.got = true; score += c.v; sfx('tally'); opts.onCoin && opts.onCoin(score); return; }
       if (y > 20 && y < SAND - 4 && pellets.length < PELLETS) { pellets.push({ x, y }); sfx('tick'); }
     });
