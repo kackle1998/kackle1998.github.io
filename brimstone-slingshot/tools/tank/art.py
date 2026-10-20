@@ -82,23 +82,40 @@ for (tx, ty) in ((60, 112), (88, 118), (24, 136), (104, 132)):                  
   for i, (dx, dy) in enumerate(((0, 0), (-2, -3), (2, -3), (0, -5), (-3, -6), (3, -6))):
     for a in (0, 1):
       g[ty + dy][tx + dx + a] = 5 if i > 2 else 3
-# the diving helmet on the right: a brass-rimmed sphere with portholes, on a bolted collar
-HX, HY, HR = 262, 140, 34
+# the diving helmet on the right: a brass-rimmed sphere half sunk in the sand, a curved neck ring round
+# its base, sand drifted over it, its shadow falling to the lower right
+HX, HY, HR = 262, 150, 34
+for y in range(H):                                            # its shadow on the sand, dithered
+  for x in range(W):
+    if y >= sand_top(x) + 1 and ell(x, y, HX + 44, 184, 40, 8) <= 1 and g[y][x] >= 3:
+      g[y][x] = tone(0.3 + 0.55 * ell(x, y, HX + 44, 184, 40, 8), x, y, 2, 4)
 for y in range(H):
   for x in range(W):
     e = ell(x, y, HX, HY, HR, HR)
-    collar = abs(y - 174) <= 4 and abs(x - HX) <= 30
-    if e > 1 and not collar: continue
-    if collar:
-      g[y][x] = 0 if abs(y - 174) == 4 or abs(x - HX) == 30 else (5 if y < 172 else 6) if (x - HX) % 8 else 1   # bolts
-      continue
-    lit = 0.78 - ((x - HX) * 0.55 + (y - HY) * 0.75) / (HR * 1.6)
-    g[y][x] = 0 if e > 0.93 else tone(lit - 0.12 * ((x * 3 + y * 5) % 7 == 0), x, y, 1, 4)
-    for (px, py, pr) in ((250, 150, 14), (229, 134, 7), (285, 140, 7), (262, 117, 8)):
+    if e > 1 or y > sand_top(x) + 10: continue
+    lit = 0.8 - ((x - HX) * 0.55 + (y - HY) * 0.75) / (HR * 1.5)
+    edge = e > 0.94
+    g[y][x] = (0 if y < HY else 1) if edge else tone(lit - 0.1 * ((x * 3 + y * 5) % 7 == 0), x, y, 1, 4)
+    for (px, py, pr) in ((250, 152, 13), (229, 140, 7), (285, 146, 7), (262, 126, 8)):
       d = math.hypot(x - px, y - py)
       if d <= pr - 3: g[y][x] = 5 if (x - px) - (y - py) < -pr * 0.7 and d > pr - 6 else (0 if (x + y) % 3 else 1)   # dark glass, a streak of light
-      elif d <= pr: g[y][x] = 0 if d > pr - 0.9 else 6 if d < pr - 1.8 or (x - px) + (y - py) > 0 else 5            # the brass rim
-    if ell(x, y, 281, 121, 5, 5) <= 1: g[y][x] = 0 if ell(x, y, 281, 121, 5, 5) > 0.7 else 6                       # a plate
+      elif d <= pr:                                                                                            # the rim: light, gold where lit
+        g[y][x] = 0 if d > pr - 0.9 else 6 if (x - px) + (y - py) < -pr * 0.3 and d < pr - 1.8 else 3
+    if ell(x, y, 283, 129, 5, 5) <= 1: g[y][x] = 0 if ell(x, y, 283, 129, 5, 5) > 0.7 else 3                    # a plate
+# the neck ring: a curved brass band round the base, gold where the light catches it
+for y in range(H):
+  for x in range(W):
+    o, i = ell(x, y, HX, 170, 33, 7), ell(x, y, HX, 167, 33, 7)
+    if o <= 1 and i > 1 and y >= 164 and abs(x - HX) <= 30:
+      g[y][x] = 0 if o > 0.86 or i < 1.12 else 6 if x < HX - 8 and (x + y) % 2 else 3
+# sand drifted over the base: a low mound in the sand's own tones, its top edge dithered into the ring
+for y in range(H):
+  for x in range(W):
+    m = ell(x, y, HX - 2, 182, 46, 12)
+    if m <= 1 and y >= 166:
+      d = (y - 170) / 40
+      if m > 0.82 and (x * 7 + y * 3) % 3: continue                  # a ragged, dithered rim
+      g[y][x] = tone(0.86 - 0.4 * d + 0.08 * math.sin(x / 9), x, y, 2, 5)
 # little sand plants in front
 for (px, h) in ((150, 9), (210, 7), (330, 10), (12, 8)):
   for i in range(h):
