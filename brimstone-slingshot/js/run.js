@@ -428,6 +428,7 @@ const ALTAR_STOP = { title: 'SIGIL ALTAR', art: 'ri_altar', consume: true,
    stop rolls it; only its test bench opens it (Run.idolTest, ?scenetest=idol). */
 const IDOL_TEST = { title: 'THE IDOL', art: 'ri_idol', parts: { mask: 'alien', vessel: 'alien', pedestal: 'alien' },
   text: 'An idol of three pieces turns slowly on the spot.' };
+const IDOL_TEST_FPS = [1, 2, 3, 5, 8, 12];               // the test event's speed steps, frames a second (5 is Idol.FPS)
 const BOWL_PER_PIN = 1;
 const BOWL_STRIKE_BONUS = 3;
 const BOWL_SLIDE_HZ = 0.35;                              // the ball sliding along the foul line, sweeps a second
@@ -1718,7 +1719,8 @@ const Run = {
   },
   /* The Idol's test event (IDOL_TEST): the plain event screen, the idol turning left to right and
      back over most of it (Idol.play, js/idol.js), and a < NAME > stepper for each piece beside it
-     to swap the head, body or legs for another creature's. LEAVE puts your run back. */
+     to swap the head, body or legs for another creature's, plus one for the turn's speed
+     (IDOL_TEST_FPS). LEAVE puts your run back. */
   idolTest(ev, pick) {
     // `pick` names the pieces by initial, mask then vessel then pedestal (?idol=LRG); unknown letters keep the default
     const names = Object.keys(IDOL_PARTS), parts = { ...ev.parts };
@@ -1732,7 +1734,12 @@ const Run = {
         <button class="db-step" data-d="-1" aria-label="Previous ${label.toLowerCase()}">&lt;</button>
         <span class="opt-pval">${parts[k].toUpperCase()}</span>
         <button class="db-step" data-d="1" aria-label="Next ${label.toLowerCase()}">&gt;</button>
-      </div></div>`).join('');
+      </div></div>`).join('') + `<div class="opt-row"><span class="opt-label">SPEED</span>
+      <div class="opt-pal" id="idolSpeed">
+        <button class="db-step" data-d="-1" aria-label="Slower">&lt;</button>
+        <span class="opt-pval">${Idol.FPS} FPS</span>
+        <button class="db-step" data-d="1" aria-label="Faster">&gt;</button>
+      </div></div>`;
     this.screen(ev.art, ev.title, escapeHTML(ev.text),
       `<div class="idol-stage"><canvas class="idol-turn" id="idolTurn"></canvas></div><div class="idol-pick">${steppers}</div>`,
       '<button class="btn" id="rnLeave">LEAVE</button>');
@@ -1746,6 +1753,13 @@ const Run = {
       sfx('select');
       player.set(parts);
     })));
+    let fps = IDOL_TEST_FPS.indexOf(Idol.FPS);
+    $$('#idolSpeed .db-step').forEach((b) => (b.onclick = () => {
+      fps = Math.max(0, Math.min(IDOL_TEST_FPS.length - 1, fps + +b.dataset.d));
+      $('#idolSpeed .opt-pval').textContent = `${IDOL_TEST_FPS[fps]} FPS`;
+      sfx('select');
+      player.speed(IDOL_TEST_FPS[fps]);
+    }));
     $('#rnLeave').onclick = () => { sfx('select'); this.sceneTestEnd(); };
   },
   bowlTest() { this.sceneTest('bowl'); },
