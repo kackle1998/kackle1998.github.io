@@ -468,11 +468,8 @@ const Idol = (() => {
     return C;
   }
 
-  /* Turn an idol on a canvas: left to right and back, FPS frames a second (speed() changes it), at the largest whole
-     scale that fits `box` (CSS px). The frame is the box around every facing of every combination,
-     so the idol neither jumps as it turns nor changes size when a piece is swapped (set()).
-     Stops on its own once the canvas leaves the page. */
-  const FPS = 5;
+  /* The frame around every facing of every combination, so an idol neither jumps as it turns nor
+     changes size when a piece is swapped. size() is its width and height in idol pixels. */
   let bounds = null;
   function allBounds() {
     if (bounds) return bounds;
@@ -485,36 +482,51 @@ const Idol = (() => {
     }
     return (bounds = { x0, x1, y0, y1 });
   }
-  function play(canvas, parts, box) {
-    const { x0, x1, y0, y1 } = allBounds();
-    const w = x1 - x0 + 1, h = y1 - y0 + 1, s = Math.max(1, Math.floor(Math.min(box.w / w, box.h / h)));
-    canvas.width = w * s; canvas.height = h * s;
-    const g = canvas.getContext('2d'), seq = [...TURN.keys(), ...[3, 2, 1]];
+  const size = () => { const { x0, x1, y0, y1 } = allBounds(); return { w: x1 - x0 + 1, h: y1 - y0 + 1 }; };
+
+  /* Turn an idol, left to right and back, on one or more canvases at once: `targets` is a list of
+     { canvas, scale }, scale in CSS px per idol pixel (fractions allowed, to see the art shrunk).
+     Each frame is drawn once at 1x, then scaled onto every canvas with no smoothing. One timer
+     drives them all, FPS frames a second; speed() changes it and speed(0) holds the current frame.
+     Stops on its own once the canvases leave the page. */
+  const FPS = 5;
+  function play(targets, parts) {
+    const { x0, y0 } = allBounds(), { w, h } = size();
+    const one = document.createElement('canvas');
+    one.width = w; one.height = h;
+    const g1 = one.getContext('2d'), seq = [...TURN.keys(), ...[3, 2, 1]];
+    for (const t of targets) { t.canvas.width = Math.round(w * t.scale); t.canvas.height = Math.round(h * t.scale); }
     let frames = TURN.map((f) => compose(parts, f)), i = 0, cur = 0, ms = 1000 / FPS, timer = 0;
     const draw = () => {
       const C = frames[seq[cur]];
-      g.clearRect(0, 0, canvas.width, canvas.height);
-      for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
-        const c = C[y][x];
+      g1.clearRect(0, 0, w, h);
+      for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+        const c = C[y + y0][x + x0];
         if (c === '.') continue;
-        g.fillStyle = PAL[c];
-        g.fillRect((x - x0) * s, (y - y0) * s, s, s);
+        g1.fillStyle = PAL[c];
+        g1.fillRect(x, y, 1, 1);
+      }
+      for (const { canvas } of targets) {
+        const g = canvas.getContext('2d');
+        g.imageSmoothingEnabled = false;
+        g.clearRect(0, 0, canvas.width, canvas.height);
+        g.drawImage(one, 0, 0, w, h, 0, 0, canvas.width, canvas.height);
       }
     };
     const step = () => {
-      if (!canvas.isConnected) return;
+      if (!targets[0].canvas.isConnected) return;
       cur = i++ % seq.length;
       draw();
-      timer = setTimeout(step, ms);
+      if (ms) timer = setTimeout(step, ms);
     };
     step();
     return {
       // Swap pieces mid-turn: the new idol shows at once, facing the same way.
       set(p) { frames = TURN.map((f) => compose(p, f)); draw(); },
-      // Change the speed (frames a second); the next frame comes at the new pace.
-      speed(fps) { ms = 1000 / fps; clearTimeout(timer); timer = setTimeout(step, ms); },
+      // Change the speed (frames a second; 0 holds still); the next frame comes at the new pace.
+      speed(fps) { clearTimeout(timer); ms = fps ? 1000 / fps : 0; if (ms) timer = setTimeout(step, ms); },
     };
   }
 
-  return { TURN, FPS, compose, play };
+  return { TURN, FPS, compose, size, play };
 })();

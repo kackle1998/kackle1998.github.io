@@ -424,11 +424,11 @@ const ALTAR_STOP = { title: 'SIGIL ALTAR', art: 'ri_altar', consume: true,
     { label: 'SACRIFICE', ok: (run) => run.givers().length > 0, need: 'None of your creatures can pass on a sigil.' },
     { label: 'LEAVE', act: () => 'The altar waits for another.' },
   ] };
-/* The Idol's test event: an idol turning in the plain event screen. It isn't in RUN_EVENTS, so no ?
+/* The Idol's test event: an idol turning in the plain event screen, at four scales. It isn't in RUN_EVENTS, so no ?
    stop rolls it; only its test bench opens it (Run.idolTest, ?scenetest=idol). */
 const IDOL_TEST = { title: 'THE IDOL', art: 'ri_idol', parts: { mask: 'alien', vessel: 'alien', pedestal: 'alien' },
   text: 'An idol of three pieces turns slowly on the spot.' };
-const IDOL_TEST_FPS = [1, 2, 3, 5, 8, 12];               // the test event's speed steps, frames a second (5 is Idol.FPS)
+const IDOL_TEST_FPS = [0, 1, 2, 3, 5, 8, 12];            // the test event's speed steps, frames a second (0 holds still; 5 is Idol.FPS)
 const BOWL_PER_PIN = 1;
 const BOWL_STRIKE_BONUS = 3;
 const BOWL_SLIDE_HZ = 0.35;                              // the ball sliding along the foul line, sweeps a second
@@ -1717,35 +1717,39 @@ const Run = {
     this.bench = null;
     showTitle();
   },
-  /* The Idol's test event (IDOL_TEST): the plain event screen, the idol turning left to right and
-     back over most of it (Idol.play, js/idol.js), and a < NAME > stepper for each piece beside it
-     to swap the head, body or legs for another creature's, plus one for the turn's speed
-     (IDOL_TEST_FPS). LEAVE puts your run back. */
+  /* The Idol's test event (IDOL_TEST): the plain event screen with the same idol turning four times
+     over, at full, half, a third and a quarter scale (full is the largest whole scale that fits all
+     four; Idol.play, js/idol.js), and beside them a < NAME > stepper for each piece, to swap the mask,
+     vessel or pedestal for another creature's, and one for the turn's speed (IDOL_TEST_FPS, STILL
+     to stop it). LEAVE puts your run back. */
   idolTest(ev, pick) {
     // `pick` names the pieces by initial, mask then vessel then pedestal (?idol=LRG); unknown letters keep the default
     const names = Object.keys(IDOL_PARTS), parts = { ...ev.parts };
-    const PIECES = [['mask', 'HEAD'], ['vessel', 'BODY'], ['pedestal', 'LEGS']];
+    const PIECES = [['mask', 'MASK'], ['vessel', 'VESSEL'], ['pedestal', 'PEDESTAL']];
+    const SCALES = [[1, 'FULL'], [1 / 2, '1/2'], [1 / 3, '1/3'], [1 / 4, '1/4']];
+    const fpsLabel = (n) => (n ? `${n} FPS` : 'STILL');
     [...(pick || '')].slice(0, 3).forEach((l, i) => {
       const n = names.find((k) => k[0] === l.toLowerCase());
       if (n) parts[PIECES[i][0]] = n;
     });
-    const steppers = PIECES.map(([k, label]) => `<div class="opt-row"><span class="opt-label">${label}</span>
-      <div class="opt-pal" data-piece="${k}">
+    const stepper = (id, label, value, attrs = '') => `<div class="opt-row"><span class="opt-label">${label}</span>
+      <div class="opt-pal" ${id ? `id="${id}"` : ''} ${attrs}>
         <button class="db-step" data-d="-1" aria-label="Previous ${label.toLowerCase()}">&lt;</button>
-        <span class="opt-pval">${parts[k].toUpperCase()}</span>
+        <span class="opt-pval">${value}</span>
         <button class="db-step" data-d="1" aria-label="Next ${label.toLowerCase()}">&gt;</button>
-      </div></div>`).join('') + `<div class="opt-row"><span class="opt-label">SPEED</span>
-      <div class="opt-pal" id="idolSpeed">
-        <button class="db-step" data-d="-1" aria-label="Slower">&lt;</button>
-        <span class="opt-pval">${Idol.FPS} FPS</span>
-        <button class="db-step" data-d="1" aria-label="Faster">&gt;</button>
       </div></div>`;
+    const steppers = PIECES.map(([k, label]) => stepper('', label, parts[k].toUpperCase(), `data-piece="${k}"`)).join('') +
+      stepper('idolSpeed', 'SPEED', fpsLabel(Idol.FPS));
+    const cells = SCALES.map(([, label]) => `<div class="idol-cell"><canvas class="idol-turn"></canvas><span class="idol-scale">${label}</span></div>`).join('');
     this.screen(ev.art, ev.title, escapeHTML(ev.text),
-      `<div class="idol-stage"><canvas class="idol-turn" id="idolTurn"></canvas></div><div class="idol-pick">${steppers}</div>`,
+      `<div class="idol-stage">${cells}</div><div class="idol-pick">${steppers}</div>`,
       '<button class="btn" id="rnLeave">LEAVE</button>');
     $('.rn').classList.add('rn-idol');
-    const stage = $('.idol-stage');
-    const player = Idol.play($('#idolTurn'), parts, { w: stage.clientWidth, h: stage.clientHeight });
+    // Full scale: the largest whole scale at which all four fit side by side, labels and gaps included.
+    const stage = $('.idol-stage'), { w, h } = Idol.size(), GAP = 24, LABEL = 28;
+    const sum = SCALES.reduce((a, [f]) => a + f, 0);
+    const full = Math.max(1, Math.floor(Math.min((stage.clientWidth - GAP * (SCALES.length + 1)) / (w * sum), (stage.clientHeight - LABEL) / h)));
+    const player = Idol.play([...$$('.idol-turn')].map((canvas, i) => ({ canvas, scale: full * SCALES[i][0] })), parts);
     $$('.idol-pick [data-piece]').forEach((row) => row.querySelectorAll('.db-step').forEach((b) => (b.onclick = () => {
       const k = row.dataset.piece, n = names.length;
       parts[k] = names[(names.indexOf(parts[k]) + +b.dataset.d + n) % n];
@@ -1756,7 +1760,7 @@ const Run = {
     let fps = IDOL_TEST_FPS.indexOf(Idol.FPS);
     $$('#idolSpeed .db-step').forEach((b) => (b.onclick = () => {
       fps = Math.max(0, Math.min(IDOL_TEST_FPS.length - 1, fps + +b.dataset.d));
-      $('#idolSpeed .opt-pval').textContent = `${IDOL_TEST_FPS[fps]} FPS`;
+      $('#idolSpeed .opt-pval').textContent = fpsLabel(IDOL_TEST_FPS[fps]);
       sfx('select');
       player.speed(IDOL_TEST_FPS[fps]);
     }));
