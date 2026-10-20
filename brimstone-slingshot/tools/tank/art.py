@@ -33,14 +33,14 @@ for y in range(H):
     g[y][x] = tone(b, x, y, 1, 5)
 # the sand: a wavy back edge, lighter dunes, darker toward the front, pebbles
 pebbles = [(30, 200, 4, 2), (120, 205, 5, 2), (200, 196, 3, 2), (330, 207, 6, 3), (360, 190, 4, 2), (170, 211, 4, 2), (95, 186, 3, 1.5)]
+def sand_b(x, y):
+  st = sand_top(x); d = (y - st) / (H - st)
+  return 0.85 - 0.45 * d + 0.12 * math.sin(x / 23 + d * 4) * (1 - d)
 for y in range(H):
   for x in range(W):
     st = sand_top(x)
     if y < st: continue
-    d = (y - st) / (H - st)
-    dune = 0.12 * math.sin(x / 23 + d * 4) * (1 - d)
-    b = 0.85 - 0.45 * d + dune
-    g[y][x] = 0 if abs(y - st) < 1 else tone(b, x, y, 2, 5)
+    g[y][x] = 0 if abs(y - st) < 1 else tone(sand_b(x, y), x, y, 2, 5)
     for px, py, rx, ry in pebbles:
       e = ell(x, y, px, py, rx, ry)
       if e <= 1: g[y][x] = 1 if e > 0.55 or (x - px) + (y - py) > 0 else 2
@@ -85,10 +85,6 @@ for (tx, ty) in ((60, 112), (88, 118), (24, 136), (104, 132)):                  
 # the diving helmet on the right: a brass-rimmed sphere half sunk in the sand, a curved neck ring round
 # its base, sand drifted over it, its shadow falling to the lower right
 HX, HY, HR = 262, 150, 34
-for y in range(H):                                            # its shadow on the sand, dithered
-  for x in range(W):
-    if y >= sand_top(x) + 1 and ell(x, y, HX + 44, 184, 40, 8) <= 1 and g[y][x] >= 3:
-      g[y][x] = tone(0.3 + 0.55 * ell(x, y, HX + 44, 184, 40, 8), x, y, 2, 4)
 for y in range(H):
   for x in range(W):
     e = ell(x, y, HX, HY, HR, HR)
@@ -108,14 +104,20 @@ for y in range(H):
     o, i = ell(x, y, HX, 170, 33, 7), ell(x, y, HX, 167, 33, 7)
     if o <= 1 and i > 1 and y >= 164 and abs(x - HX) <= 30:
       g[y][x] = 0 if o > 0.86 or i < 1.12 else 6 if x < HX - 8 and (x + y) % 2 else 3
-# sand drifted over the base: a low mound in the sand's own tones, its top edge dithered into the ring
+# sand drifted over the base: in the floor's own shading, so it shows only where it covers the helmet
 for y in range(H):
   for x in range(W):
     m = ell(x, y, HX - 2, 182, 46, 12)
-    if m <= 1 and y >= 166:
-      d = (y - 170) / 40
-      if m > 0.82 and (x * 7 + y * 3) % 3: continue                  # a ragged, dithered rim
-      g[y][x] = tone(0.86 - 0.4 * d + 0.08 * math.sin(x / 9), x, y, 2, 5)
+    if m <= 1 and y >= sand_top(x) + 1:
+      if m > 0.82 and (x * 7 + y * 3) % 3: continue                  # a ragged, dithered rim over the ring
+      g[y][x] = tone(sand_b(x, y), x, y, 2, 5)
+# its shadow, falling to the lower right, fading out at its edges
+for y in range(H):
+  for x in range(W):
+    e = ell(x, y, HX + 30, 180, 44, 8)
+    if e <= 1 and y >= sand_top(x) + 2 and ell(x, y, HX, HY, HR, HR) > 1:
+      g[y][x] = tone(sand_b(x, y) - 0.38 * (1 - e) ** 0.7, x, y, 2, 5)
+
 # little sand plants in front
 for (px, h) in ((150, 9), (210, 7), (330, 10), (12, 8)):
   for i in range(h):
