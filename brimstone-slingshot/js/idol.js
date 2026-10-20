@@ -446,11 +446,11 @@ const Idol = (() => {
     return C;
   }
 
-  /* Turn an idol on a canvas: left to right and back, a frame every FRAME_MS, at the largest whole
+  /* Turn an idol on a canvas: left to right and back, FPS frames a second (speed() changes it), at the largest whole
      scale that fits `box` (CSS px). The frame is the box around every facing of every combination,
      so the idol neither jumps as it turns nor changes size when a piece is swapped (set()).
      Stops on its own once the canvas leaves the page. */
-  const FRAME_MS = 200;
+  const FPS = 5;
   let bounds = null;
   function allBounds() {
     if (bounds) return bounds;
@@ -468,7 +468,7 @@ const Idol = (() => {
     const w = x1 - x0 + 1, h = y1 - y0 + 1, s = Math.max(1, Math.floor(Math.min(box.w / w, box.h / h)));
     canvas.width = w * s; canvas.height = h * s;
     const g = canvas.getContext('2d'), seq = [...TURN.keys(), ...[3, 2, 1]];
-    let frames = TURN.map((f) => compose(parts, f)), i = 0, cur = 0;
+    let frames = TURN.map((f) => compose(parts, f)), i = 0, cur = 0, ms = 1000 / FPS, timer = 0;
     const draw = () => {
       const C = frames[seq[cur]];
       g.clearRect(0, 0, canvas.width, canvas.height);
@@ -483,12 +483,16 @@ const Idol = (() => {
       if (!canvas.isConnected) return;
       cur = i++ % seq.length;
       draw();
-      setTimeout(step, FRAME_MS);
+      timer = setTimeout(step, ms);
     };
     step();
-    // Swap pieces mid-turn: the new idol shows at once, facing the same way.
-    return { set(p) { frames = TURN.map((f) => compose(p, f)); draw(); } };
+    return {
+      // Swap pieces mid-turn: the new idol shows at once, facing the same way.
+      set(p) { frames = TURN.map((f) => compose(p, f)); draw(); },
+      // Change the speed (frames a second); the next frame comes at the new pace.
+      speed(fps) { ms = 1000 / fps; clearTimeout(timer); timer = setTimeout(step, ms); },
+    };
   }
 
-  return { TURN, compose, play };
+  return { TURN, FPS, compose, play };
 })();
