@@ -119,7 +119,11 @@ class Game {
         c.grown = (c.grown || 0) + 1;
         this.buffCreature(c, 1);
       }
+      if (has(c, 'zorf')) { this.healPlayer(p, 1); this.say(`${c.name} fed ${this.obj(p)} 1 life.`, p); }
     }
+    // after the loop, so a new Guppy stays summoning sick this turn
+    const prego = p.board.find((c) => c && has(c, 'prego'));
+    if (prego) this.pregoBirth(p, prego);
     if (this.turnNum > 1) this.drawCard(p); // the starting player skips their first draw
     this.checkOver();
   }
@@ -397,7 +401,14 @@ class Game {
     return true;
   }
 
+  /* Prego: if its owner controls no Guppy, a 1/1 Guppy is born into an empty slot. */
+  pregoBirth(p, c) {
+    if (p.board.some((b) => b && !b.dead && b.id === 'guppy')) return;
+    if (this.putOnBoard(p, 'guppy')) this.say(`${c.name} gave birth to a Guppy.`, p);
+  }
+
   onSummon(p, c) {
+    if (has(c, 'prego')) this.pregoBirth(p, c);
     if (has(c, 'scholar') && this.drawCard(p)) this.say(`${c.name} drew a card.`, p);
     if (c.mend) { this.healPlayer(p, c.mend); this.say(`${c.name} mended ${c.mend} life.`, p); }
     if (c.snipe) {

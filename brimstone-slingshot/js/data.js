@@ -356,6 +356,13 @@ const SPRITES = {
     '..#w----', '.#w-----', '.#w-----', '#w------', '########', '......##', '......##', '........',
   ],
   /* ---------- the Brimstone Tank's fish (Run.tank): full 16x16, facing left ---------- */
+  // A Guppy (Prego's token): the tank's guppy at card size, a big eye, red lips, pink fins.
+  guppy: [
+    '................', '................', '.....#++##......', '.....#++++#...#.',
+    '...##++++++#.#+#', '..#--------##++#', '.#-w#w------+++#', '.#-w#w-------++#',
+    '#++-ww-+---++++#', '#++---+++++++++#', '.##wwwwwwwww#++#', '...#wwwwwww#.#+#',
+    '....#######...#.', '................', '................', '................',
+  ],
   // A round yellow fish in a spotted cap, one wide eye, red lips, pink tail fins.
   prego: [
     '......######....', '....##---+++#...', '...#www#-+w++#..', '..#wwwww#++++#..',
@@ -401,6 +408,8 @@ const ICONS = {
   mend:      ['.##.##.', '#..#..#', '#.###.#', '#..#..#', '.#...#.', '..#.#..', '...#...'],
   rally:     ['#####..', '######.', '#####..', '#......', '#......', '#......', '#......'],
   thorns:    ['...#...', '.#.#.#.', '..###..', '#######', '..###..', '.#.#.#.', '...#...'],
+  prego:     ['..###..', '.#...#.', '#.##..#', '#.####.', '#.##..#', '.#...#.', '..###..'], // an egg, a little fish curled inside
+  zorf:      ['..##...', '.#.##..', '..####.', '...##..', '...#...', '..##...', '.##....'], // a seahorse
   bloodlust: ['#######', '.#####.', '..###..', '..###..', '...#...', '.......', '...#...'],
   reach:     ['#######', '.......', '...#...', '..###..', '.#.#.#.', '...#...', '...#...'],
   spite:     ['.##.##.', '####.##', '###.###', '####.##', '.##.##.', '..#.#..', '...#...'],
@@ -514,6 +523,8 @@ const SIGILS = {
   undying:    { name: 'Undying',    icon: 'undying',    text: () => 'When this perishes, it returns to your hand instead of the grave.' },
   shockwave:  { name: 'Shockwave',  icon: 'shockwave',  text: () => 'When summoned, deal 1 damage to every enemy creature.' },
   warcry:     { name: 'War Cry',    icon: 'warcry',     text: () => 'When summoned, your other creatures get +1/+1 for good.' },
+  prego:      { name: 'Prego',      icon: 'prego',      text: () => "When summoned, and at the start of your turn: if you don't control a Guppy, a 1/1 Guppy is born." },
+  zorf:       { name: 'Zorf',       icon: 'zorf',       text: () => 'At the start of your turn, gain 1 life.' },
 };
 
 /* Sigils with an amount show it in their name: 'Snipe 2', 'Mend 3'. */
@@ -620,10 +631,11 @@ creature('monk',      'Thunder Monk','2H',   2, 3, ['shockwave'], { flavor: 'Eve
 creature('djinn',     'Storm Djinn','3H',   4, 5, ['airborne', 'quick'], { rarity: 'rare', flavor: 'It grants three wishes. All of them are lightning.' });
 creature('phoenix',   'Phoenix',    '2HH',  4, 4, ['airborne', 'haste', 'undying'], { rarity: 'mythical', flavor: 'It has died a thousand times. It is not tired of it.' });
 // The Brimstone Tank's fish (Run.tank): generic cost only, so any deck can take one. Only the tank
-// offers them (`tank` keeps them out of every other pool). Their sigils are stand-ins for now.
-creature('prego',     'Prego',      '2',    1, 2, ['grow'], { tank: true, flavor: 'Always expecting. Always hungry.' });
-creature('carnivore', 'Carnivore',  '3',    3, 2, ['bloodlust'], { tank: true, flavor: 'It only eats the little ones. At first.' });
-creature('zorf',      'Zorf',       '2',    1, 2, ['rally'], { tank: true, flavor: 'It feeds the others. Nobody asked it to.' });
+// offers them (`tank` keeps them out of every other pool). Prego keeps a Guppy (a 1/1 token) at your side.
+creature('prego',     'Prego',      '2',    1, 2, ['prego'], { tank: true, flavor: 'Always expecting. Always hungry.' });
+creature('carnivore', 'Carnivore',  '3',    3, 2, ['snipe'], { snipe: 3, tank: true, flavor: 'It only eats the little ones. At first.' });
+creature('zorf',      'Zorf',       '2',    1, 2, ['zorf'], { tank: true, flavor: 'It feeds the others. Nobody asked it to.' });
+CARDS.guppy = { id: 'guppy', name: 'Guppy', type: 'creature', cost: parseCost('0'), atk: 1, hp: 1, sigils: [], sprite: 'guppy', token: true, flavor: 'Small, orange, and somebody\'s lunch.' };
 
 for (const k of COLOR_KEYS) {
   CARDS['land_' + k] = { id: 'land_' + k, name: COLORS[k].land, type: 'land', color: k, cost: parseCost('0'), sigils: [], sprite: 'land_' + k };
