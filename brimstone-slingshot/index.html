@@ -7,8 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Silkscreen&family=VT323&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css">
-  <link rel="stylesheet" href="cardmaker.css">
+  <style id="loading">body { visibility: hidden }</style>
 </head>
 <body>
   <canvas id="bgfx" aria-hidden="true"></canvas>
@@ -54,40 +53,31 @@
     </div>
   </div>
 
-  <script src="js/data.js"></script>
-  <script src="js/custom.js"></script>
-  <script src="js/config.js"></script>
-  <script src="js/cloud.js"></script>
-  <script src="js/render.js"></script>
-  <script src="js/engine.js"></script>
-  <script src="js/ai.js"></script>
-  <script src="js/crt.js"></script>
-  <script src="js/pixeleditor.js"></script>
-  <script src="js/deckbuilder.js"></script>
-  <script src="js/cardmaker.js"></script>
-  <script src="js/charmaker.js"></script>
-  <script src="js/options.js"></script>
-  <script src="js/run.js"></script>
-  <script src="js/runmap.js"></script>
-  <script src="js/scene.js"></script>
-  <script src="js/settings.js"></script>
-  <script src="js/bowl.js"></script>
-  <script src="js/casino.js"></script>
-  <script src="js/draft.js"></script>
-  <script src="js/dip.js"></script>
-  <script src="js/moth.js"></script>
-  <script src="js/factory.js"></script>
-  <script src="js/rune.js"></script>
-  <script src="js/forge.js"></script>
-  <script src="js/shrine.js"></script>
-  <script src="js/handover.js"></script>
-  <script src="js/campfire.js"></script>
-  <script src="js/fire.js"></script>
-  <script src="js/props.js"></script>
-  <script src="js/idol.js"></script>
-  <script src="js/tank-art.js"></script>
-  <script src="js/tank.js"></script>
-  <script src="js/ui.js"></script>
-  <script src="js/netplay.js"></script>
+  <script>
+  // Loads the styles and scripts in order, asking the server each time whether they changed, so a
+  // phone never keeps running an old copy after an update (an unchanged file costs a 304).
+  (() => {
+    const FILES = [
+    'style.css', 'cardmaker.css', 'js/data.js', 'js/custom.js', 'js/config.js', 'js/cloud.js',
+    'js/render.js', 'js/engine.js', 'js/ai.js', 'js/crt.js', 'js/pixeleditor.js', 'js/deckbuilder.js',
+    'js/cardmaker.js', 'js/charmaker.js', 'js/options.js', 'js/run.js', 'js/runmap.js', 'js/scene.js',
+    'js/settings.js', 'js/bowl.js', 'js/casino.js', 'js/draft.js', 'js/dip.js', 'js/moth.js',
+    'js/factory.js', 'js/rune.js', 'js/forge.js', 'js/shrine.js', 'js/handover.js', 'js/campfire.js',
+    'js/fire.js', 'js/props.js', 'js/idol.js', 'js/tank-art.js', 'js/tank.js', 'js/ui.js',
+    'js/netplay.js',
+    ];
+    const add = (f, text) => {
+      const css = f.endsWith('.css'), el = document.createElement(css ? 'style' : 'script');
+      if (text != null) el.textContent = text + (css ? '' : '\n//# sourceURL=' + f);
+      else if (css) return document.head.insertAdjacentHTML('beforeend', `<link rel="stylesheet" href="${f}">`);
+      else { el.src = f; el.async = false; }
+      (css ? document.head : document.body).appendChild(el);
+    };
+    const shown = () => document.getElementById('loading').remove();
+    Promise.all(FILES.map((f) => fetch(f, { cache: 'no-cache' }).then((r) => { if (!r.ok) throw r; return r.text(); })))
+      .then((texts) => { FILES.forEach((f, i) => add(f, texts[i])); shown(); })
+      .catch(() => { FILES.forEach((f) => add(f, null)); shown(); }); // opened as a plain file: load them the usual way
+  })();
+  </script>
 </body>
 </html>
