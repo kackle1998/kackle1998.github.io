@@ -840,6 +840,12 @@ body[data-crt="off"] .rm-fig img, .rm-fig.hopping img { animation: none; }
 }
 .rn-tonic img { width: 64px; height: 64px; background: var(--artbg); border: 2px solid var(--ink); image-rendering: pixelated; }
 .rn-tonic b { font-family: var(--pixel); font-size: 11px; font-weight: normal; }
+/* The Brimstone Tank (Run.tank): the tank's canvas at 2x, a readout under it. */
+.rn.rn-tank { height: 680px; }
+.rn-tank .rn-body { flex: 1; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+.tank-wrap { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+.tank-cv { width: 768px; height: 432px; image-rendering: pixelated; border: 3px solid var(--ink); cursor: crosshair; touch-action: none; }
+.tank-read { font-family: var(--pixel); font-size: 14px; letter-spacing: 2px; text-align: center; }
 /* The Idol's test event: the idol turning at four scales, its steppers beside it (Run.idolTest). */
 .rn.rn-idol { height: 680px; }
 .rn-idol .rn-body { flex: 1; display: flex; align-items: center; gap: 24px; overflow: hidden; }

@@ -57,6 +57,7 @@ const STOPS = {
   event:  { name: '???',         icon: 'ri_event',  desc: 'Unknown: something hums under the board.' },
   bowl:   { name: 'BRIMSTONE LANES', icon: 'ri_rack', desc: 'Bowling: one ball, ten pins, an arcana for every pin that falls.' },
   casino: { name: 'CASINO',      icon: 'ri_casino', desc: 'Casino: fling yourself at the roulette wheel or the slots.' },
+  tank:   { name: 'BRIMSTONE TANK', icon: 'ri_tank', desc: 'An aquarium: feed the fish, catch their coins, drive off what comes for them.' },
   boss:   { name: 'THE DEALER',  icon: 'ri_chip',   desc: 'The Dealer: the house always plays last.' },
 };
 
@@ -93,7 +94,7 @@ function runPickN(R, arr, n, weight = () => 1) {
 
 /* Built-in cards a run can hand out: no lands, tokens, custom or run cards, and payable from `colors`. */
 function runPool(colors, maxCost = 99) {
-  return Object.values(CARDS).filter((c) => c.type !== 'land' && !c.token && !c.custom && !c.runCard
+  return Object.values(CARDS).filter((c) => c.type !== 'land' && !c.token && !c.custom && !c.runCard && !c.tank
     && COLOR_KEYS.every((k) => !c.cost[k] || colors.includes(k))
     && costTotal(c.cost) <= maxCost);
 }
@@ -128,7 +129,7 @@ function getRunRecord() { return { wins: 0, losses: 0, ...Store.read(RUN_RECORD_
 
 // The rare stops share one chance, so they stay equally rare: each map rolls it once for each.
 const RUN_SPECIAL_ODDS = 0.33;                             // chance a map has each rare stop
-const RUN_SPECIAL_STOPS = ['bowl', 'casino'];              // the bowling lane (js/bowl.js), the casino (js/casino.js)
+const RUN_SPECIAL_STOPS = ['bowl', 'casino', 'tank'];      // the bowling lane (js/bowl.js), the casino (js/casino.js), the tank (js/tank.js)
 /* Start, 5 rows of 2-3 stops, then the boss. Links run in sorted order, so the map's arcs never cross. */
 function genRunMap(R) {
   const even = (v) => Math.round(v / 2) * 2;
@@ -167,7 +168,7 @@ function genRunMap(R) {
       edges.push([A[i], B[j]]);
     }
   }
-  // Now and then a campfire, trader or altar is a bowling lane or a casino instead, each rolled on
+  // Now and then a campfire, trader or altar is a bowling lane, a casino or a tank instead, each rolled on
   // its own at the same odds (rolled last, so the rest of the map comes out as it would without
   // them). The last row's campfire always stays.
   for (const t of RUN_SPECIAL_STOPS) {
@@ -428,6 +429,9 @@ const ALTAR_STOP = { title: 'SIGIL ALTAR', art: 'ri_altar', consume: true,
    stop rolls it; only its test bench opens it (Run.idolTest, ?scenetest=idol). */
 const IDOL_TEST = { title: 'THE IDOL', art: 'ri_idol', parts: { mask: 'alien', vessel: 'alien', pedestal: 'alien' },
   text: 'An idol of three pieces turns slowly on the spot.' };
+/* The Brimstone Tank (js/tank.js), a rare stop of its own (RUN_SPECIAL_ODDS, as the bowling lane and
+   the casino): its own fish are the reward, one of them by how many coins you caught (Tank.TIERS). */
+const TANK_CARDS = ['prego', 'carnivore', 'zorf'];
 const IDOL_TEST_FPS = [0, 1, 2, 3, 5, 8, 12];            // the test event's speed steps, frames a second (0 holds still; 5 is Idol.FPS)
 const BOWL_PER_PIN = 1;
 const BOWL_STRIKE_BONUS = 3;
@@ -642,6 +646,7 @@ const Run = {
       case 'event': return this.event(n);
       case 'bowl': return this.bowl(n, BOWL_STOP);
       case 'casino': return this.casino(n);
+      case 'tank': return this.tank(n);
       default: return this.leave();
     }
   },
@@ -1674,7 +1679,7 @@ const Run = {
     this.save();
     RunMap.cleared().then(() => Scene.play({ draw, at, from: 0, to, cues, done }));
   },
-  /* The test benches: Run.sceneTest(id) in the console, or index.html?scenetest=<id> (bowl, draft, dip, mirror, spring, moth, rune, altar, forge, shrine, offer, ghost, relic, bones, idol;
+  /* The test benches: Run.sceneTest(id) in the console, or index.html?scenetest=<id> (bowl, draft, dip, mirror, spring, moth, rune, altar, forge, shrine, offer, ghost, relic, bones, idol, tank;
      ?bowltest and ?drafttest too). The scene plays as often as you like on a stand-in run: nothing
      is saved (save() checks this.bench) or paid, and DONE puts your run back. this.bench holds the
      bench's own state: the bowling lane's throws, Bone Draft's ante and the colors it deals from. */
@@ -1697,6 +1702,7 @@ const Run = {
     relic: (run) => run.handover(null, RUN_EVENTS.find((e) => e.id === 'reliquary')),
     bones: (run) => run.handover(null, RUN_EVENTS.find((e) => e.id === 'bones')),
     idol: (run) => run.idolTest(IDOL_TEST, new URLSearchParams(location.search).get('idol')),
+    tank: (run) => run.tank(null),
   },
   sceneTest(id) {
     if (!this.SCENE_BENCHES[id]) return console.warn('No scene bench called', id, '- try', Object.keys(this.SCENE_BENCHES).join(', '));
@@ -1765,6 +1771,64 @@ const Run = {
       player.speed(IDOL_TEST_FPS[fps]);
     }));
     $('#rnLeave').onclick = () => { sfx('select'); this.sceneTestEnd(); };
+  },
+  /* ---------- the Brimstone Tank (a rare stop, js/tank.js) ----------
+     A 2D minigame, like the slots and the wheel: feed the fish, catch their coins, drive off the idol
+     creature that comes for them. node.tk holds the invader (rolled and saved first), the coins
+     caught (saved as they come, so a reload mid-round ends it with what you had) and the fish
+     offered (rolled and saved before they show, so a reload offers the same ones). */
+  tank(n) {
+    Music.play('event');
+    const node = this.s.node, test = this.bench, names = Object.keys(IDOL_PARTS);
+    const tk = node.tk || (node.tk = { inv: names[Math.floor(Math.random() * names.length)], score: 0, started: false });
+    if (tk.offer) return this.tankPick(n, tk);
+    if (tk.started) return this.tankOffer(n, tk);
+    this.save();
+    this.screen(STOPS.tank.icon, STOPS.tank.name, 'Fish drift in a tank of sulfur water. Fed fish grow, and grown fish drop coins.',
+      `<div class="tank-wrap"><canvas class="tank-cv" id="tkCv"></canvas>
+        <div class="tank-read" id="tkRead">CLICK THE WATER TO DROP FOOD · CLICK COINS TO CATCH THEM · CLICK WHAT COMES FOR THE FISH</div></div>`,
+      '<button class="btn" id="tkGo">START</button><button class="btn" id="rnLeave">LEAVE</button>');
+    $('.rn').classList.add('rn-tank');
+    const read = $('#tkRead');
+    const game = this.tankGame = Tank.mount($('#tkCv'), { // (kept on Run for checking: Run.tankGame.peek())
+      invader: tk.inv,
+      onTick: (left, score) => { read.textContent = `${Math.ceil(left)} SECONDS · ${score} ARCANA`; },
+      onCoin: (score) => { tk.score = score; this.save(); },
+      onEnd: (score) => { tk.score = score; this.tankOffer(n, tk); },
+    });
+    $('#tkGo').onclick = () => {
+      sfx('select');
+      tk.started = true;
+      this.save();
+      $('#tkGo').disabled = $('#rnLeave').disabled = true;
+      $('.rn-sub').textContent = 'Feed them. Catch the coins. Something is coming.';
+      game.start();
+    };
+    $('#rnLeave').onclick = () => { sfx('select'); if (test) this.sceneTestEnd(); else this.leave(); };
+  },
+  /* The round is over: fish by the coins caught (Tank.TIERS), rolled and saved before they show. */
+  tankOffer(n, tk) {
+    const k = tk.score >= Tank.TIERS[1] ? 3 : tk.score >= Tank.TIERS[0] ? 2 : 1;
+    tk.offer = runShuffle(Math.random, [...TANK_CARDS]).slice(0, k);
+    this.save();
+    sfx('payout');
+    this.tankPick(n, tk);
+  },
+  tankPick(n, tk) {
+    const test = this.bench, one = tk.offer.length === 1;
+    this.screen(STOPS.tank.icon, STOPS.tank.name,
+      `You caught ${tk.score} arcana. ${one ? 'One fish swims up to the glass.' : `Pick one of ${tk.offer.length} fish for your deck.`}`, '',
+      (test ? '<button class="btn" id="tkAgain">PLAY AGAIN</button>' : '') + '<button class="btn" id="rnLeave">LEAVE</button>');
+    this.cardGrid($('#rnBody'), tk.offer.map((id) => CARDS[id]), (c) => {
+      if (test) return toast(`${c.name} would join your deck.`);
+      this.finishStop(STOPS.tank.icon, STOPS.tank.name, `${c.name} joins your deck.`, [this.add(c.id)]);
+    });
+    if (test) $('#tkAgain').onclick = () => { sfx('select'); this.s.node = {}; this.tank(n); };
+    $('#rnLeave').onclick = () => {
+      sfx('select');
+      if (test) this.sceneTestEnd();
+      else this.finishStop(STOPS.tank.icon, STOPS.tank.name, 'You leave the fish to their tank.');
+    };
   },
   bowlTest() { this.sceneTest('bowl'); },
   draftTest() { this.sceneTest('draft'); },
