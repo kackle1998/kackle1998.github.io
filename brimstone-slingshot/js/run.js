@@ -430,7 +430,7 @@ const ALTAR_STOP = { title: 'SIGIL ALTAR', art: 'ri_altar', consume: true,
 const IDOL_TEST = { title: 'THE IDOL', art: 'ri_idol', parts: { mask: 'alien', vessel: 'alien', pedestal: 'alien' },
   text: 'An idol of three pieces turns slowly on the spot.' };
 /* The Brimstone Tank (js/tank.js), a rare stop of its own (RUN_SPECIAL_ODDS, as the bowling lane and
-   the casino): its own fish are the reward, one of them by how many coins you caught (Tank.TIERS). */
+   the casino): its own fish are the reward, one of them by how much arcana you caught (Tank.TIERS). */
 const TANK_CARDS = ['prego', 'carnivore', 'zorf'];
 const IDOL_TEST_FPS = [0, 1, 2, 3, 5, 8, 12];            // the test event's speed steps, frames a second (0 holds still; 5 is Idol.FPS)
 const BOWL_PER_PIN = 1;
@@ -1766,8 +1766,8 @@ const Run = {
     $('#rnLeave').onclick = () => { sfx('select'); this.sceneTestEnd(); };
   },
   /* ---------- the Brimstone Tank (a rare stop, js/tank.js) ----------
-     A 2D minigame, like the slots and the wheel: feed the fish, catch their coins, drive off the idol
-     creature that comes for them. node.tk holds the invader (rolled and saved first), the coins
+     A 2D minigame, like the slots and the wheel: click the fish that glint gold, not the crab or the
+     idol creature drifting through. node.tk holds the invader (rolled and saved first), the arcana
      caught (saved as they come, so a reload mid-round ends it with what you had) and the fish
      offered (rolled and saved before they show, so a reload offers the same ones). */
   tank(n) {
@@ -1777,7 +1777,7 @@ const Run = {
     if (tk.offer) return this.tankPick(n, tk);
     if (tk.started) return this.tankOffer(n, tk);
     this.save();
-    this.eventScreen(STOPS.tank.icon, STOPS.tank.name, 'Click the water to drop food. Grown fish drop coins: click them. Click whatever comes for the fish.',
+    this.eventScreen(STOPS.tank.icon, STOPS.tank.name, 'Click the fish that glint gold for arcana. Leave the crab and anything else alone: they cost you.',
       `<div class="tank-box" id="tkBox"><div class="tank-wrap"><canvas class="tank-cv" id="tkCv"></canvas><div class="tank-hud" id="tkRead"></div></div></div>`,
       '<button class="btn" id="tkGo">START</button><button class="btn" id="rnLeave">LEAVE</button>');
     // the tank as big as the cabinet has room for (not a whole scale: the screen itself scales on a phone anyway)
@@ -1787,7 +1787,7 @@ const Run = {
     const game = this.tankGame = Tank.mount(cv, { // (kept on Run for checking: Run.tankGame.peek())
       invader: tk.inv,
       onTick: (left, score) => { read.innerHTML = `${Math.ceil(left)}s &nbsp; ${ico('arcana')} ${score}`; },
-      onCoin: (score) => { tk.score = score; this.save(); },
+      onScore: (score) => { tk.score = score; this.save(); },
       onEnd: (score) => { tk.score = score; this.tankOffer(n, tk); },
     });
     $('#tkGo').onclick = () => {
@@ -1795,7 +1795,7 @@ const Run = {
       tk.started = true;
       this.save();
       $('#tkGo').disabled = $('#rnLeave').disabled = true;
-      $('.rn-sub').textContent = 'Feed them. Catch the coins. Something is coming...';
+      $('.rn-sub').textContent = 'Catch the gold ones. Something is coming...';
       game.start();
     };
     $('#rnLeave').onclick = () => { sfx('select'); if (test) this.sceneTestEnd(); else this.leave(); };
