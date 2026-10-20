@@ -1691,7 +1691,7 @@ const Run = {
     ghost: (run) => run.handover(null, RUN_EVENTS.find((e) => e.id === 'ghost')),
     relic: (run) => run.handover(null, RUN_EVENTS.find((e) => e.id === 'reliquary')),
     bones: (run) => run.handover(null, RUN_EVENTS.find((e) => e.id === 'bones')),
-    idol: (run) => run.idolTest(IDOL_TEST),
+    idol: (run) => run.idolTest(IDOL_TEST, new URLSearchParams(location.search).get('idol')),
   },
   sceneTest(id) {
     if (!this.SCENE_BENCHES[id]) return console.warn('No scene bench called', id, '- try', Object.keys(this.SCENE_BENCHES).join(', '));
@@ -1714,11 +1714,17 @@ const Run = {
   },
   /* The Idol's test event (IDOL_TEST): the plain event screen, the idol turning left to right and
      back over most of it (Idol.play, js/idol.js). LEAVE puts your run back. */
-  idolTest(ev) {
+  idolTest(ev, pick) {
+    // `pick` names the pieces by initial, mask then vessel then pedestal (?idol=LRG); unknown letters keep the default
+    const names = Object.keys(IDOL_PARTS), parts = { ...ev.parts };
+    [...(pick || '')].slice(0, 3).forEach((l, i) => {
+      const n = names.find((k) => k[0] === l.toLowerCase());
+      if (n) parts[['mask', 'vessel', 'pedestal'][i]] = n;
+    });
     this.screen(ev.art, ev.title, escapeHTML(ev.text), '<canvas class="idol-turn" id="idolTurn"></canvas>', '<button class="btn" id="rnLeave">LEAVE</button>');
     const body = $('#rnBody');
     $('.rn').classList.add('rn-idol');
-    Idol.play($('#idolTurn'), ev.parts, { w: body.clientWidth, h: body.clientHeight });
+    Idol.play($('#idolTurn'), parts, { w: body.clientWidth, h: body.clientHeight });
     $('#rnLeave').onclick = () => { sfx('select'); this.sceneTestEnd(); };
   },
   bowlTest() { this.sceneTest('bowl'); },
