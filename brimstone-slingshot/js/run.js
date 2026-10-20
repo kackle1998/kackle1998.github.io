@@ -1717,18 +1717,35 @@ const Run = {
     showTitle();
   },
   /* The Idol's test event (IDOL_TEST): the plain event screen, the idol turning left to right and
-     back over most of it (Idol.play, js/idol.js). LEAVE puts your run back. */
+     back over most of it (Idol.play, js/idol.js), and a < NAME > stepper for each piece beside it
+     to swap the head, body or legs for another creature's. LEAVE puts your run back. */
   idolTest(ev, pick) {
     // `pick` names the pieces by initial, mask then vessel then pedestal (?idol=LRG); unknown letters keep the default
     const names = Object.keys(IDOL_PARTS), parts = { ...ev.parts };
+    const PIECES = [['mask', 'HEAD'], ['vessel', 'BODY'], ['pedestal', 'LEGS']];
     [...(pick || '')].slice(0, 3).forEach((l, i) => {
       const n = names.find((k) => k[0] === l.toLowerCase());
-      if (n) parts[['mask', 'vessel', 'pedestal'][i]] = n;
+      if (n) parts[PIECES[i][0]] = n;
     });
-    this.screen(ev.art, ev.title, escapeHTML(ev.text), '<canvas class="idol-turn" id="idolTurn"></canvas>', '<button class="btn" id="rnLeave">LEAVE</button>');
-    const body = $('#rnBody');
+    const steppers = PIECES.map(([k, label]) => `<div class="opt-row"><span class="opt-label">${label}</span>
+      <div class="opt-pal" data-piece="${k}">
+        <button class="db-step" data-d="-1" aria-label="Previous ${label.toLowerCase()}">&lt;</button>
+        <span class="opt-pval">${parts[k].toUpperCase()}</span>
+        <button class="db-step" data-d="1" aria-label="Next ${label.toLowerCase()}">&gt;</button>
+      </div></div>`).join('');
+    this.screen(ev.art, ev.title, escapeHTML(ev.text),
+      `<div class="idol-stage"><canvas class="idol-turn" id="idolTurn"></canvas></div><div class="idol-pick">${steppers}</div>`,
+      '<button class="btn" id="rnLeave">LEAVE</button>');
     $('.rn').classList.add('rn-idol');
-    Idol.play($('#idolTurn'), parts, { w: body.clientWidth, h: body.clientHeight });
+    const stage = $('.idol-stage');
+    const player = Idol.play($('#idolTurn'), parts, { w: stage.clientWidth, h: stage.clientHeight });
+    $$('.idol-pick [data-piece]').forEach((row) => row.querySelectorAll('.db-step').forEach((b) => (b.onclick = () => {
+      const k = row.dataset.piece, n = names.length;
+      parts[k] = names[(names.indexOf(parts[k]) + +b.dataset.d + n) % n];
+      row.querySelector('.opt-pval').textContent = parts[k].toUpperCase();
+      sfx('select');
+      player.set(parts);
+    })));
     $('#rnLeave').onclick = () => { sfx('select'); this.sceneTestEnd(); };
   },
   bowlTest() { this.sceneTest('bowl'); },
