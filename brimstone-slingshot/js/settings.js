@@ -449,6 +449,116 @@
     });
   }
 
+  /* ---------- the carnival: rides under the open sky ----------
+     Far back, where the floor ends at D_CARN, the carnival's skyline stands under the orrery sky (it
+     stays open): a wooden roller coaster on its lattice at the left, a striped big top and two small
+     tents, a Ferris wheel at the right, and pennant strings with bulbs between tall poles along the
+     front. Pale on the dark sky, lit from the upper left. What moves (the wheel turning, the coaster's
+     car, the pennants, a run of bulbs chasing along the strings, longer each ante) is on a second
+     canvas just in front, redrawn 4 steps a second. Canvas px are 2 map units, KX the canvas's left
+     edge in plane x. */
+  const D_CARN = -260, KX = -1100, KW = 1800, KH = 320, KG = KH - 1; // KG: the ground row
+  // The coaster's track height (canvas px) over x, through key points, eased between them.
+  const TRACK = [[300, 24], [330, 40], [440, 236], [470, 244], [500, 228], [560, 40], [600, 30], [650, 150], [690, 160], [740, 60], [770, 54], [810, 112], [840, 116], [880, 30]];
+  const trackH = (x) => {
+    for (let i = 1; i < TRACK.length; i++) {
+      const [x0, h0] = TRACK[i - 1], [x1, h1] = TRACK[i];
+      if (x <= x1) { const u = Scene.cl((x - x0) / (x1 - x0)); return h0 + (h1 - h0) * (1 - Math.cos(u * Math.PI)) / 2; }
+    }
+    return TRACK[TRACK.length - 1][1];
+  };
+  const POLES = Array.from({ length: 10 }, (_, i) => 200 + i * 170);
+  const WHEEL = { x: 1380, y: KG - 158, r: 132, spokes: 16 };
+  function carnivalArt(C) {
+    const cv = document.createElement('canvas');
+    cv.width = KW; cv.height = KH;
+    const { R, P } = Scene.pen(cv.getContext('2d'), C);
+    // A 2 px line, sampled finely so a steep one has no gaps.
+    const line = (x0, y0, x1, y1, k) => { const n = Math.ceil(Math.hypot(x1 - x0, y1 - y0) * 2); for (let i = 0; i <= n; i++) R(x0 + (x1 - x0) * i / n, y0 + (y1 - y0) * i / n, 2, 2, k); };
+    // The coaster: posts every 16 px down to the ground, a brace across each bay, then the track on top.
+    for (let x = 304; x < 878; x += 16) {
+      const top = KG - trackH(x) + 4;
+      R(x, top, 3, KG - top + 1, 4); R(x, top, 1, KG - top + 1, 5);
+      const nx = x + 16, nt = KG - trackH(nx) + 4;
+      if (nx < 878) { line(x + 2, KG, nx, nt + (KG - nt) * 0.35, 4); for (let y = KG - 40; y > Math.max(top, nt) + 8; y -= 40) R(x + 2, y, 14, 2, 4); }
+    }
+    for (let x = 300; x < 880; x += 0.25) { const y = KG - trackH(x); R(x, y - 2, 1, 2, 7); R(x, y, 1, 2, 6); R(x, y + 2, 1, 1, 4); } // lit rail, its body, its shadowed side
+    // A tent: a striped cone of a roof (lit stripes on the left, shaded on the right), scalloped
+    // valance, striped walls with a dark doorway, a pole at the peak.
+    const tent = (cx, w, wallH, roofH) => {
+      const top = KG - wallH - roofH;
+      for (let y = top; y < KG - wallH; y++) {
+        const hw = Math.max(1, (y - top) / roofH * w / 2);
+        for (let x = Math.floor(cx - hw); x <= cx + hw; x++) {
+          const s = Math.floor((x - cx) / hw * 4 + 4), lit = x < cx;
+          P(x, y, s % 2 ? 8 : lit ? 7 : 5);
+        }
+      }
+      for (let x = cx - w / 2; x < cx + w / 2; x++) { const d = [2, 3, 3, 2, 1, 0][pmod(Math.round(x - cx), 6)]; R(x, KG - wallH, 1, d + 2, Math.floor((x - cx) / 6) % 2 ? 8 : 7); }
+      for (let x = cx - w / 2 + 2; x < cx + w / 2 - 2; x++) R(x, KG - wallH + 5, 1, wallH - 5, pmod(Math.floor((x - cx) / 10), 2) ? 6 : x < cx ? 7 : 5);
+      const dw = Math.round(w * 0.12);
+      for (let y = 0; y < wallH - 6; y++) { const hw = dw * y / (wallH - 6); R(cx - hw, KG - wallH + 6 + y, hw * 2 + 1, 1, 2); }
+      R(cx, top - 16, 2, 16, 5);
+    };
+    tent(870, 230, 56, 110); tent(1110, 120, 34, 64); tent(1660, 136, 38, 70);
+    // The Ferris wheel's legs (the wheel itself turns, on the moving canvas) and its boarding deck.
+    for (const s of [-1, 1]) { line(WHEEL.x, WHEEL.y, WHEEL.x + s * 76, KG, 5); line(WHEEL.x + 2, WHEEL.y, WHEEL.x + s * 76 + 2, KG, s < 0 ? 6 : 4); }
+    R(WHEEL.x - 92, KG - 8, 184, 9, 4); R(WHEEL.x - 92, KG - 8, 184, 2, 6);
+    // Tall poles carrying the pennant strings.
+    for (const x of POLES) { R(x, KG - 96, 3, 97, 4); R(x, KG - 96, 1, 97, 6); R(x - 1, KG - 100, 5, 4, 7); }
+    return cv;
+  }
+  function carnivalWall(sc, heat) {
+    const { C } = sc;
+    sc.stand(carnivalArt(C), KX, D_CARN, KW * 2, KH * 2);
+    const mv = document.createElement('canvas');
+    mv.width = KW; mv.height = KH;
+    sc.stand(mv, KX, D_CARN + 1, KW * 2, KH * 2);
+    const g = mv.getContext('2d'), { R } = Scene.pen(g, C), run = [3, 5, 8][heat];
+    let last = -1;
+    sc.every(50, () => {
+      const st = Math.floor(performance.now() / 250); // 4 steps a second
+      if (st === last) return;
+      last = st;
+      g.clearRect(0, 0, KW, KH);
+      // The wheel: two rims (lit on the upper left), spokes, the hub, and a gondola hanging from each spoke's end.
+      const { x: cx, y: cy, r, spokes } = WHEEL, a0 = st * Math.PI / 128;
+      for (let i = 0; i < spokes; i++) {
+        const a = a0 + i * 2 * Math.PI / spokes;
+        for (let k = 10; k < r; k += 1) R(cx + Math.cos(a) * k, cy + Math.sin(a) * k, 2, 2, 5);
+      }
+      for (let k = 0; k < 900; k++) {
+        const a = k / 900 * 2 * Math.PI, lit = Math.cos(a) + Math.sin(a) < 0;
+        R(cx + Math.cos(a) * r - 1, cy + Math.sin(a) * r - 1, 3, 3, lit ? 7 : 6);
+        R(cx + Math.cos(a) * (r - 18), cy + Math.sin(a) * (r - 18), 2, 2, lit ? 6 : 5);
+      }
+      R(cx - 8, cy - 8, 17, 17, 6); R(cx - 6, cy - 6, 13, 13, 7); R(cx - 2, cy - 2, 5, 5, 4);
+      for (let i = 0; i < spokes; i++) {
+        const a = a0 + i * 2 * Math.PI / spokes, gx = Math.round(cx + Math.cos(a) * r), gy = Math.round(cy + Math.sin(a) * r);
+        R(gx, gy, 2, 5, 5); R(gx - 7, gy + 4, 16, 3, 6); R(gx - 6, gy + 7, 14, 9, i % 2 ? 8 : 7); R(gx - 6, gy + 14, 14, 2, 4); R(gx - 4, gy + 9, 4, 3, 2);
+      }
+      // The coaster's car: three cars climbing and plunging round the track, a step at a time.
+      const span = 560, head = 300 + pmod(st * 7, span);
+      for (let c = 0; c < 3; c++) {
+        const x = head - c * 13;
+        if (x < 300) continue;
+        const y = KG - trackH(x);
+        R(x - 5, y - 9, 12, 7, 8); R(x - 5, y - 9, 12, 2, 7); R(x - 4, y - 11, 3, 2, 2);
+      }
+      // Pennant strings sagging between the poles, flags fluttering, bulbs chasing along them.
+      let b = 0;
+      for (let p = 0; p + 1 < POLES.length; p++) {
+        const x0 = POLES[p] + 2, x1 = POLES[p + 1], y0 = KG - 92;
+        for (let x = x0; x < x1; x += 0.5) { const u = (x - x0) / (x1 - x0); R(x, y0 + Math.sin(u * Math.PI) * 22, 1, 2, 5); }
+        for (let i = 1; i < 8; i++) {
+          const u = i / 8, x = x0 + (x1 - x0) * u, y = Math.round(y0 + Math.sin(u * Math.PI) * 22) + 2;
+          if (i % 2) { const tip = (st + i + p) % 2; for (let j = 0; j < 9; j++) R(x - 4 + Math.floor(j / 2) + tip * (j >> 2), y + j, Math.max(1, 8 - j), 1, (i + p) % 3 ? 8 : 7); } // a flag
+          else { R(x - 1, y, 4, 4, pmod(b - st, 12) < run ? 8 : 4); b++; } // a bulb
+        }
+      }
+    });
+  }
+
   /* ---------- critters and effects ---------- */
   /* Named background life any scene (or the builder, builder.html) can add: CRITTERS pass behind
      the action (Scene.crosser), EFFECTS drift through the air (Scene.motes); each takes the heat
@@ -652,6 +762,58 @@
       return m < 0.4 && mud < 1 && bay(X >> 1, Y >> 1) < 11 && crack(X, Y) < 2 ? 3 : -1;
     };
   };
+  /* The carnival midway, out in the open: a boardwalk deck in the middle (where the booth stands and
+     in front of it, out to the camera), trodden dirt either side with pebbles and tufts of dry grass,
+     the two blended where they meet by Bayer dithering. Its boards run back toward the booth, so the
+     eye follows them there. Ticket stubs and popcorn are dropped on both. From ante 2 boards are
+     scorched; at ante 3 brimstone glows in the joints. DECK: the boardwalk's middle and half width
+     (plane x), where it starts (depth) and how wide the dithered blend is. */
+  const DECK = { x: 720, half: 470, y0: -20, blend: 110 };
+  const midway = (heat) => {
+    const B = 34, L = 190, G = 72; // board width, length; the litter's cell
+    const litter = cells((i, j) => {
+      const q = fh(i, j, 30);
+      return q < 0.4 ? { x: (i + 0.2 + 0.6 * fh(i, j, 31)) * G, y: (j + 0.2 + 0.6 * fh(i, j, 32)) * G, ticket: q < 0.13 } : null;
+    });
+    const tufts = cells((i, j) => (fh(i, j, 36) < 0.5 ? { x: (i + 0.25 + 0.5 * fh(i, j, 37)) * 46, y: (j + 0.25 + 0.5 * fh(i, j, 38)) * 46, big: fh(i, j, 39) < 0.3 } : null));
+    // Dirt: pebbles lit on the upper left, tufts of dry grass (a few blades fanning up), else bare ground (-1).
+    const dirt = (X, Y) => {
+      const tf = tufts(Math.floor(X / 46), Math.floor(Y / 46));
+      if (tf) {
+        const dx = X - tf.x, dy = Y - tf.y;
+        if (tf.big) { // a pebble
+          const d = Math.hypot(dx / 1.4, dy);
+          if (d < 4) return d > 3 ? 3 : dx + dy < 0 ? 6 : 4;
+          if (Math.hypot((dx - 3) / 1.4, dy - 2) < 4) return 3;
+        } else if (dy > -10 && dy <= 0) { // blades: three strokes 2 px wide, leaning out from the root
+          for (const s of [-1, 0, 1]) if (Math.abs(dx - s * (-dy) * 0.5) < 1.5) return dy > -3 ? 3 : 4;
+        }
+      }
+      return heat >= 1 && bay(X >> 1, Y >> 1) < 2 && fh(Math.floor(X / 30), Math.floor(Y / 30), 40) < 0.2 ? 3 : -1; // scuffed, hotter each ante
+    };
+    // How much of the deck a point is: 1 well inside, 0 outside, the blend between.
+    const deck = (X, Y) => Math.min(1, (DECK.half - Math.abs(X - DECK.x)) / DECK.blend + 0.5, (Y - DECK.y0) / DECK.blend + 0.5);
+    return (X, Y) => {
+      const it = litter(Math.floor(X / G), Math.floor(Y / G));
+      if (it) {
+        const dx = X - it.x, dy = Y - it.y;
+        if (it.ticket) { // a torn stub: pale, an ink rim, a gold band across it
+          if (Math.abs(dx) < 8 && Math.abs(dy) < 5) return Math.abs(dx) > 6 || Math.abs(dy) > 3 ? 2 : Math.abs(dx - 2) < 1.5 ? 8 : 7;
+          if (dx > -6 && dx < 10 && dy >= 5 && dy < 7) return 3; // its shadow, to the lower right
+        } else { // a kernel of popcorn, lit on the upper left
+          if (Math.hypot(dx, dy) < 3) return dx + dy < 0 ? 7 : 6;
+          if (Math.hypot(dx - 2, dy - 2) < 3) return 3;
+        }
+      }
+      if ((bay(X >> 1, Y >> 1) + 0.5) / 16 >= deck(X, Y)) return dirt(X, Y);
+      const col = Math.floor(X / B), x = pmod(X, B), v = Y + fh(col, 0, 33) * L, row = Math.floor(v / L), y = pmod(v, L), id = fh(col, row, 34);
+      if (x < 2 || y < 2) return heat === 2 && fh(col, row, 35) < 0.3 && bay(X >> 1, Y >> 1) < 10 ? 8 : 2; // the joints
+      if (x < 4 || y < 4) return 7; // lit on the upper left, shaded on the lower right
+      if (x >= B - 2 || y >= L - 2) return 4;
+      if (heat >= 1 && id < 0.35 && bay(X >> 1, Y >> 1) < 7) return 4; // scorched boards
+      return pmod(x + Math.sin(Y * 0.03 + id * 9) * 2, 12) < 1 && id > 0.6 ? 5 : 6; // pale boards (the dirt is the ground's own darker tones), a little grain
+    };
+  };
   // Floors: Scene.ground options for the heat, or build(sc, heat, opts) for a floor with more to it.
   const FLOORS = {
     ash: () => ({}),
@@ -668,6 +830,7 @@
     columns: (heat) => ({ seed: 53, grit: 1000, pattern: columns(heat) }),
     ossuary: (heat) => ({ seed: 59, grit: 1200, pattern: ossuary(heat) }),
     forest: (heat) => ({ seed: 61, grit: 1000, pattern: forest(heat) }),
+    midway: (heat) => ({ tones: [3, 4, 4, 5], seed: 67, grit: 900, pattern: midway(heat) }), // the dirt a shade darker than ash, so the pale deck stands out
   };
   // Backdrops: the sky stays open (the horizon is wherever the floor ends); a wall builds itself in
   // its place at depth `front`, where the floor stops. `open` is where open floor begins in front
@@ -677,6 +840,7 @@
     crypt: { front: D_WALL, open: D_WALL + 30, wall: cryptWall }, // past the shade at the wall's foot
     tropicana: { front: D_TROP, open: D_TROP + 30, wall: tropWall },
     forge: { front: -130, open: 170, wall: (sc, heat) => Factory.backdrop(sc, heat) }, // the hall (D_HALL, js/factory.js); open floor starts in front of its lava river (-90..-40) and machine row (D_MACH 150)
+    carnival: { front: D_CARN, open: D_CARN + 40, wall: carnivalWall }, // the rides under the open sky, where the midway ends
   };
   // Features: props scattered over the floor (Scene.ruins), drawn with propArt's signature; their
   // kinds rename the spire kinds ('spike' tall, 'basalt' low, 'strata' the one that shows the heat).
@@ -697,6 +861,7 @@
     graveyard: { floor: 'path', backdrop: 'sky', features: ['graves'], critters: ['crow'], effects: ['ash'] },
     tropicana: { floor: 'tiles', backdrop: 'tropicana', features: [], critters: [], effects: [] },
     forge: { floor: 'grate', backdrop: 'forge', features: [], critters: [], effects: [] },
+    carnival: { floor: 'midway', backdrop: 'carnival', features: [], critters: [], effects: [] },
   };
   /* `horizon` (under the sky) sets how much sky shows over the features' far row: 'wall' (the
      standard: the floor runs far off and a tall row hides the horizon), 'low' (as the hand scenes:

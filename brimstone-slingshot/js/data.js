@@ -384,6 +384,35 @@ const SPRITES = {
     '......#---+++#..', '......#---+++#..', '......#---+++#..', '.......#--++#...',
     '......#---++#...', '......#---##....', '......#---+#....', '.......##-+#....',
   ],
+  /* ---------- the idols' heads at card size (tools/idols): full 16x16, not on any card yet ---------- */
+  // Sylvester, the alien: a big pale dome swept back, a grille mouth, a shoulder, facing left.
+  idol_sylvester: [
+    '................', '......#####.....', '....##-----##...', '...#---------#..',
+    '..#----------+#.', '..#---------++#.', '.#+--------+++#.', '.#+-------++++#.',
+    '.#++----+++++#..', '..#+#+##+#++#...', '.#w#w##+#+++#...', '.#w#w##++++#....',
+    '..##.#-+++#+#...', '..#w#-+++##+#...', '...#-+++##+++##.', '....######++++#.',
+  ],
+  // Destructor, the robot: a box head, two lamp eyes, a grille mouth, a jointed neck.
+  idol_destructor: [
+    '.##############.', '.#------------#.', '.#-++++--++++-#.', '.#-+www--www+-#.',
+    '.#-+www--www++#.', '.#--+++--+++-+#.', '.#-----------+#.', '.#--########-+#.',
+    '.#-+#w#w#w#w#+#.', '.#++########++#.', '.#++++++++++++#.', '.##############.',
+    '......#-+#......', '.....##-+##.....', '......#-+#......', '....#--++++#....',
+  ],
+  // Balrog, the lion: a quarter turn to the left, spiky mane, slit eyes, a muzzle.
+  idol_balrog: [
+    '................', '....#..##.##.#..', '...#-##-+#++#+#.', '..#--++++++++++#',
+    '.#-+#------#+++#', '.#-#--------#++#', '#+#-w#---#w-#++#', '.##---------#++#',
+    '.#--##------#++#', '#-#ww#---+-#+++#', '.#-##---+-#++++#', '.#-#-#--+#++++#.',
+    '..#-----#++++#..', '..#+####++++#...', '...#++#++#+#....', '....##.##.#.....',
+  ],
+  // Ulysses, the golem: a rock head, one big eye, a cracked jaw, facing front.
+  idol_ulysses: [
+    '................', '.....######.....', '...##------##...', '..#--+-------#..',
+    '.#-------+----#.', '.#-+---ww---++#.', '#-----wwww--+++#', '#----ww##w-++++#',
+    '#-----w##-+++++#', '#-+----ww++++++#', '#---+-----+++++#', '.#--#+#-#+#+++#.',
+    '.#-###-###+##+#.', '..#-#--+#++++#..', '...##--++++##...', '.....######.....',
+  ],
 };
 
 /* 7x7 one-color icons */
@@ -466,6 +495,7 @@ const ICONS = {
   rack:      ['#.#.#.#', '.......', '.#.#.#.', '.......', '..#.#..', '.......', '...#...'], // ten pins from above
   casino:    ['..###..', '.#.#.#.', '##...##', '#.....#', '##...##', '.#.#.#.', '..###..'], // a poker chip, its edge notched
   tank:      ['.......', '..###.#', '.#.####', '#######', '.######', '..###.#', '.......'], // a fish
+  gallery:   ['...##..', '...#...', '..###..', '.#.#.#.', '#######', '.##.##.', '.##.##.'], // a circus tent: its pennant, striped roof, the doorway
   idol:      ['.#.#.#.', '.#####.', '.#.#.#.', '..###..', '.#####.', '..###..', '#######'], // mask, vessel and pedestal stacked
 };
 
@@ -489,7 +519,7 @@ function iconSprite(name) {
   return px.map((r) => r.join(''));
 }
 for (const k of COLOR_KEYS) SPRITES['land_' + k] = iconSprite(COLORS[k].icon);
-for (const k of ['battle', 'fire', 'altar', 'arcana', 'event', 'chip', 'spring', 'pool', 'slots', 'wheel', 'pack', 'relic', 'rack', 'casino', 'idol', 'tank']) SPRITES['ri_' + k] = iconSprite(k);
+for (const k of ['battle', 'fire', 'altar', 'arcana', 'event', 'chip', 'spring', 'pool', 'slots', 'wheel', 'pack', 'relic', 'rack', 'casino', 'idol', 'tank', 'gallery']) SPRITES['ri_' + k] = iconSprite(k);
 /* The slot machine's lever: a long cracked bone standing upright, lit from the left (16 wide, so not mirrored). */
 SPRITES.slot_bone = [
   '..####....####..', '.#wwww#..#www-#.', '#wwwwww##wwww-+#', '#wwwwwwwwwwww-+#', '#wwwwwwwwwww-++#',
@@ -635,7 +665,7 @@ creature('phoenix',   'Phoenix',    '2HH',  4, 4, ['airborne', 'haste', 'undying
 creature('prego',     'Prego',      '2',    1, 2, ['prego'], { rarity: 'mythical', tank: true, flavor: 'Always expecting. Always hungry.' });
 creature('carnivore', 'Carnivore',  '3',    3, 2, ['snipe', 'bloodlust'], { snipe: 1, rarity: 'mythical', tank: true, flavor: 'It only eats the little ones. At first.' });
 creature('zorf',      'Zorf',       '2',    1, 2, ['zorf'], { rarity: 'mythical', tank: true, flavor: 'It feeds the others. Nobody asked it to.' });
-CARDS.guppy = { id: 'guppy', name: 'Guppy', type: 'creature', cost: parseCost('0'), atk: 1, hp: 1, sigils: [], sprite: 'guppy', token: true, flavor: 'Small, orange, and somebody\'s lunch.' };
+CARDS.guppy = { id: 'guppy', name: 'Guppy', type: 'creature', cost: parseCost('0'), atk: 1, hp: 1, sigils: ['haste'], sprite: 'guppy', token: true, flavor: 'Small, orange, and somebody\'s lunch.' };
 
 for (const k of COLOR_KEYS) {
   CARDS['land_' + k] = { id: 'land_' + k, name: COLORS[k].land, type: 'land', color: k, cost: parseCost('0'), sigils: [], sprite: 'land_' + k };

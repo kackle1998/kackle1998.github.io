@@ -102,7 +102,7 @@ const PixelEditor = (() => {
 
   /* ---------- "start from art" picker (same tile grid as the deck art picker) ---------- */
   function artLabel(key) {
-    if (key === 'hero') return 'Hero';
+    if (key === 'hero' || key === 'hero_default') return 'Hero';
     if (key.startsWith('land_')) return COLORS[key.slice(5)] ? COLORS[key.slice(5)].land : key;
     const c = Object.values(CARDS).find((x) => x.sprite === key);
     return c ? c.name : key;
@@ -129,7 +129,9 @@ const PixelEditor = (() => {
     closePicker();
   }
 
-  function openPicker() {
+  /* overwrite: the dev account's "Overwrite game art" picker, which sends the canvas to the server
+     as the new art for the sprite picked (db/art.sql, custom.js) instead of loading that art. */
+  function openPicker(overwrite = false) {
     sfx('select');
     closePicker();
     const mine = customIds.map((id) => CARDS[id].sprite).filter((k) => k.startsWith('spr_') && SPRITES[k]);
@@ -141,18 +143,20 @@ const PixelEditor = (() => {
     wrap.id = 'tplWrap';
     wrap.innerHTML = `<div class="da panel">
       <div class="da-head">
-        <div class="db-title">START FROM ART</div>
-        <div class="da-curname">Replaces the canvas. UNDO brings your drawing back.</div>
+        <div class="db-title">${overwrite ? 'OVERWRITE GAME ART' : 'START FROM ART'}</div>
+        <div class="da-curname">${overwrite ? 'Pick the art to replace with your drawing.' : 'Replaces the canvas. UNDO brings your drawing back.'}</div>
       </div>
       <div class="da-body">
+        ${overwrite ? artSection('ALL ART', builtIn.filter((k) => k !== 'hero').concat('hero_default')) : `
         ${artSection('MY CARD MAKER ART', mine)}
         ${artSection('GAME LIBRARY ART', library)}
-        ${artSection('ALL ART', builtIn)}
+        ${artSection('ALL ART', builtIn)}`}
       </div>
       <div class="da-foot"><button class="btn sm" id="tplCancel">CANCEL</button></div>
     </div>`;
     wrap.addEventListener('pointerdown', (e) => { if (e.target === wrap) closePicker(); });
     wrap.querySelectorAll('[data-art]').forEach((b) => (b.onclick = () => {
+      if (overwrite) { sfx('select'); confirmOverwrite(b.dataset.art); return; }
       closePicker();
       sfx('place');
       apply(expandSprite(SPRITES[b.dataset.art]));
@@ -160,6 +164,61 @@ const PixelEditor = (() => {
     wrap.querySelector('#tplCancel').onclick = () => { sfx('select'); closePicker(); };
     q('#screen').appendChild(wrap);
     document.addEventListener('keydown', pickerKey, true);
+  }
+
+  /* ---------- debug: overwrite game art ----------
+     Only shown to the dev account (isDev, js/options.js); the server checks the account again. */
+  const ART_ERRORS = {
+    not_allowed: 'Only the developer account can overwrite game art.',
+    not_logged_in: 'Log in as the developer account first.',
+    bad_art: 'That drawing could not be read.',
+    bad_sprite: 'That art can\'t be overwritten.',
+  };
+
+  function rowsURL(src) {
+    const c = document.createElement('canvas');
+    c.width = c.height = SIZE;
+    const x = c.getContext('2d');
+    src.forEach((r, y) => [...r].forEach((ch, xx) => { if (PAL[ch]) { x.fillStyle = PAL[ch]; x.fillRect(xx, y, 1, 1); } }));
+    return c.toDataURL();
+  }
+
+  function confirmOverwrite(key) {
+    const box = q('#tplWrap .da'), label = artLabel(key), art = rows();
+    box.innerHTML = `<div class="da-head">
+        <div class="db-title">OVERWRITE ${escapeHTML(label.toUpperCase())}</div>
+        <div class="da-curname">Every player gets the new art straight away.</div>
+      </div>
+      <div class="da-body pe-ow">
+        <figure><img src="${spriteURL(key)}" alt=""><figcaption>NOW${artOverridden(key) ? ' (REDRAWN)' : ''}</figcaption></figure>
+        <figure><img src="${rowsURL(art)}" alt=""><figcaption>YOUR DRAWING</figcaption></figure>
+        ${artOverridden(key) ? `<figure><img src="${rowsURL(expandSprite(artOriginal(key)))}" alt=""><figcaption>ORIGINAL</figcaption></figure>` : ''}
+      </div>
+      <div class="acct-err" role="alert"></div>
+      <div class="da-foot">
+        <button class="btn sm" id="owBack">BACK</button>
+        ${artOverridden(key) ? '<button class="btn sm" id="owRestore">RESTORE ORIGINAL</button>' : ''}
+        <button class="btn sm accent" id="owGo">OVERWRITE</button>
+      </div>`;
+    const err = box.querySelector('.acct-err');
+    const send = async (pixels, done) => {
+      box.querySelectorAll('button').forEach((b) => (b.disabled = true));
+      err.textContent = 'Saving...';
+      try {
+        await Cloud.setArt(key, pixels);
+      } catch (e) {
+        err.textContent = ART_ERRORS[e.message] ||
+          (/could not find the function/i.test(e.message) ? 'Art overrides aren\'t set up yet: run db/art.sql in Supabase.' : 'Could not reach the server.');
+        box.querySelectorAll('button').forEach((b) => (b.disabled = false));
+        return;
+      }
+      closePicker();
+      sfx('place');
+      onToast(done);
+    };
+    box.querySelector('#owBack').onclick = () => openPicker(true);
+    box.querySelector('#owGo').onclick = () => send(art, `${label} now uses your drawing.`);
+    if (box.querySelector('#owRestore')) box.querySelector('#owRestore').onclick = () => send(null, `${label} is back to its original art.`);
   }
 
   function init(opts = {}) {
@@ -208,7 +267,11 @@ const PixelEditor = (() => {
     }));
 
     closePicker();
-    q('#template').onclick = openPicker;
+    q('#template').onclick = () => openPicker();
+    if (isDev() && Cloud.enabled && !q('#overwriteArt')) {
+      q('#template').insertAdjacentHTML('afterend', '<button class="btn sm cm-template" id="overwriteArt">OVERWRITE GAME ART...</button>');
+      q('#overwriteArt').onclick = () => openPicker(true);
+    }
 
     renderTools();
     draw();

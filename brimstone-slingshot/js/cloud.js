@@ -378,9 +378,30 @@ const Cloud = (() => {
 
   if (enabled) pullLibrary();
 
+  /* ---------- art overrides (built-in art the developer redrew, for everyone) ---------- */
+  async function pullArt() {
+    let map;
+    try {
+      map = Object.fromEntries((await get('art_overrides?select=sprite,pixels&order=sprite.asc')).map((r) => [r.sprite, r.pixels]));
+    } catch (e) { return; } // offline, or db/art.sql not run yet: keep the cached copy
+    if (JSON.stringify(map) === JSON.stringify(Store.read(ART_KEY, {}))) return;
+    Store.write(ART_KEY, map);
+    announce();
+  }
+
+  /* pixels: 16 rows, or null to restore the sprite's original art. */
+  async function setArt(sprite, pixels) {
+    const s = session();
+    if (!s) throw new Error('not_logged_in');
+    await rpc('set_art', { p_token: s.token, p_sprite: sprite, p_pixels: pixels });
+    await pullArt();
+  }
+
+  if (enabled) pullArt();
+
   return {
     enabled,
-    queue, syncNow, browseCards, mount, addToLibrary,
+    queue, syncNow, browseCards, mount, addToLibrary, setArt,
     rpc, get, // used by js/netplay.js
     user() { const s = session(); return s ? s.player.username : null; },
     playerId() { const s = session(); return s ? s.player.id : null; },

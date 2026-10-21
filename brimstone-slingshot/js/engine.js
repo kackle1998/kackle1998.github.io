@@ -246,7 +246,9 @@ class Game {
   putOnBoard(p, id) {
     const slot = p.board.indexOf(null);
     if (slot < 0) return null;
-    return (p.board[slot] = instantiate(id, p.idx));
+    const c = instantiate(id, p.idx);
+    c.sick = !has(c, 'haste');
+    return (p.board[slot] = c);
   }
 
   castSpell(p, handIdx, targetUid) {

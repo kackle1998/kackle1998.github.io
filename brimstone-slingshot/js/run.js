@@ -57,7 +57,8 @@ const STOPS = {
   event:  { name: '???',         icon: 'ri_event',  desc: 'Unknown: something hums under the board.' },
   bowl:   { name: 'BRIMSTONE LANES', icon: 'ri_rack', desc: 'Bowling: one ball, ten pins, an arcana for every pin that falls.' },
   casino: { name: 'CASINO',      icon: 'ri_casino', desc: 'Casino: fling yourself at the roulette wheel or the slots.' },
-  tank:   { name: 'BRIMSTONE TANK', icon: 'ri_tank', desc: 'An aquarium: feed the fish, catch their coins, drive off what comes for them.' },
+  tank:   { name: 'BRIMSTONE TANK', icon: 'ri_tank', desc: 'An aquarium: feed the fish, catch their coins, drive off what comes for them.' }, // no longer on the map: the gallery took its place (Run.load turns a saved run's tank stops into galleries); its bench still opens it
+  gallery: { name: 'SHOOTING GALLERY', icon: 'ri_gallery', desc: "Shooting gallery: knock down three of one card and it's yours." },
   boss:   { name: 'THE DEALER',  icon: 'ri_chip',   desc: 'The Dealer: the house always plays last.' },
 };
 
@@ -129,7 +130,7 @@ function getRunRecord() { return { wins: 0, losses: 0, ...Store.read(RUN_RECORD_
 
 // The rare stops share one chance, so they stay equally rare: each map rolls it once for each.
 const RUN_SPECIAL_ODDS = 0.33;                             // chance a map has each rare stop
-const RUN_SPECIAL_STOPS = ['bowl', 'casino', 'tank'];      // the bowling lane (js/bowl.js), the casino (js/casino.js), the tank (js/tank.js)
+const RUN_SPECIAL_STOPS = ['bowl', 'casino', 'gallery'];   // the bowling lane (js/bowl.js), the casino (js/casino.js), the shooting gallery (js/gallery.js)
 /* Start, 5 rows of 2-3 stops, then the boss. Links run in sorted order, so the map's arcs never cross. */
 function genRunMap(R) {
   const even = (v) => Math.round(v / 2) * 2;
@@ -168,7 +169,7 @@ function genRunMap(R) {
       edges.push([A[i], B[j]]);
     }
   }
-  // Now and then a campfire, trader or altar is a bowling lane, a casino or a tank instead, each rolled on
+  // Now and then a campfire, trader or altar is a bowling lane, a casino or a shooting gallery instead, each rolled on
   // its own at the same odds (rolled last, so the rest of the map comes out as it would without
   // them). The last row's campfire always stays.
   for (const t of RUN_SPECIAL_STOPS) {
@@ -317,7 +318,7 @@ const RUN_EVENTS = [
   /* A choice with `cards` deals some cards to pick one of (Run.eventCards), and `take` keeps it. */
   {
     id: 'pack', title: 'BONE DRAFT', art: 'ri_pack', screen: 'draft', // the giant pack in the ruins (Run.draft, js/draft.js)
-    text: 'A giant pack stands sealed among the brimstone spires, its foil still bright. Tear it open and keep one card: one of the three is sure to be rare or better.',
+    text: 'A giant pack stands sealed among the brimstone spires, its foil still bright. Tear it open and keep one of the cards.',
     choices: [
       { label: 'TEAR IT OPEN', cards: (run) => runOffer(Math.random, run.s.colors, 3, { row: run.row(), least: 'rare' }).map((c) => c.id),
         take: (run, c) => { run.add(c.id); return `${c.name} joins your deck.`; } },
@@ -417,6 +418,11 @@ const BOWL_STOP = { title: 'BRIMSTONE LANES', art: 'ri_rack',
    yourself at the roulette wheel (the Sigil Wheel) or the slot machine (Bone Slots). */
 const CASINO_STOP = { title: 'CASINO', art: 'ri_casino',
   text: 'Try your luck at the casino!' };
+/* The shooting gallery (js/gallery.js), a rare stop of its own (RUN_SPECIAL_ODDS, as the bowling lane and
+   the casino): five shots at the gliding cards; three of one card down and it's yours (the tank's fish,
+   TANK_CARDS, which no other pool offers). */
+const GALLERY_STOP = { title: 'SHOOTING GALLERY', art: 'ri_gallery',
+  text: "Five shots. Knock down three of one card and it's yours." };
 /* The Sigil Altar, a stop of its own on the map: the Rune Circle's scene in a graveyard, paid
    for with the creature the sigil comes from (Run.rune, Altar in js/rune.js). */
 const ALTAR_STOP = { title: 'SIGIL ALTAR', art: 'ri_altar', consume: true,
@@ -455,6 +461,8 @@ const Run = {
     const s = Store.read(RUN_KEY, null);
     this.s = s && s.map && s.deck ? s : null;
     if (this.s) respaceRunMap(this.s.map);
+    // The Brimstone Tank's stops became the shooting gallery: a run saved with one opens the gallery there.
+    if (this.s) for (const n of this.s.map.nodes) if (n.t === 'tank') n.t = 'gallery';
     // A game library card taken back out of the library (js/custom.js) leaves the run's deck.
     if (this.s) this.s.deck = this.s.deck.filter((rc) => CARDS[rc.base]);
     this.register();
@@ -647,6 +655,7 @@ const Run = {
       case 'bowl': return this.bowl(n, BOWL_STOP);
       case 'casino': return this.casino(n);
       case 'tank': return this.tank(n);
+      case 'gallery': return this.gallery(n);
       default: return this.leave();
     }
   },
@@ -751,6 +760,16 @@ const Run = {
     this.cardGrid(el, defs, onPick);
     this.tip(null);
     return Scene.faces(el, [...el.querySelectorAll('.card')], rects, to, { now: FAST, ...opts });
+  },
+  /* Pay a session's first-faces costs (the pixel font, card styles, images) while a scene sits
+     still, before any faces have to open on cue: three throwaway faces of `colors` (cards like
+     the ones to come) are built and painted behind the sky for a couple of frames, then removed.
+     Real faces built meanwhile replace them (sceneFaces removes any already up). */
+  sceneWarm(stage, rects, to, colors) {
+    if (FAST || !stage.isConnected) return;
+    const defs = runOffer(Math.random, colors, rects.length, { least: 'rare' });
+    const host = this.sceneFaces(stage, defs, null, rects, to, { now: false, hold: true })[0]?.parentElement;
+    requestAnimationFrame(() => requestAnimationFrame(() => host?.remove()));
   },
 
   /* The card's full text in a panel beside it, like the battle's inspector (null hides it). */
@@ -1475,6 +1494,7 @@ const Run = {
           const again = () => { sfx('select'); this.s.node = { bw: { step: 0, landed: true } }; this.bowl(n, ev); }; // you're already on the lane
           $('#bwTake').onclick = again;
           stage.onclick = again;
+          stage.classList.add('tap');
           this.bwKey = (e) => {
             if (!stage.isConnected) { document.removeEventListener('keydown', this.bwKey); this.bwKey = null; return; }
             if (e.code === 'Space' && !e.repeat) { e.preventDefault(); again(); }
@@ -1581,6 +1601,7 @@ const Run = {
     };
     $('#bwGo').onclick = set;
     stage.onclick = set;
+    stage.classList.add('tap');
     this.bwKey = (e) => {
       if (!stage.isConnected) { document.removeEventListener('keydown', this.bwKey); this.bwKey = null; return; }
       if (e.code === 'Space' && !e.repeat) { e.preventDefault(); set(); }
@@ -1673,7 +1694,7 @@ const Run = {
     this.save();
     RunMap.cleared().then(() => Scene.play({ draw, at, from: 0, to, cues, done }));
   },
-  /* The test benches: Run.sceneTest(id) in the console, or index.html?scenetest=<id> (bowl, draft, dip, mirror, spring, moth, rune, altar, forge, shrine, offer, ghost, relic, bones, idol, tank;
+  /* The test benches: Run.sceneTest(id) in the console, or index.html?scenetest=<id> (bowl, draft, dip, mirror, spring, moth, rune, altar, forge, shrine, offer, ghost, relic, bones, idol, tank, gallery;
      ?bowltest and ?drafttest too). The scene plays as often as you like on a stand-in run: nothing
      is saved (save() checks this.bench) or paid, and DONE puts your run back. this.bench holds the
      bench's own state: the bowling lane's throws, Bone Draft's ante and the colors it deals from. */
@@ -1697,6 +1718,7 @@ const Run = {
     bones: (run) => run.handover(null, RUN_EVENTS.find((e) => e.id === 'bones')),
     idol: (run) => run.idolTest(IDOL_TEST, new URLSearchParams(location.search).get('idol')),
     tank: (run) => run.tank(null),
+    gallery: (run) => run.gallery(null),
   },
   sceneTest(id) {
     if (!this.SCENE_BENCHES[id]) return console.warn('No scene bench called', id, '- try', Object.keys(this.SCENE_BENCHES).join(', '));
@@ -1824,6 +1846,98 @@ const Run = {
       else this.finishStop(STOPS.tank.icon, STOPS.tank.name, 'You leave the fish to their tank.');
     };
   },
+  /* ---------- the shooting gallery (a rare stop, js/gallery.js) ----------
+     You land in the slingshot (the entrance, once per stop: node.gl.landed). A marker sweeps the
+     front tier of cards, then the back one; FIRE (the button, a click on the scene, or Space) flings
+     you at what's under it. Each shot is worked out the moment you let go (which card will be there
+     when you arrive, or a gap) and saved before you fly (node.gl.shots: { r, i } each, i -1 a miss),
+     so a reload shows the same cards down and the same shots left. Three of one card down and it
+     rises over the booth for you to take; five shots without that and you leave empty-handed.
+     Input does nothing while you're flying or scurrying back. The bench plays as often as you like. */
+  gallery(n) {
+    Music.play('event');
+    const node = this.s.node, gl = node.gl || (node.gl = { shots: [] }), test = this.bench, ev = GALLERY_STOP;
+    const ante = test ? test.ante : Math.min(this.s.circuit || 1, RunMap.SPIRE_ANTES.length);
+    const tally = () => Gallery.KINDS.map((k) => gl.shots.filter((s) => s.i >= 0 && Gallery.kindOf(s.r, s.i) === k).length);
+    const won = () => tally().findIndex((v) => v >= Gallery.NEED);
+    const left = () => Gallery.SHOTS - gl.shots.length;
+    const sub = () => `${ev.text} ${left()} shot${left() === 1 ? '' : 's'} left.`;
+    const stage = this.sceneScreen(ev.art, ev.title, escapeHTML(sub()),
+      '<button class="btn" id="glFire">FIRE</button>'
+        + (test ? `<button class="btn" id="glAnte">ANTE ${ante}</button><button class="btn" id="glReset">RESET</button><button class="btn" id="rnLeave">DONE</button>` : '<button class="btn" id="rnLeave">LEAVE</button>'));
+    const lk = this.sceneLock();
+    let ready = false;
+    const draw = Gallery.mount(stage, RunMap.SPIRE_ANTES[ante - 1].heat, () => fire());
+    // The cards already down (a reload), lying flat from the start.
+    for (const s of gl.shots) if (s.i >= 0) draw.down.set(s.r + ':' + s.i, -1e9);
+    draw.st.shots = gl.shots.length;
+    const subText = (t) => { $('.rn-sub').textContent = t; };
+    const end = (now = false) => {
+      ready = false;
+      draw.st.aiming = false;
+      const w = won();
+      if (w < 0) { // out of shots
+        lk.unlock();
+        $('#glFire').disabled = true;
+        subText('Out of shots. The cards glide on without you.');
+        return;
+      }
+      const c = CARDS[Gallery.KINDS[w]];
+      draw.st.won = w;
+      lk.lock();
+      if (!now) sfx('payout');
+      draw.rise(now || FAST, () => {
+        lk.unlock();
+        $('#glFire').disabled = true;
+        subText(`Three ${c.name} down! Take your prize.`);
+        this.sceneFaces(stage, [c], (d) => {
+          if (test) return toast(`${d.name} would join your deck.`);
+          this.finishStop(ev.art, ev.title, `You win ${d.name}! It joins your deck.`, [this.add(d.id)]);
+        }, [[0, 0]], draw.toPrize, { now: now || FAST });
+      });
+    };
+    const aimNext = () => {
+      if (won() >= 0 || left() <= 0) return end();
+      ready = true;
+      draw.st.aiming = true;
+      lk.unlock();
+      subText(sub());
+    };
+    const fire = () => {
+      if (!ready || lk.busy()) return;
+      sfx('select');
+      ready = false;
+      lk.lock();
+      const aim = draw.aim(), f = Gallery.shot(aim.x, aim.r), g0 = draw.glide();
+      // Which card will stand there when you arrive, saved before you fly.
+      const i = Gallery.cardAt(aim.r, aim.x, g0 + f.HIT, draw.down);
+      gl.shots.push({ r: aim.r, i });
+      this.save();
+      draw.st.aiming = false;
+      draw.st.shots = gl.shots.length;
+      if (i >= 0) draw.down.set(aim.r + ':' + i, g0 + f.HIT); // it tips back the moment you hit it
+      if (FAST) return aimNext();
+      Scene.play({ draw, at: f.at, to: f.END, cues: f.cues(i >= 0), done: () => { draw(Gallery.at(Gallery.REST)); aimNext(); } });
+    };
+    $('#glFire').onclick = fire;
+    const key = (e) => { if (!stage.isConnected) return document.removeEventListener('keydown', key); if (e.code === 'Space' || e.code === 'Enter') { e.preventDefault(); fire(); } };
+    document.addEventListener('keydown', key);
+    lk.lock();
+    if (won() >= 0 || left() <= 0) { gl.landed = true; draw(Gallery.at(Gallery.REST)); end(true); }
+    else this.sceneEnter(gl, { draw, at: Gallery.at, to: Gallery.REST, cues: Gallery.ENTER_CUES, done: () => { draw(Gallery.at(Gallery.REST)); aimNext(); } });
+    if (test) {
+      const again = () => { this.s.node = { gl: { shots: [], landed: true } }; this.gallery(n); };
+      $('#glAnte').onclick = () => { if (lk.busy()) return; sfx('select'); test.ante = test.ante % RunMap.SPIRE_ANTES.length + 1; again(); };
+      $('#glReset').onclick = () => { if (lk.busy()) return; sfx('select'); again(); };
+      $('#rnLeave').onclick = () => { if (lk.busy()) return; sfx('select'); this.sceneTestEnd(); };
+      return;
+    }
+    $('#rnLeave').onclick = () => {
+      if (lk.busy()) return;
+      sfx('select');
+      this.finishStop(ev.art, ev.title, won() >= 0 ? 'You leave your prize on the shelf.' : gl.shots.length ? 'You leave the gallery empty-handed.' : 'You walk past the gallery.');
+    };
+  },
   bowlTest() { this.sceneTest('bowl'); },
   draftTest() { this.sceneTest('draft'); },
 
@@ -1844,23 +1958,32 @@ const Run = {
         : opened ? leave : `<button class="btn" id="drTear">${escapeHTML(tear.label)}</button><button class="btn" id="drSell">${escapeHTML(sell.label)}</button>`);
     const draw = Draft.mount(stage, RunMap.SPIRE_ANTES[ante - 1].heat), lk = this.sceneLock();
     // The risen cards turn face up where they stand over the pack, still fanned, and grow to be
-    // read; the one you click joins your deck.
-    const pick = (defs, now = false) => {
+    // read; the one you click joins your deck. The faces are built (held, hidden) as the pack
+    // starts to open, so nothing slow runs on the frame the backs finish turning: reveal() only
+    // swaps the backs out and starts them. `now`: up at once, full size (a reload, FAST).
+    const faces = (defs, now = false) => this.sceneFaces(stage, defs, (c) => {
+      if (test) { stage.querySelector('.sc-faces')?.remove(); return draw(Draft.at(Draft.REST)); } // the bench keeps nothing
+      this.finishStop(ev.art, ev.title, ...this.result(tear.take(this, c), [c]));
+    }, Draft.CARDS, draw.toStage, { now: now || FAST, hold: !now && !FAST });
+    const reveal = (ws) => {
       draw({ ...Draft.at(Draft.END), cards: -1 });
-      this.sceneFaces(stage, defs, (c) => {
-        if (test) { stage.querySelector('.sc-faces')?.remove(); return draw(Draft.at(Draft.REST)); } // the bench keeps nothing
-        this.finishStop(ev.art, ev.title, ...this.result(tear.take(this, c), [c]));
-      }, Draft.CARDS, draw.toStage, { now: now || FAST });
+      ws.start();
       $('.rn-sub').textContent = prompt;
     };
     if (opened) {
-      pick((node.cards || []).map((id) => CARDS[id]).filter(Boolean), true);
+      reveal(faces((node.cards || []).map((id) => CARDS[id]).filter(Boolean), true));
       $('#rnLeave').onclick = () => { sfx('select'); this.leave(); };
       return;
     }
     // The entrance: the map's slingshot flung you here, so you land in this one on the tail of that lob.
     lk.lock();
-    this.sceneEnter(dr, { draw, at: Draft.at, to: Draft.REST, cues: Draft.ENTER_CUES, done: () => { draw(Draft.at(Draft.REST)); lk.unlock(); } });
+    // Once you've landed and the scene is still, the first faces' costs are paid (sceneWarm), so the
+    // turn at the end of the opening is smooth even the first time in a session.
+    this.sceneEnter(dr, { draw, at: Draft.at, to: Draft.REST, cues: Draft.ENTER_CUES, done: () => {
+      draw(Draft.at(Draft.REST));
+      lk.unlock();
+      this.sceneWarm(stage, Draft.CARDS, draw.toStage, (test || this.s).colors || Object.keys(COLORS).slice(0, 2));
+    } });
     $('#drTear').onclick = () => {
       if (lk.busy()) return;
       sfx('select');
@@ -1872,17 +1995,20 @@ const Run = {
         draw(Draft.at(Draft.REST));
         const defs = runOffer(Math.random, test.colors, 3, { least: 'rare' });
         draw.deal(defs);
-        return Scene.play({ draw, at: Draft.at, from: Draft.PULL, to: Draft.END, cues: Draft.CUES, done: () => { lk.unlock(); pick(defs); } });
+        const ws = faces(defs);
+        return Scene.play({ draw, at: Draft.at, from: Draft.PULL, to: Draft.END, cues: Draft.CUES, done: () => { lk.unlock(); reveal(ws); } });
       }
       node.cards = tear.cards(this);
       node.choice = 0;
       dr.opened = true;
       this.save();
-      draw.deal(node.cards.map((id) => CARDS[id]));
+      const defs = node.cards.map((id) => CARDS[id]);
+      draw.deal(defs);
+      const ws = faces(defs);
       const done = () => {
         $('.rn-btns').innerHTML = leave;
         $('#rnLeave').onclick = () => { sfx('select'); this.leave(); };
-        pick(node.cards.map((id) => CARDS[id]));
+        reveal(ws);
       };
       if (FAST) return done();
       lk.lock();

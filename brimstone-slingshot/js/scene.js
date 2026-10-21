@@ -350,7 +350,12 @@ const Scene = (() => {
      fork(pln, fx, gy) stands the fork with its foot at scene (fx, gy), behind you; front(pln, fx,
      gy, dx, dy) draws the pouch (drawn back dx, dy from rest) and both bands in front of you, tied
      on at each tip knob and running to the pouch's tie loops, 2 px thick so they stay solid through
-     the CRT's scanlines. rest(gy): the scene y your feet stand at in the pouch at rest. */
+     the CRT's scanlines. rest(gy): the scene y your feet stand at in the pouch at rest.
+     The fork's plane and the front one stand at different depths (you stand between them), and the
+     camera looks down on them, so a point on the nearer front plane shows lower and further out than
+     the same scene point on the fork's: drawn at the same coordinates, the bands would start below and
+     outside the tips. So front() ties them on where the fork's tips show through the camera
+     (Scene.toStage), worked out once for that pair of planes and kept. */
   function slingshot(sc) {
     const forkCv = RunMap.forkArt(sc.C), pouchCv = RunMap.pouchArt(sc.C);
     const TIP = 13, TIP_UP = 41, TIE = 9, REST_UP = 28; // scene px: the tips either side of the foot and their height; the tie loops; your feet over the foot at rest
@@ -358,13 +363,40 @@ const Scene = (() => {
       const n = Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0), 1);
       for (let i = 0; i <= n; i++) R(Math.round(x0 + (x1 - x0) * i / n) - 1, y0 + (y1 - y0) * i / n, 2, 1, 1);
     };
+    let forkAt = null, seen = null; // where the fork stands; its tips as scene points on a front plane
+    // The fork's tips [left, right] as scene points on plane `pln`: where they show on screen, read back
+    // onto pln. The camera's perspective isn't a plain scale across an upright plane, so each is found
+    // by Newton's method: from the tip's own coordinates, a few steps, each measuring how the screen
+    // moves for a step across and down pln. null: the same plane, no fork yet, or not laid out.
+    const tipsOn = (pln) => {
+      if (!forkAt || forkAt.pln === pln || forkAt.pln.depth === pln.depth || !sc.stage.isConnected) return null;
+      if (seen && seen.pln === pln && seen.fx === forkAt.fx && seen.gy === forkAt.gy) return seen.tips;
+      const tips = [];
+      for (const s of [-1, 1]) {
+        const [gx, gy] = toStage(sc, forkAt.pln, forkAt.fx + s * TIP, forkAt.gy - TIP_UP);
+        let x = forkAt.fx + s * TIP, y = forkAt.gy - TIP_UP;
+        for (let k = 0; k < 4; k++) {
+          const [px, py] = toStage(sc, pln, x, y), [ax, ay] = toStage(sc, pln, x + 4, y), [bx, by] = toStage(sc, pln, x, y + 4);
+          const a = (ax - px) / 4, c = (ay - py) / 4, b = (bx - px) / 4, d = (by - py) / 4, det = a * d - b * c;
+          if (!det) return null;
+          const ex = gx - px, ey = gy - py;
+          x += (d * ex - b * ey) / det; y += (a * ey - c * ex) / det;
+        }
+        // Planes 2 dozen map units apart put it a few px off; far more means the stage wasn't measurable
+        // (mid-resize): draw at the tip's own coordinates and measure again next time.
+        if (!(Math.hypot(x - forkAt.fx - s * TIP, y - forkAt.gy + TIP_UP) < 40)) return null;
+        tips.push([x, y]);
+      }
+      seen = { pln, fx: forkAt.fx, gy: forkAt.gy, tips };
+      return tips;
+    };
     return {
       rest: (gy) => gy - REST_UP,
-      fork: (pln, fx, gy) => pln.art(forkCv, fx - 15, gy - 42),
+      fork: (pln, fx, gy) => { forkAt = { pln, fx, gy }; pln.art(forkCv, fx - 15, gy - 42); },
       front(pln, fx, gy, dx = 0, dy = 0) {
-        const ux = fx + dx, uy = gy - REST_UP + 1 + dy;
+        const ux = fx + dx, uy = gy - REST_UP + 1 + dy, tips = tipsOn(pln);
         pln.art(pouchCv, ux - 9.5, uy - 1);
-        for (const s of [-1, 1]) band(pln.p, fx + s * TIP, gy - TIP_UP, ux + s * TIE, uy);
+        [-1, 1].forEach((s, i) => { const [x, y] = tips ? tips[i] : [fx + s * TIP, gy - TIP_UP]; band(pln.p, Math.round(x), Math.round(y), ux + s * TIE, uy); });
       },
     };
   }
@@ -374,7 +406,9 @@ const Scene = (() => {
      about its middle through TURN's widths, a frame each at 7 a second; the other side opens from
      narrow the same way. A card you read or pick is the real face (HTML) over the scene: Scene.faces
      opens it at its back's size, then grows it in steps to FACE.READ. Rarity shows the way the real
-     faces' frames do: a rare back has a gold diamond, a mythical one a gold border too. */
+     faces' frames do (style.css .c-frame), so a back turns into a face of the same look: a rare one
+     has a dark border, as a rare face's frame is mid green, and only a mythical one is gold (a gold
+     border and diamond). Gold means mythical. */
   const CARD = { W: 15, H: 22, TURN: [15, 9, 3] };
   const gilt = (rarity) => (rarity === 'mythical' ? 2 : rarity === 'rare' ? 1 : 0);
   /* A card back: an ink edge, a pale border, a mid field with a diamond. `rarity` is a card's
@@ -383,11 +417,11 @@ const Scene = (() => {
     const { W, H } = CARD, g = gilt(rarity);
     x += (W - w) >> 1;
     R(x, y, w, H, 1);
-    if (w > 2) R(x + 1, y + 1, w - 2, H - 2, g > 1 ? 8 : 6);
-    if (w > 4) R(x + 2, y + 2, w - 4, H - 4, 3);
+    if (w > 2) R(x + 1, y + 1, w - 2, H - 2, g > 1 ? 8 : g ? 3 : 6); // the border: gold, mid green, or pale
+    if (w > 4) R(x + 2, y + 2, w - 4, H - 4, g === 1 ? 2 : 3);    // a rare's field a shade darker, so its border shows
     if (w < W) return;
-    R(x + 1, y + 1, 1, H - 2, 7);
-    const k = g ? 8 : 7;
+    if (g !== 1) R(x + 1, y + 1, 1, H - 2, 7);                   // the border's lit edge (a rare's stays dark)
+    const k = g > 1 ? 8 : 7;
     R(x + 6, y + 8, 3, 6, k); R(x + 5, y + 9, 5, 4, k); R(x + 7, y + 7, 1, 8, k);
   }
   /* A card's sprite (SPRITES[name]) as a 16 x 16 canvas in the palette's colors, like spriteURL,
@@ -403,13 +437,13 @@ const Scene = (() => {
   /* A pixel card face, for a card that stays part of the scene (dipped, forged): its art in a frame,
      a text band and its stats, narrowed about its middle to width w while it opens. `art`: the
      card's sprite (spriteArt), drawn at half a scene px a pixel by `pl.art` (a plane's); without
-     it, a stand-in beast. A mythical card's border is gold, as on its back. */
+     it, a stand-in beast. A mythical card's border is gold and a rare one's mid green, as on its back. */
   function cardFace({ P, R }, x, y, w = CARD.W, { art = null, pl = null, rarity = 'common' } = {}) {
     const { W, H } = CARD;
     x += (W - w) >> 1;
     R(x, y, w, H, 1);
     if (w > 2) R(x + 1, y + 1, w - 2, H - 2, 6);
-    if (w > 2 && gilt(rarity) > 1) { R(x + 1, y + 1, w - 2, 1, 8); R(x + 1, y + H - 2, w - 2, 1, 8); R(x + w - 2, y + 1, 1, H - 2, 8); }
+    if (w > 2 && gilt(rarity)) { const k = gilt(rarity) > 1 ? 8 : 3; R(x + 1, y + 1, w - 2, 1, k); R(x + 1, y + H - 2, w - 2, 1, k); R(x + w - 2, y + 1, 1, H - 2, k); } // gold for a mythical, mid green for a rare, as the faces' frames
     if (w < W) { if (w > 4) R(x + 2, y + 2, w - 4, 9, 5); return; }
     R(x + 1, y + 1, 1, H - 2, 7);
     R(x + 2, y + 2, 11, 9, 5); R(x + 2, y + 2, 11, 1, 4);
@@ -422,28 +456,39 @@ const Scene = (() => {
      (class sc-faces) holding the .card elements `cards` (Run.cardGrid made them); `rects`: each
      back's top left in scene px, as cardArt was given it, on the plane whose Scene.toStage is
      `to(x, y)`. Each face opens from narrow at its back's size (OPEN, after the back's TURN), then
-     grows in GROW steps to READ of its own size: as a group, up from its foot (`grow: 'group'`, a
+     grows in GROW steps to READ of its own size. OPEN picks up where TURN left off: the back's last
+     frame was its narrowest, so the face starts one width up (15, 9, 3 as a back, then 9, 15 as a
+     face, each width once). While it opens it keeps the back's height on screen too (the view's
+     tilt shortens a back; a face is flat), and the grow steps ease that into READ. It grows as a
+     group, up from its foot (`grow: 'group'`, a
      fan stays a fan) or each standing on its own foot ('foot'), kept inside the stage. A card that
      was face up already (a cardStandee) passes `open: false`: it only grows. 7 frames a second;
-     `now` skips to the end; they take no clicks until then. Returns the faces' holders (class
-     sc-face), each with its card inside; done(boxes): each one's [left, top, w, h] in stage px. */
-  const FACE = { READ: 0.74, OPEN: [0.2, 0.6, 1], GROW: 3, FPS: 7, PAD: 6 };
-  function faces(host, cards, rects, to, { grow = 'group', now = false, open = true, done = () => {} } = {}) {
+     `now` skips to the end; they take no clicks until then. Building faces is slow (about 90 ms
+     for three: their HTML, images and layout), so a scene whose backs turn over first passes
+     `hold`: the faces are built, placed and painted behind the stage's sky (.sc-behind), their
+     images decoded, while the scene still plays, and the returned holders' start() brings them
+     forward and opens them at once, on the frame the backs finish. A session's first faces cost
+     the most (the pixel font, card styles), so a scene can warm up first (Run.sceneWarm).
+     Returns the faces' holders (class sc-face), each with its card inside;
+     done(boxes): each one's [left, top, w, h] in stage px. */
+  const FACE = { READ: 0.74, OPEN: [0.6, 1], GROW: 3, FPS: 7, PAD: 6 };
+  function faces(host, cards, rects, to, { grow = 'group', now = false, open = true, hold = false, done = () => {} } = {}) {
     const stage = host.parentElement;
     const ws = cards.map((c) => { const w = document.createElement('div'); w.className = 'sc-face'; c.replaceWith(w); w.appendChild(c); return w; });
     const fw = cards[0]?.offsetWidth || 1, fh = cards[0]?.offsetHeight || 1, s1 = FACE.READ;
     // Where each starts (its middle, its scale: the back's width), and where it ends. The view's
     // perspective narrows a back toward its foot, so it's read at all four corners.
+    // h: how tall the back stands on screen, as a share of the face's height at scale s.
     const from = rects.map(([x, y]) => {
-      const [[ax], [bx], [cx, cy], [dx, dy]] = [to(x, y), to(x + CARD.W, y), to(x, y + CARD.H), to(x + CARD.W, y + CARD.H)];
-      const s = (bx - ax + dx - cx) / 2 / fw, foot = (cy + dy) / 2;
-      return { x: (ax + bx + cx + dx) / 4, y: foot - fh * s / 2, s };
+      const [[ax, ay], [bx, by], [cx, cy], [dx, dy]] = [to(x, y), to(x + CARD.W, y), to(x, y + CARD.H), to(x + CARD.W, y + CARD.H)];
+      const s = (bx - ax + dx - cx) / 2 / fw, foot = (cy + dy) / 2, h = (foot - (ay + by) / 2) / (fh * s);
+      return { x: (ax + bx + cx + dx) / 4, y: foot - fh * s * h / 2, s, h };
     });
     // A group grows up from its foot (its middle across, its feet's level), so nothing under it is covered.
-    const n = from.length || 1, gx = from.reduce((a, f) => a + f.x, 0) / n, gy = from.reduce((a, f) => a + f.y + fh * f.s / 2, 0) / n;
+    const n = from.length || 1, gx = from.reduce((a, f) => a + f.x, 0) / n, gy = from.reduce((a, f) => a + f.y + fh * f.s * f.h / 2, 0) / n;
     const end = from.map((f) => (grow === 'foot'
-      ? { x: f.x, y: f.y + fh * (f.s - s1) / 2, s: s1 }
-      : { x: gx + (f.x - gx) * s1 / f.s, y: gy + (f.y - gy) * s1 / f.s, s: s1 }));
+      ? { x: f.x, y: f.y + fh * (f.s * f.h - s1) / 2, s: s1, h: 1 }
+      : { x: gx + (f.x - gx) * s1 / f.s, y: gy + (f.y + fh * f.s * f.h / 2 - gy) * s1 / f.s - fh * s1 / 2, s: s1, h: 1 }));
     // Kept inside the stage, all together.
     const box = (e) => [e.x - fw * e.s / 2, e.y - fh * e.s / 2, fw * e.s, fh * e.s];
     const bs = end.map(box), W = stage.clientWidth, H = stage.clientHeight, P = FACE.PAD;
@@ -451,8 +496,8 @@ const Scene = (() => {
     const T = Math.min(...bs.map((b) => b[1])), B = Math.max(...bs.map((b) => b[1] + b[3]));
     const dx = L < P ? P - L : R > W - P ? W - P - R : 0, dy = T < P ? P - T : B > H - P ? H - P - B : 0;
     for (const e of end) { e.x += dx; e.y += dy; }
-    const put = (w, { x, y, s }, sx = 1) => {
-      w.style.transform = `translate(${Math.round(x - fw * s * sx / 2)}px, ${Math.round(y - fh * s / 2)}px) scale(${s * sx}, ${s})`;
+    const put = (w, { x, y, s, h = 1 }, sx = 1) => {
+      w.style.transform = `translate(${Math.round(x - fw * s * sx / 2)}px, ${Math.round(y - fh * s * h / 2)}px) scale(${s * sx}, ${s * h})`;
     };
     const frames = FACE.OPEN.length + FACE.GROW;
     let f = now ? frames - 1 : open ? 0 : FACE.OPEN.length - 1;
@@ -461,13 +506,21 @@ const Scene = (() => {
       ws.forEach((w, i) => {
         if (f < FACE.OPEN.length) return put(w, from[i], FACE.OPEN[f]);
         const k = (f - FACE.OPEN.length + 1) / FACE.GROW, a = from[i], b = end[i];
-        put(w, { x: a.x + (b.x - a.x) * k, y: a.y + (b.y - a.y) * k, s: a.s + (b.s - a.s) * k });
+        put(w, { x: a.x + (b.x - a.x) * k, y: a.y + (b.y - a.y) * k, s: a.s + (b.s - a.s) * k, h: a.h + (b.h - a.h) * k });
       });
       if (++f < frames) return setTimeout(step, 1000 / FACE.FPS);
       ws.forEach((w) => w.classList.add('sc-ready'));
       done(end.map(box));
     };
-    step();
+    let started = !hold;
+    ws.start = () => { if (started) return; started = true; host.classList.remove('sc-behind'); step(); };
+    if (hold) {
+      // Placed where they'll open and painted for real (fonts, images, styles), out of sight behind
+      // the stage's opaque sky: a hidden element isn't painted, so it would still pay at start().
+      host.classList.add('sc-behind');
+      ws.forEach((w, i) => put(w, from[i], FACE.OPEN[0]));
+      host.querySelectorAll('img').forEach((img) => img.decode?.().catch(() => {}));
+    } else step();
     return ws;
   }
   /* A real card face standing in the scene, CARD sized: a card that is held or carried face up

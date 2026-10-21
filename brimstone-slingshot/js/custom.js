@@ -91,6 +91,29 @@ function loadLibraryCards() {
   }
 }
 
+/* ---------- art overrides ----------
+   Built-in art the developer redrew with the pixel editor's "Overwrite game art" button. They
+   live on the server (db/art.sql) as { sprite: 16 rows } and replace those SPRITES entries for
+   every player; the last copy fetched is kept here, like the library. The originals are kept
+   so a restore or a newer copy can put them back. */
+const ART_KEY = 'cardgrave.art.v1';
+const artOriginals = {};
+
+function loadArtOverrides() {
+  for (const k in artOriginals) { SPRITES[k] = artOriginals[k]; delete artOriginals[k]; }
+  for (const [k, rows] of Object.entries(Store.read(ART_KEY, {}))) {
+    // The hero sprite is the player's own portrait; its built-in art is hero_default.
+    if (!SPRITES[k] || k === 'hero' || k.startsWith('spr_') || !Array.isArray(rows)) continue;
+    artOriginals[k] = SPRITES[k];
+    SPRITES[k] = rows.map((r) => String(r).replace(/[^.#+\-w]/g, '.').padEnd(16, '.').slice(0, 16));
+  }
+  if (typeof clearArtCache === 'function') clearArtCache();
+}
+
+/* The art js/data.js ships for a sprite, under any override. */
+function artOriginal(k) { return artOriginals[k] || SPRITES[k]; }
+function artOverridden(k) { return k in artOriginals; }
+
 function saveCustomRecords(list) {
   const ok = Store.write(CUSTOM_KEY, list);
   loadCustomCards();
@@ -101,7 +124,8 @@ function saveCustomRecords(list) {
 /* Fires `cb(key)` when another tab changes custom cards, decks or the character. */
 function onSharedChange(cb) {
   window.addEventListener('storage', (e) => {
-    if (e.key === CUSTOM_KEY || e.key === DECKS_KEY || e.key === HERO_KEY || e.key === LIBRARY_KEY || e.key === null) {
+    if (e.key === CUSTOM_KEY || e.key === DECKS_KEY || e.key === HERO_KEY || e.key === LIBRARY_KEY || e.key === ART_KEY || e.key === null) {
+      loadArtOverrides();
       loadLibraryCards();
       loadCustomCards();
       loadHero();
@@ -213,6 +237,7 @@ function saveHeroRecord(d) {
   return ok;
 }
 
+loadArtOverrides();
 loadLibraryCards();
 loadCustomCards();
 loadHero();

@@ -116,6 +116,7 @@
   <script src="js/shrine.js"></script>
   <script src="js/handover.js"></script>
   <script src="js/campfire.js"></script>
+  <script src="js/idol.js"></script>
   <script src="js/props.js"></script>
   <script>
   'use strict';
@@ -161,8 +162,8 @@
       factory: { name: 'Factory (Rune Circle, Crystal Forge)', rows: 700, top: 178 },
     };
     // The parts' names in the panel (Scene.PARTS has them all; a new one shows by its own name).
-    const NAMES = { ash: 'ash', flagstones: 'flagstones', felt: 'casino felt', cracks: 'cracked basalt', path: 'dirt path', grate: 'iron grate', cobbles: 'cobbles', planks: 'planks', checker: 'checker tiles', dunes: 'dune sand', columns: 'basalt columns', ossuary: 'ossuary', forest: 'forest floor',
-      sky: 'orrery sky', crypt: 'crypt wall', forge: 'factory hall',
+    const NAMES = { ash: 'ash', flagstones: 'flagstones', felt: 'casino felt', cracks: 'cracked basalt', path: 'dirt path', grate: 'iron grate', cobbles: 'cobbles', planks: 'planks', checker: 'checker tiles', dunes: 'dune sand', columns: 'basalt columns', ossuary: 'ossuary', forest: 'forest floor', midway: 'carnival midway',
+      sky: 'orrery sky', crypt: 'crypt wall', forge: 'factory hall', carnival: 'carnival rides',
       spires: 'spires', slots: 'slot cabinets', vents: 'spikes and vents', graves: 'trees and headstones', woods: 'leafy trees',none: 'none' };
     const named = (k) => NAMES[k] || k;
     // The critter sliders (Scene.crosser's life): [key, label, min %, max %, step, standard %].
@@ -221,7 +222,7 @@
       el.style.transform = `scale(${f.clientWidth / 1088})`;
       const cam = CAMS[st.cam], heat = st.ante, sc = Scene.mount(el, { rows: cam.rows, top: cam.top });
       const near = st.near ? NEAR.map(([sx, dd, k, h, w], i) => ({ k, x: mx(sx), d: dd, h, w, l: 3, seed: 3 + i })) : [];
-      const gnd = Scene.setting(sc, st.setting, { heat, near, floor: st.floor, backdrop: st.backdrop, features: st.features, density: st.density, clearing: st.clearing, critters: st.critters, critterLife: st.life, effects: st.effects, horizon: st.horizon, over: { x0: 260, y0: 280, w: 460, h: 130 } });
+      const gnd = Scene.setting(sc, st.setting, { heat, near, floor: st.floor, backdrop: st.backdrop, features: st.features, density: st.density, clearing: st.clearing, critters: st.critters, critterLife: st.life, effects: st.effects, horizon: st.horizon, over: { x0: 0, y0: 0, w: 720, h: 300 } }); // room for shadows from deep in the scene to its front
       // The props ticked, each on its own plane at the next free spot around the action (scene x, depth).
       const paints = st.props.map((e) => Scene.placeProp(sc, Scene.PROPS.find((q) => q.id === e.id), { spot: e.spot, heat }));
       if (paints.length) sc.every(100, () => { const t = performance.now() / 1000; for (const p of paints) p(t); });

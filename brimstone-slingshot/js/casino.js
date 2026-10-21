@@ -170,24 +170,26 @@ const Casino = (() => {
       cv.style.transform = left ? 'scaleX(-1)' : '';
     };
   }
-  // A walk from a to b stays clear of KEEP if no point along it comes inside one.
-  const clear = (ax, ad, bx, bd) => {
+  // A walk from a to b stays clear of `keep` (KEEP unless said) if no point along it comes inside one.
+  const clear = (ax, ad, bx, bd, keep = KEEP) => {
     for (let i = 0; i <= 12; i++) {
       const x = ax + (bx - ax) * i / 12, d = ad + (bd - ad) * i / 12;
-      if (KEEP.some(([kx, kd, hw, hd]) => Math.abs(x - kx) < hw && Math.abs(d - kd) < hd)) return false;
+      if (keep.some(([kx, kd, hw, hd]) => Math.abs(x - kx) < hw && Math.abs(d - kd) < hd)) return false;
     }
     return true;
   };
   /* PATRONS.n rivals, each picked at random, wandering at random over the whole floor: to a spot, a
      pause, another spot, in any direction. Positions move smoothly; the walk's hop steps at
-     PATRONS.fps. view: { xs(d): the scene x range shown at depth d, k(d): the scale there }.
+     PATRONS.fps. view: { xs(d): the scene x range shown at depth d, k(d): the scale there } (view()
+     below). Another scene can use them too (the shooting gallery, js/gallery.js), passing its own
+     `keep` ([x, depth, half width, half depth] each), `walk` ({ d0, d1, edge }, as WALK) and `n`.
      Returns the list ({ x, d, k } each, for shadows), with step(dt, t) to move them on. */
-  function patrons(sc, view) {
+  function patrons(sc, view, { keep = KEEP, walk = WALK, n = PATRONS.n } = {}) {
     const R = Math.random, pick = (lo, hi) => lo + R() * (hi - lo);
-    const spot = () => { const d = pick(WALK.d0, WALK.d1), [a, b] = view.xs(d); return [pick(a + WALK.edge, b - WALK.edge), d]; };
-    const free = () => { for (;;) { const [x, d] = spot(); if (clear(x, d, x, d)) return [x, d]; } };
+    const spot = () => { const d = pick(walk.d0, walk.d1), [a, b] = view.xs(d); return [pick(a + walk.edge, b - walk.edge), d]; };
+    const free = () => { for (let i = 0; i < 200; i++) { const [x, d] = spot(); if (clear(x, d, x, d, keep)) return [x, d]; } return spot(); };
     const names = RIVALS.map((r) => r.sprite).filter((s) => SPRITES[s]);
-    const list = Array.from({ length: PATRONS.n }, () => {
+    const list = Array.from({ length: n }, () => {
       const [x, d] = free();
       return { x, d, k: view.k(d), tx: x, td: d, wait: pick(0, PATRONS.pause[1]), v: pick(...PATRONS.speed), left: R() < 0.5, phase: R(), put: patron(sc, names[Math.floor(R() * names.length)]) };
     });
@@ -197,7 +199,7 @@ const Casino = (() => {
           p.wait -= dt;
           if (p.wait <= 0) {
             // A new spot it can walk to without crossing a table; it keeps waiting if none turns up this time.
-            for (let i = 0; i < 8; i++) { const [x, d] = spot(); if (clear(p.x, p.d, x, d)) { p.tx = x; p.td = d; p.v = pick(...PATRONS.speed); break; } }
+            for (let i = 0; i < 8; i++) { const [x, d] = spot(); if (clear(p.x, p.d, x, d, keep)) { p.tx = x; p.td = d; p.v = pick(...PATRONS.speed); break; } }
           }
         } else {
           // Depth is in map units (4 a scene px), so it's scaled to walk at the same pace both ways.
@@ -215,20 +217,26 @@ const Casino = (() => {
     return list;
   }
 
+  /* What the stage shows across each depth from d0 to dRef (sampled, then read between): xs(d), the
+     scene x range shown there, and k(d), the scale that makes a patron there your figurine's size
+     on screen (as it shows at dRef). */
+  function viewOf(sc, d0, dRef) {
+    const SAMPLES = Array.from({ length: 13 }, (_, i) => { const d = d0 + (dRef - d0) * i / 12, [a, b] = Scene.span(sc, d); return [d, (a - 720) / U + 75, (b - 720) / U + 75]; });
+    const read = (d) => {
+      const i = Math.max(0, Math.min(11, Math.floor((d - d0) / (dRef - d0) * 12))), [e0, a0, b0] = SAMPLES[i], [e1, a1, b1] = SAMPLES[i + 1], q = (d - e0) / (e1 - e0);
+      return [a0 + (a1 - a0) * q, b0 + (b1 - b0) * q];
+    };
+    const near = read(dRef);
+    return { xs: read, k: (d) => { const [a, b] = read(d); return (b - a) / (near[1] - near[0]); } };
+  }
+
   /* ---------- the stage ---------- */
   /* Build the casino in `stage` with the ante's heat (0..2). onPick(id) runs when a game is
      clicked ('wheel' or 'slots'). Returns draw(state), with draw.alive. */
   function mount(stage, heat, onPick = () => {}) {
     const sc = Scene.mount(stage, { rows: 860, top: 300 }); // the hand scenes' camera, pulled back to take in both tables
     EDGE = (Scene.span(sc, D_FIG, LAND.high * U)[0] - 720) / U + 75 - 24;
-    // What the stage shows across each depth (sampled, then read between): scene x ranges, and the
-    // scale that makes a patron there your figurine's size on screen.
-    const SAMPLES = Array.from({ length: 13 }, (_, i) => { const d = WALK.d0 + (D_FIG - WALK.d0) * i / 12, [a, b] = Scene.span(sc, d); return [d, (a - 720) / U + 75, (b - 720) / U + 75]; });
-    const read = (d) => {
-      const i = Math.max(0, Math.min(11, Math.floor((d - WALK.d0) / (D_FIG - WALK.d0) * 12))), [d0, a0, b0] = SAMPLES[i], [d1, a1, b1] = SAMPLES[i + 1], q = (d - d0) / (d1 - d0);
-      return [a0 + (a1 - a0) * q, b0 + (b1 - b0) * q];
-    };
-    const near = read(D_FIG), view = { xs: read, k: (d) => { const [a, b] = read(d); return (b - a) / (near[1] - near[0]); } };
+    const view = viewOf(sc, WALK.d0, D_FIG), read = view.xs;
     // The games against the wall, and the ground everyone keeps clear of.
     for (const G of Object.values(GAMES)) { const [a, b] = read(G.depth); G.x = Math.round(a + (b - a) * G.f); }
     KEEP = [[GAMES.wheel.x, GAMES.wheel.depth, 30, 30], [GAMES.slots.x, GAMES.slots.depth, 30, 30], [FX, D_FIG, 26, 60]];
@@ -281,5 +289,5 @@ const Casino = (() => {
     return draw;
   }
 
-  return { mount, at, fling, LANDED, REST, ENTER_CUES, GAMES, PROPS };
+  return { mount, at, fling, LANDED, REST, ENTER_CUES, GAMES, PROPS, patrons, viewOf };
 })();
