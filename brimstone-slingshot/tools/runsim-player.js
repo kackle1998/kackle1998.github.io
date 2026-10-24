@@ -166,10 +166,10 @@ const EVENTS = {
     const ch = choice(ev, 'PRESS GENTLY'), mons = Run.creatures().filter(ch.pick);
     if (mons.length) ch.act(Run, best(mons, (d) => d.atk * 10 + price(d)));
   },
-  spring(ev) { choice(ev, Run.s.maxLife - Run.s.life >= 4 ? 'DRINK' : 'BOTTLE').act(Run); },
+  spring(ev) { const ch = choice(ev, Run.s.maxLife - Run.s.life >= 4 ? 'DRINK' : 'BOTTLE'); ch.act(Run, null, ch); },
   pool() {}, // a 50% chance to lose the card: walk past
-  bones(ev) { choice(ev, 'SIFT').act(Run); },
-  offer(ev) { const ch = choice(ev, 'ACCEPT'); if (Run.canChoose(ch)) ch.act(Run); },
+  bones(ev) { const ch = choice(ev, 'SIFT'); ch.act(Run, null, ch); },
+  offer(ev) { const ch = choice(ev, 'ACCEPT'); if (Run.canChoose(ch)) ch.act(Run, null, ch); },
   rune(ev) { // pay 3 life to copy a sigil, only while above 12 life
     const ch = choice(ev, 'PAY');
     if (Run.s.life <= 12 || !Run.canChoose(ch)) return;
@@ -183,7 +183,7 @@ const EVENTS = {
     if (Run.s.life <= 12 || !Run.canChoose(ch)) return;
     ch.act(Run, best(Run.creatures().filter(ch.pick), (d) => d.atk * 10 + price(d)));
   },
-  ghost(ev) { const ch = choice(ev, 'TRADE'); if (Run.canChoose(ch)) ch.act(Run); },
+  ghost(ev) { const ch = choice(ev, 'TRADE'); if (Run.canChoose(ch)) ch.act(Run, null, ch); },
   slots() { // Run.slots(): the first pull is free; take whatever it pays, no rerolls
     const t = Run.slotRoll(null);
     if (t.k === 'card') Run.add(t.id);
@@ -267,6 +267,24 @@ var SIM = {
       if (playRun(deckIdx, stat)) stat.wins++;
     }
     Run.clear();
+    return stat;
+  },
+  /* A quick match (startGame in ui.js): both full deck lists at START_LIFE, the game's AI in both seats.
+     Deck a goes first in even games and second in odd ones, so neither deck gets the coin flip. */
+  match(a, b, games) {
+    const stat = { games: 0, wins: 0, losses: 0, firstWins: 0 };
+    for (let i = 0; i < games; i++) {
+      const first = i % 2, g = new Game(DECKS[a], DECKS[b], first);
+      g.startTurn();
+      while (!g.over && g.turnNum < 400) {
+        aiTurn(g, g.cur);
+        if (!g.over) g.endTurn();
+      }
+      stat.games++;
+      if (!g.over) continue; // a stalemate counts for neither deck
+      if (g.winner === 0) stat.wins++; else stat.losses++;
+      if (g.winner === first) stat.firstWins++;
+    }
     return stat;
   },
   /* Events and stop types this player has no plan for (the report flags them). */

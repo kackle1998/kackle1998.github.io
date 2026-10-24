@@ -224,6 +224,32 @@ const SPRITES = {
     '.#++-#+#', '#+++-#+-', '.#++-+#-', '..#+-#+-', '...##.#+', '.....#+-', '....#+#-', '.....#.#',
   ],
 
+  /* ---------- GOLD (two colors) ---------- */
+  mossgolem: [ // a hunched stone beast, moss down its back and a sprout on its head
+    '..#.............', '.#-#.#..........', '..#-#-#.........', '...#-#..........', '..#+#####.......', '.#++++++-##.....', '#++#w+++---###..', '#++##++-----+-#.',
+    '#+++++++-+-+++-#', '.#+++++++++++++#', '.#+##+++#+++++#.', '..#.#++#+#+++#..', '....#++#.#++#...', '....#+##.#+##...', '....###..###....', '................',
+  ],
+  tortoise: [ // its shell split open on a crystal hollow, like Heal Geode
+    '................', '................', '.......######...', '.....##wwwwww##.', '....#w#w-w-ww#w#', '...#ww-#ww-w#ww#', '...#w-ww#w-#w-w#', '..#++++++++++++#',
+    '.##+-+-+-+-+-+-#', '#++#############', '#+#w#+#.....#+#.', '#+##++#.....#+#.', '.#+++#.....###..', '..####..........', '................', '................',
+  ],
+  sparklynx: [ // tufted ears, sparks jumping off its cheek fur
+    '.#......', '.#......', '.##.....', '.#+#....', '.#++####', '.#++++++', '#+-+++++', '#++#w+++',
+    '#++##+++', 'w#-+++++', '.#--++++', 'w.#--+--', '...#--##', '....#---', '.....###', '........',
+  ],
+  stormram: [ // horns curled round like storm clouds
+    '........', '.####...', '#+--+#..', '#+##-+#.', '#+#.#+##', '#+#..#++', '.#+#.#++', '..##.#+#',
+    '....#+#w', '....#++#', '....#+++', '....#-++', '.....#--', '.....#-#', '......##', '........',
+  ],
+  cryptwarden: [ // a crystal headstone with a skull set into it
+    '...#####', '..#w----', '.#w-----', '.#w-####', '.#w#wwww', '.#w#w##w', '.#-#w##w', '.#-#wwww',
+    '.#-##w#w', '.#-#####', '.#------', '.#------', '########', '#+++++++', '########', '........',
+  ],
+  tombidol: [ // a skull grown into a geode, crystals jutting from its crown
+    '...#....', '..#w#..#', '..#w-##w', '.#w-#w-#', '..##wwww', '..#wwwww', '.#w##www', '.#w##www',
+    '.#wwwww#', '..#ww#w#', '..##w#w#', '.#++####', '#+-+-+-+', '#++++++-', '.#######', '........',
+  ],
+
   /* Land art is generated from each color's energy icon (see below COLORS). */
 
   /* ---------- MISC ---------- */
@@ -636,17 +662,14 @@ CARDS.skeleton = { id: 'skeleton', name: 'Skeleton', type: 'creature', cost: par
 // Gem
 creature('shard',     'Mox Shard',  'G',    0, 4, ['guardian'], { flavor: 'It hums when struck.' });
 creature('golem',     'Stone Golem','1G',   2, 4, ['regen']);
-creature('moth',      'Crystal Moth','1G',   1, 2, ['airborne', 'regen']);
+creature('moth',      'Crystal Moth','1G',   1, 3, ['reach', 'regen']);
 creature('geode',     'Heal Geode', '1G',   1, 3, ['mend'], { mend: 3 });
 creature('sentinel',  'Gem Sentinel','2G',   1, 5, ['guardian']);
-creature('shardblade','Shardblade', '1GG',  3, 2, ['quick']);
-creature('drake',     'Prism Drake','2GG',  3, 4, ['airborne']);
 creature('colossus',  'Gem Colossus','3GG',  5, 7, ['guardian', 'regen'], { flavor: 'A mountain that learned to walk.' });
 creature('bud',       'Crystal Bud','1G',   0, 3, ['grow'], { flavor: 'Give it a century. Or three turns.' });
 creature('crab',      'Quartz Crab','1G',   1, 3, ['thorns'], { flavor: 'Its shell grew teeth.' });
 creature('obsidian',  'Obsidian Eye','2G',   1, 4, ['guardian', 'reach'], { flavor: 'It watches the sky so you don\'t have to.' });
 creature('warden',    'Gem Warden', '2GG',  4, 6, ['guardian', 'regen', 'thorns'], { rarity: 'rare', flavor: 'Nothing has ever moved it. Plenty has tried.' });
-creature('diamondwyrm','Diamond Wyrm','3GG', 5, 7, ['airborne', 'quick', 'regen', 'thorns'], { rarity: 'mythical', flavor: 'It hoards nothing. It is the hoard.' });
 CARDS.statue = { id: 'statue', name: 'Stone Statue', type: 'creature', cost: parseCost('0'), atk: 0, hp: 3, sigils: [], sprite: 'statue', token: true, flavor: 'Whatever it was, it is a statue now.' };
 // Arcane
 creature('apprentice','Apprentice', 'H',    1, 1, ['scholar']);
@@ -659,7 +682,18 @@ creature('wyrm',      'Storm Wyrm', '3HH',  5, 4, ['airborne'], { flavor: 'Thund
 creature('crane',     'Paper Crane','1H',   1, 1, ['airborne', 'scholar'], { flavor: 'Folded from a spell that didn\'t work.' });
 creature('monk',      'Thunder Monk','2H',   2, 3, ['shockwave'], { flavor: 'Every prayer ends in thunder.' });
 creature('djinn',     'Storm Djinn','3H',   4, 5, ['airborne', 'quick'], { rarity: 'rare', flavor: 'It grants three wishes. All of them are lightning.' });
-creature('phoenix',   'Phoenix',    '2HH',  4, 4, ['airborne', 'haste', 'undying'], { rarity: 'mythical', flavor: 'It has died a thousand times. It is not tired of it.' });
+// Gold: two colors, one main sigil from each (the color pie in Color Pie v2.xlsx). Gem doesn't fly on
+// its own, so its flyers are Gem and Arcane.
+creature('shardblade','Shardblade', '1GH',  3, 2, ['quick']);
+creature('drake',     'Prism Drake','2GH',  3, 4, ['airborne']);
+creature('diamondwyrm','Diamond Wyrm','3GH', 5, 7, ['airborne', 'quick', 'regen', 'thorns'], { rarity: 'mythical', flavor: 'It hoards nothing. It is the hoard.' });
+creature('phoenix',   'Phoenix',    '2KH',  4, 4, ['airborne', 'haste', 'undying'], { rarity: 'mythical', flavor: 'It has died a thousand times. It is not tired of it.' });
+creature('mossgolem', 'Moss Golem', '1PG',  2, 3, ['grow'], { flavor: 'Half stone, half forest floor. Both halves are growing.' });
+creature('tortoise',  'Geode Tortoise','2PG', 2, 5, ['guardian', 'thorns'], { flavor: 'It carries its own cave.' });
+creature('sparklynx', 'Spark Lynx', '1PH',  2, 2, ['haste', 'snipe'], { snipe: 1, flavor: 'Its fur crackles. Its prey never hears it coming.' });
+creature('stormram',  'Storm Ram',  '2PH',  3, 3, ['haste', 'shockwave'], { flavor: 'Every charge ends in thunder.' });
+creature('cryptwarden','Crypt Warden','1KG', 2, 4, ['guardian', 'leech'], { flavor: 'It guards the dead, and feeds on whoever disturbs them.' });
+creature('tombidol',  'Tomb Idol',  '2KG',  2, 5, ['guardian', 'spite'], { flavor: 'Break it, and the crystals break you back.' });
 // The Brimstone Tank's fish (Run.tank): generic cost only, so any deck can take one. Only the tank
 // offers them (`tank` keeps them out of every other pool). Prego keeps a Guppy (a 1/1 token) at your side.
 creature('prego',     'Prego',      '2',    1, 2, ['prego'], { rarity: 'mythical', tank: true, flavor: 'Always expecting. Always hungry.' });
@@ -716,7 +750,7 @@ const DECKS = [
   {
     name: 'Wild Hunt', colors: ['paw', 'bone'], feature: 'grizzly',
     desc: 'Fast beasts backed by bones that refuse to stay dead.',
-    list: { land_paw: 6, land_bone: 6, stoat: 2, hare: 1, wolf: 2, bat: 2, boar: 2, ghoul: 1, elk: 2, grizzly: 1, revenant: 1, mooseking: 1, might: 1, drain: 1, beartrap: 1 },
+    list: { land_paw: 6, land_bone: 6, stoat: 2, porcupine: 1, wolf: 2, bat: 2, boar: 2, weaver: 1, elk: 2, grizzly: 1, revenant: 1, mooseking: 1, might: 1, drain: 1, beartrap: 1 },
   },
   {
     name: 'Crypt Arcana', colors: ['bone', 'hat'], feature: 'bonelord',
@@ -726,12 +760,22 @@ const DECKS = [
   {
     name: 'Crystal Wilds', colors: ['gem', 'paw'], feature: 'colossus',
     desc: 'Guardian walls hold the line while beasts trample through.',
-    list: { land_gem: 6, land_paw: 6, shard: 2, stoat: 1, golem: 1, wolf: 2, geode: 1, sentinel: 2, boar: 1, shardblade: 1, elk: 1, grizzly: 1, colossus: 1, drake: 1, restore: 1, mirrorward: 1, howl: 1 },
+    list: { land_gem: 6, land_paw: 6, shard: 2, stoat: 1, golem: 1, wolf: 2, geode: 1, sentinel: 2, boar: 1, mossgolem: 1, elk: 1, grizzly: 1, colossus: 1, tortoise: 1, restore: 1, mirrorward: 1, howl: 1 },
   },
   {
     name: 'Prism Sorcery', colors: ['gem', 'hat'], feature: 'wyrm',
     desc: 'Flyers rule the skies above a wall of crystal.',
-    list: { land_gem: 6, land_hat: 6, shard: 1, apprentice: 1, moth: 1, wisp: 2, adept: 1, owl: 2, shardblade: 1, battlemage: 1, drake: 1, archmage: 1, wyrm: 1, firebolt: 1, insight: 1, meteor: 1, shatter: 1, stasisrune: 1 },
+    list: { land_gem: 6, land_hat: 6, shard: 1, apprentice: 1, crane: 1, wisp: 2, adept: 1, owl: 2, shardblade: 1, battlemage: 1, drake: 1, archmage: 1, wyrm: 1, firebolt: 1, insight: 1, meteor: 1, shatter: 1, stasisrune: 1 },
+  },
+  {
+    name: 'Feral Arcana', colors: ['paw', 'hat'], feature: 'monk',
+    desc: 'Beasts charge in while spellfire clears the way.',
+    list: { land_paw: 6, land_hat: 6, stoat: 1, porcupine: 1, spark: 1, adept: 2, wolf: 2, sparklynx: 1, firebolt: 2, glyph: 1, battlemage: 1, boar: 2, monk: 1, stormram: 1, wyrm: 1, mooseking: 1 },
+  },
+  {
+    name: 'Grave Geodes', colors: ['bone', 'gem'], feature: 'revenant',
+    desc: 'Crystal walls hold while the dead drain the enemy dry.',
+    list: { land_bone: 6, land_gem: 6, shard: 1, rat: 1, draugr: 2, hellhound: 1, golem: 1, bat: 1, drain: 1, coil: 1, sentinel: 1, cryptwarden: 1, crow: 1, banshee: 1, revenant: 1, tombidol: 1, bonelord: 1, colossus: 1, cage: 1 },
   },
 ];
 

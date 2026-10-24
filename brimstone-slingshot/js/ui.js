@@ -1426,28 +1426,48 @@ function showDeckSelect(onPick = startGame, heading = 'CHOOSE YOUR DECK') {
       </div>
       <div class="my-decks panel">
         <div class="md-title">MY DECKS</div>
-        <div class="md-list">${saved.map(({ d, def }) => {
-          const n = deckCount(def.list);
-          return `<button class="md-deck" data-id="${escapeHTML(d.id)}" ${n === DECK_SIZE ? '' : 'disabled'}>
-            <img src="${spriteURL(def.feature)}" alt=""><span class="md-name">${escapeHTML(def.name)}</span>
-            <span class="md-meta">${def.colors.map((c) => ico(COLORS[c].icon)).join('')} ${n}/${DECK_SIZE}</span></button>`;
-        }).join('') || '<span class="muted">No saved decks yet. Build one in the Deck Builder.</span>'}</div>
-        <div class="md-btns">
-          <button class="btn" id="dsBuilder">DECK BUILDER</button>
-          <button class="btn" id="dsBack">BACK</button>
-        </div>
+        <button class="md-arrow" id="mdPrev">&#9664;</button>
+        <div class="md-list"></div>
+        <button class="md-arrow" id="mdNext">&#9654;</button>
       </div>
+      <button class="btn" id="dsBack">BACK</button>
     </div>`);
   $$('.tablet').forEach((t) => {
     t.onclick = () => onPick(DECKS[+t.dataset.i]);
     t.onmouseenter = () => sfx('select');
   });
-  $$('.md-deck').forEach((b) => {
-    b.onclick = () => { const s = saved.find((x) => x.d.id === b.dataset.id); if (s) onPick(s.def); };
-  });
-  $('#dsBuilder').onclick = () => { sfx('select'); showDeckBuilder(); };
+  // Saved decks stand as card piles, a page at a time; the pile's thickness shows how full the deck is.
+  const pages = Math.max(1, Math.ceil(saved.length / MD_PAGE));
+  let page = 0;
+  const showPage = () => {
+    const list = saved.slice(page * MD_PAGE, (page + 1) * MD_PAGE);
+    $('.md-list').innerHTML = list.map(({ d, def }) => {
+      const n = deckCount(def.list), edges = Math.max(1, Math.round(n / DECK_SIZE * 5));
+      return `<button class="md-deck" data-id="${escapeHTML(d.id)}" ${n === DECK_SIZE ? '' : 'disabled'}>
+        <span class="md-pile" style="--e:${edges}">${Array.from({ length: edges }, (_, k) => `<i style="--k:${edges - k}"></i>`).join('')}
+          <span class="md-top"><img src="${spriteURL(def.feature)}" alt=""></span></span>
+        <span class="md-icons">${def.colors.map((c) => ico(COLORS[c].icon)).join('')}</span>
+        <span class="md-name">${escapeHTML(def.name)}</span>
+        <span class="md-count">${n}/${DECK_SIZE}</span></button>`;
+    }).join('') || '<span class="muted">No saved decks yet. Build one in the Deck Builder.</span>';
+    $$('.md-deck').forEach((b) => {
+      b.onclick = () => { const s = saved.find((x) => x.d.id === b.dataset.id); if (s) onPick(s.def); };
+      b.onmouseenter = () => { if (!b.disabled) sfx('select'); };
+    });
+    $('#mdPrev').disabled = page === 0;
+    $('#mdNext').disabled = page === pages - 1;
+  };
+  const flip = (dp) => { page = Math.max(0, Math.min(pages - 1, page + dp)); sfx('select'); showPage(); };
+  $('#mdPrev').onclick = () => flip(-1);
+  $('#mdNext').onclick = () => flip(1);
+  $$('.md-arrow').forEach((a) => a.classList.toggle('hidden', pages < 2));
+  showPage();
   $('#dsBack').onclick = () => { sfx('select'); if (onPick === startGame) showOfflineMenu(); else showTitle(); };
 }
+const MD_PAGE = 7;
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && $('.my-decks') && !$('#screen').classList.contains('hidden')) $('#dsBack').onclick();
+});
 
 /* ---------- opening dice roll: high roll picks who goes first ---------- */
 const PIPS = { 1: [4], 2: [0, 8], 3: [0, 4, 8], 4: [0, 2, 6, 8], 5: [0, 2, 4, 6, 8], 6: [0, 2, 3, 5, 6, 8] };

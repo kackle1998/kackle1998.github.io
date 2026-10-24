@@ -12,6 +12,9 @@
    node tools/runsim.js --set BOSS_COST_CAP=5    try a different value for any top-level const
    node tools/runsim.js --set "DEALER_LIFE=[0, 6, 6, 10, 10, 12]"
 
+   node tools/runsim.js --matchups               quick matches instead: every starter deck against
+                                                 every other, --runs games per pairing
+
    Other options: --seed N, --workers N, --json (raw counts),
    --path random|avoid (avoid = dodge battles when another stop is reachable),
    --lands fixed|ratio (ratio = add lands to keep the starting 9:11 mix).
@@ -33,7 +36,9 @@ const STUBS = `
   const $ = () => anyEl, $$ = () => [];
   const sfx = () => {}, toast = () => {}, showScreen = () => {}, showTitle = () => {}, showOfflineMenu = () => {}, tallyUp = () => {};
   const escapeHTML = (s) => String(s), ico = () => '', spriteURL = () => '', iconURL = () => '', cardInnerHTML = () => '', heroName = () => 'You';
-  const CRT = { pulse() {}, glitch() {} }, RunMap = { show() {} }, Palette = { cur: {} };
+  const CRT = { pulse() {}, glitch() {} }, RunMap = { show() {}, wipe: (then) => then(), cleared: () => Promise.resolve() }, Palette = { cur: {} };
+  // options.js's dev-only switches, off: a sim starts at ante 1 and walks the map normally.
+  const isDev = () => false, startAnte = () => 1, skipBeacon = () => false;
   let FAST = true;
 `;
 
@@ -60,14 +65,15 @@ function loadGame(seed, sets = {}, policy = {}) {
 if (process.argv[2] === '--worker') {
   process.once('message', (job) => {
     const ctx = loadGame(job.seed, job.sets, job.policy);
-    process.send(JSON.parse(JSON.stringify(ctx.SIM.simulate(job.deck, job.runs))), () => process.exit(0));
+    const stat = job.vs != null ? ctx.SIM.match(job.deck, job.vs, job.runs) : ctx.SIM.simulate(job.deck, job.runs);
+    process.send(JSON.parse(JSON.stringify(stat)), () => process.exit(0));
   });
   return;
 }
 
 /* ---------- command line ---------- */
 function parseArgs(argv) {
-  const o = { runs: 5000, seed: 1, workers: os.cpus().length, decks: [], sets: {}, path: 'random', lands: 'fixed', json: false };
+  const o = { runs: 5000, seed: 1, workers: os.cpus().length, decks: [], sets: {}, path: 'random', lands: 'fixed', json: false, matchups: false };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i], val = () => {
       if (i + 1 >= argv.length) throw new Error(`${a} needs a value`);
@@ -84,6 +90,7 @@ function parseArgs(argv) {
     } else if (a === '--path') o.path = val();
     else if (a === '--lands') o.lands = val();
     else if (a === '--json') o.json = true;
+    else if (a === '--matchups') o.matchups = true;
     else if (a === '--help' || a === '-h') {
       const src = fs.readFileSync(__filename, 'utf8');
       console.log(src.slice(src.indexOf('/*'), src.indexOf('*/') + 2));
@@ -163,6 +170,31 @@ function report(o, stats, secs, unmodeled) {
   if (unmodeled.stops.length) console.log(`\n! The sim skips these stop types because it has no plan for them: ${unmodeled.stops.join(', ')}.`);
 }
 
+/* --matchups: a grid of each deck's win rate against each other one, then its average over the others. */
+function reportMatchups(o, names, decks, res, secs) {
+  const per = Object.values(res)[0].games;
+  console.log(`\nQUICK MATCH SIM  ${per.toLocaleString('en-US')} games per pairing, each deck first in half, seed ${o.seed}, ${secs.toFixed(1)}s`);
+  if (Object.keys(o.sets).length) console.log(`overrides: ${Object.entries(o.sets).map(([k, v]) => `${k} = ${v}`).join(', ')}`);
+  const rate = (a, b) => {
+    const r = res[`${a}v${b}`], back = res[`${b}v${a}`];
+    if (r) return [r.wins, r.wins + r.losses];
+    if (back) return [back.losses, back.wins + back.losses];
+    return null;
+  };
+  console.log('\nROW DECK\'S WIN RATE AGAINST THE COLUMN DECK\n' + table([
+    ['DECK', ...decks.map((d) => names[d].toUpperCase()), 'AVERAGE'],
+    ...decks.map((a) => {
+      const cells = decks.map((b) => (a === b ? null : rate(a, b)));
+      const won = cells.reduce((n, c) => n + (c ? c[0] : 0), 0), played = cells.reduce((n, c) => n + (c ? c[1] : 0), 0);
+      return [names[a], ...cells.map((c) => (c ? pct(c[0], c[1]) : '-')), pct(won, played)];
+    }),
+  ]));
+  const all = Object.values(res), games = all.reduce((n, r) => n + r.wins + r.losses, 0);
+  const stale = all.reduce((n, r) => n + r.games - r.wins - r.losses, 0);
+  console.log(`\nThe deck going first won ${pct(all.reduce((n, r) => n + r.firstWins, 0), games)} of games.` +
+    (stale ? ` ${stale} games hit the turn limit and count for neither deck.` : ''));
+}
+
 (async () => {
   const o = parseArgs(process.argv.slice(2));
   const probe = loadGame(o.seed, o.sets); // also checks --set before any worker starts
@@ -172,6 +204,26 @@ function report(o, stats, secs, unmodeled) {
     if (i < 0) throw new Error(`No deck "${q}". Decks: ${names.join(', ')}`);
     return i;
   }) : names.map((_, i) => i);
+
+  if (o.matchups) {
+    const pairs = decks.flatMap((a, i) => decks.slice(i + 1).map((b) => [a, b]));
+    if (!pairs.length) throw new Error('--matchups needs at least two decks');
+    // Even game counts per batch, so each deck goes first in exactly half.
+    const shards = Math.max(1, Math.round(o.workers / pairs.length)), per = Math.max(2, 2 * Math.round(o.runs / shards / 2));
+    const jobs = pairs.flatMap(([a, b]) => Array.from({ length: shards }, (_, s) => ({
+      deck: a, vs: b, runs: per, seed: (o.seed * 1000003 + a * 7919 + b * 15485863 + s * 104729) >>> 0, sets: o.sets, policy: {},
+    })));
+    const t0 = Date.now(), res = {};
+    let next = 0;
+    await Promise.all(Array.from({ length: Math.min(o.workers, jobs.length) }, async () => {
+      while (next < jobs.length) {
+        const job = jobs[next++];
+        merge((res[`${job.deck}v${job.vs}`] = res[`${job.deck}v${job.vs}`] || {}), await runJob(job));
+      }
+    }));
+    if (o.json) return console.log(JSON.stringify(res, null, 2));
+    return reportMatchups(o, names, decks, res, (Date.now() - t0) / 1000);
+  }
 
   const shards = Math.max(1, Math.round(o.workers / decks.length));
   const jobs = decks.flatMap((deck) => Array.from({ length: shards }, (_, s) => ({

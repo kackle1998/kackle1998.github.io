@@ -34,12 +34,15 @@ const RUN_CIRCUIT_LIFE = 2;
 const runCircuitLife = (s) => RUN_CIRCUIT_LIFE * ((s.circuit || 1) - 1);
 const runCircuitCap = (s, cap) => Math.min(BOSS_COST_CAP, cap + Math.floor(((s.circuit || 1) - 1) / 2));
 /* Each starting deck's run: its starting (and max) life, and cards swapped into its starting 11
-   (from: to). Tuned by simulation so the game's AI clears the run about 65% of the time with each. */
+   (from: to). Tuned by simulation (tools/runsim.js) so the game's AI clears the run 62-64% of the time
+   with each. One point of life is worth about 1.5-2 points of that rate. */
 const RUN_DECKS = {
-  'Wild Hunt':     { life: 23 },
+  'Wild Hunt':     { life: 24 },
   'Crypt Arcana':  { life: 25, swap: { counter: 'firebolt', opengrave: 'battlemage' } },
-  'Crystal Wilds': { life: 24 },
-  'Prism Sorcery': { life: 20, swap: { insight: 'battlemage' } },
+  'Crystal Wilds': { life: 21 },
+  'Prism Sorcery': { life: 22, swap: { insight: 'battlemage' } },
+  'Feral Arcana':  { life: 25 },
+  'Grave Geodes':  { life: 19 },
 };
 const runDeck = (def) => RUN_DECKS[def.name] || { life: RUN_MAX_LIFE };
 /* The Dealer's hand in a run battle is named by its two colors (shown on the VS splash). */
