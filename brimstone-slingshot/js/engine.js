@@ -176,14 +176,18 @@ class Game {
       }
       if (need > 0) return null;
     }
-    // Pay generic with whichever color we have the most of left over.
+    // Pay generic with the color the rest of the hand needs least, so a Bone land isn't spent on a
+    // generic pip while a Bone card waits in hand; then with whichever color we have the most of.
+    const want = {};
+    p.hand.forEach((h) => { if (h.cost && h.cost !== cost) COLOR_KEYS.forEach((k) => (want[k] = Math.max(want[k] || 0, h.cost[k] || 0))); });
     let g = cost.g || 0;
     while (g > 0) {
       const rem = free.filter((x) => !used.has(x.i));
       if (!rem.length) return null;
       const counts = {};
       rem.forEach((x) => (counts[x.l.color] = (counts[x.l.color] || 0) + 1));
-      rem.sort((a, b) => counts[b.l.color] - counts[a.l.color]);
+      const spare = (col) => counts[col] - (want[col] || 0);
+      rem.sort((a, b) => spare(b.l.color) - spare(a.l.color) || counts[b.l.color] - counts[a.l.color]);
       used.add(rem[0].i);
       g--;
     }

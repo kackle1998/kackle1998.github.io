@@ -837,6 +837,8 @@
   // of it: features scatter only nearer than that, never into the wall's own works.
   const BACKDROPS = {
     sky: {},
+    swirl: { swirl: true }, // the game's swirl paint (Scene.swirl) where the sky would be
+
     crypt: { front: D_WALL, open: D_WALL + 30, wall: cryptWall }, // past the shade at the wall's foot
     tropicana: { front: D_TROP, open: D_TROP + 30, wall: tropWall },
     forge: { front: -130, open: 170, wall: (sc, heat) => Factory.backdrop(sc, heat) }, // the hall (D_HALL, js/factory.js); open floor starts in front of its lava river (-90..-40) and machine row (D_MACH 150)
@@ -914,6 +916,7 @@
     if (bad.length) throw new Error('Unknown part: ' + bad.join(', '));
     const H = B.wall ? { far: B.front, from: B.open, ruins: { wall: 0, count: 140 } } : HORIZONS[horizon] || HORIZONS.wall, far = H.far, from = H.from || far;
     if (B.wall) B.wall(sc, heat);
+    if (B.swirl) Scene.swirl(sc);
     // Each feature set takes a share of the props, from its own random stream; the near props go with the first.
     // Before a wall they start where its open floor begins (Scene.ruins starts 40 past area.y0).
     const count = Math.round((H.ruins && H.ruins.count || 380) / Math.max(1, fs.length)), y0 = H.from ? from - 40 : far;

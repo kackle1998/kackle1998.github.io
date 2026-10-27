@@ -203,7 +203,7 @@ function dbLoad(value) {
 function dbPlay() {
   if (deckCount(DB.deck.list) !== DECK_SIZE) { toast(`Your deck needs exactly ${DECK_SIZE} cards.`); sfx('err'); return; }
   if (!dbSave()) return;
-  startGame(savedDeckToDef(DB.deck));
+  quickMatch(savedDeckToDef(DB.deck));
 }
 
 /* ---------- deck art picker ---------- */

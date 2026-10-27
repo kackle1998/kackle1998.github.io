@@ -482,12 +482,12 @@ const Scene = (() => {
     const from = rects.map(([x, y]) => {
       const [[ax, ay], [bx, by], [cx, cy], [dx, dy]] = [to(x, y), to(x + CARD.W, y), to(x, y + CARD.H), to(x + CARD.W, y + CARD.H)];
       const s = (bx - ax + dx - cx) / 2 / fw, foot = (cy + dy) / 2, h = (foot - (ay + by) / 2) / (fh * s);
-      return { x: (ax + bx + cx + dx) / 4, y: foot - fh * s * h / 2, s, h };
+      return { x: (ax + bx + cx + dx) / 4, fx: (cx + dx) / 2, y: foot - fh * s * h / 2, s, h };
     });
     // A group grows up from its foot (its middle across, its feet's level), so nothing under it is covered.
     const n = from.length || 1, gx = from.reduce((a, f) => a + f.x, 0) / n, gy = from.reduce((a, f) => a + f.y + fh * f.s * f.h / 2, 0) / n;
     const end = from.map((f) => (grow === 'foot'
-      ? { x: f.x, y: f.y + fh * (f.s * f.h - s1) / 2, s: s1, h: 1 }
+      ? { x: f.fx, y: f.y + fh * (f.s * f.h - s1) / 2, s: s1, h: 1 } // centered on its foot: the tilt carries a back's top corners outward
       : { x: gx + (f.x - gx) * s1 / f.s, y: gy + (f.y + fh * f.s * f.h / 2 - gy) * s1 / f.s - fh * s1 / 2, s: s1, h: 1 }));
     // Kept inside the stage, all together.
     const box = (e) => [e.x - fw * e.s / 2, e.y - fh * e.s / 2, fw * e.s, fh * e.s];
@@ -549,5 +549,23 @@ const Scene = (() => {
     };
   }
 
-  return { warmGround, mount, figure, land, SQUASH, play, ground, ruins, span, plane, toStage, slingshot, CARD, FACE, cardArt, cardFace, spriteArt, faces, cardStandee, pen, bay, lvl, cl, rgb };
+  /* ---------- the swirl backdrop ---------- */
+  /* The game's own swirl paint (Backdrop in js/crt.js, the Balatro-style backdrop behind every
+     screen) in place of the sky: its canvas copied onto the stage's own 10 times a second, cropped
+     to fill. Once per stage; without the backdrop running, the sky stays. */
+  function swirl(sc) {
+    const sky = sc.stage.querySelector('.bw-sky'), src = typeof Backdrop !== 'undefined' && Backdrop.cv;
+    if (!sky || !src || sc.swirl) return;
+    const cv = document.createElement('canvas'), g = cv.getContext('2d');
+    cv.className = 'bw-sky';
+    cv.style.objectFit = 'cover';
+    sky.style.visibility = 'hidden';
+    sky.after(cv);
+    const copy = () => { if (cv.width !== src.width || cv.height !== src.height) { cv.width = src.width; cv.height = src.height; } g.drawImage(src, 0, 0); };
+    copy();
+    sc.every(100, copy);
+    sc.swirl = cv;
+  }
+
+  return { warmGround, mount, figure, land, SQUASH, play, ground, ruins, span, plane, toStage, slingshot, CARD, FACE, cardArt, cardFace, spriteArt, faces, cardStandee, swirl, pen, bay, lvl, cl, rgb };
 })();

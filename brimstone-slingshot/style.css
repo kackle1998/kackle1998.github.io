@@ -40,6 +40,8 @@ button { font-family: inherit; }
   border-radius: 26px;
 }
 #screenWrap { position: absolute; inset: 0; }
+/* The gamepad / keyboard cursor (js/pad.js), over everything, tip at its top left. */
+#padCursor { position: fixed; z-index: 1000; display: none; pointer-events: none; image-rendering: pixelated; }
 
 /* ---------- CRT (game) ---------- */
 #bgfx { position: fixed; inset: 0; width: 100vw; height: 100vh; image-rendering: pixelated; display: block; }
@@ -980,6 +982,7 @@ body[data-crt="off"] .rm-fig img, .rm-fig.hopping img { animation: none; }
 .sc-held > div { transform-origin: 0 0; }
 .sc-held .card { margin: 0; box-shadow: none; }
 /* The Rune Circle's two real cards on their plinths (Run.rune); rc-lit while the circle copies from or onto one. */
+.rc-real .card, .rc-real .card.tilting { transform: none; scale: none; box-shadow: none; } /* stood on a plinth: no hover tilt, grow or drop shadow lifting it off */
 .rc-real.rc-lit .card { outline: 3px solid var(--accent); outline-offset: -3px; }
 .rc-real.rc-gone .card { animation: rcGone .43s steps(3, jump-none) both; } /* the Sigil Altar's sacrifice narrows away */
 @keyframes rcGone { from { scale: 1 1; } to { scale: .15 1; visibility: hidden; } }

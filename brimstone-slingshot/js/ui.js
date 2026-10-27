@@ -1164,7 +1164,7 @@ function showOfflineMenu() {
       desc: 'Walk the brimstone circuit to the Dealer. Your deck grows and changes, and your life carries over.',
       note: run ? `RUN IN PROGRESS &middot; ${ico('hp')} ${run.life}/${run.maxLife}` : '' },
     { name: 'QUICK MATCH', art: 'ri_battle', go: () => showDeckSelect(),
-      desc: 'One hand against the Dealer with any deck you like.', note: 'PREMADE OR YOUR OWN DECKS' },
+      desc: 'One hand against a random challenger with any deck you like.', note: 'PREMADE OR YOUR OWN DECKS' },
   ];
   showScreen(`
     <div class="ds om">
@@ -1410,7 +1410,7 @@ async function vsGo() {
 }
 
 /* `onPick(deckDef)` runs when a deck is chosen: a game against the Dealer, or the online lobby. */
-function showDeckSelect(onPick = startGame, heading = 'CHOOSE YOUR DECK') {
+function showDeckSelect(onPick = quickMatch, heading = 'CHOOSE YOUR DECK') {
   $('#game').classList.add('hidden');
   const saved = getSavedDecks().map((d) => ({ d, def: savedDeckToDef(d) }));
   showScreen(`
@@ -1462,7 +1462,7 @@ function showDeckSelect(onPick = startGame, heading = 'CHOOSE YOUR DECK') {
   $('#mdNext').onclick = () => flip(1);
   $$('.md-arrow').forEach((a) => a.classList.toggle('hidden', pages < 2));
   showPage();
-  $('#dsBack').onclick = () => { sfx('select'); if (onPick === startGame) showOfflineMenu(); else showTitle(); };
+  $('#dsBack').onclick = () => { sfx('select'); if (onPick === quickMatch) showOfflineMenu(); else showTitle(); };
 }
 const MD_PAGE = 7;
 document.addEventListener('keydown', (e) => {
@@ -1549,6 +1549,16 @@ async function rollForFirst(you, them) {
   });
   await vsGo();
   return picked;
+}
+
+/* Quick Match: your deck against any CPU (the Dealer, a rival, or a later ante's boss). A boss
+   brings its own hand from the run (the Dealer's House Rules, or its RUN_BOSSES deck); a rival
+   plays any premade deck. */
+function quickMatch(deckDef) {
+  const foes = [null, ...RIVALS, ...RUN_BOSSES.filter(Boolean)];
+  const r = foes[Math.floor(Math.random() * foes.length)];
+  const cpuDeck = !r || r.colors ? Run.bossDeck(r) : DECKS[Math.floor(Math.random() * DECKS.length)];
+  return startGame(deckDef, { cpuDeck, foe: r });
 }
 
 /* opts (Dealer's Run): { cpuDeck, life: [you, dealer], boss: rule key, run: true, foe: a RIVALS or RUN_BOSSES entry } */
@@ -1817,7 +1827,10 @@ document.addEventListener('keydown', (e) => {
   const inGame = !e.defaultPrevented && game && !$('#game').classList.contains('hidden') && $('#screen').classList.contains('hidden');
   if (!inGame) return;
   if (e.key === 'Escape') { clearSel(); render(); }
-  if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); playerEndTurn(); }
+  // E ends the turn. Enter and Space click for the keyboard (js/pad.js), so here they're only the
+  // pad's Start (sent as Enter), or the keys themselves on a page without pad.js.
+  const fromPad = typeof Pad === 'undefined' || Pad.sending;
+  if (e.code === 'KeyE' || ((e.key === ' ' || e.key === 'Enter') && fromPad)) { e.preventDefault(); playerEndTurn(); }
 });
 stage.addEventListener('contextmenu', (e) => {
   e.preventDefault();

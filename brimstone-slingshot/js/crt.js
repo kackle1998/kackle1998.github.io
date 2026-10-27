@@ -18,7 +18,9 @@ const CRT = {
     this.wrap = document.getElementById('screenWrap');
     let saved = null;
     try { saved = localStorage.getItem('cardgrave.crt'); } catch (e) { /* storage blocked */ }
-    this.level = saved === 'off' ? 'off' : 'low'; // old 'high' saves fall back to 'low'
+    // Old 'high' saves fall back to 'low'. Unset on the handheld build: off, as its overlays and
+    // swirling backdrop are more than a handheld's chip can draw smoothly.
+    this.level = saved ? (saved === 'off' ? 'off' : 'low') : /[?&]handheld\b/.test(location.search) ? 'off' : 'low';
     Backdrop.init();
     this.apply();
     requestAnimationFrame((t) => this.frame(t));

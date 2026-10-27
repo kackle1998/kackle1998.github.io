@@ -815,6 +815,24 @@ const Run = {
     return { name, colors, feature: feature || 'dealer', list };
   },
 
+  /* A boss's own hand at full size, outside a run (Quick Match): its colors (RUN_BOSSES), or for the
+     Dealer (null) House Rules in a random pair, 12 tomes shared across them, and the rest any of its
+     cards, two of a common, one of anything rarer. */
+  bossDeck(chief, R = Math.random) {
+    const colors = chief ? chief.colors.slice() : runShuffle(R, COLOR_KEYS.slice()).slice(0, 2);
+    const pool = runPool(colors), list = {}, lands = 12;
+    colors.forEach((k, i) => (list['land_' + k] = Math.floor(lands / colors.length) + (i < lands % colors.length ? 1 : 0)));
+    for (let k = lands, guard = 0; k < DECK_SIZE && guard < 400; guard++) {
+      const open = pool.filter((c) => (list[c.id] || 0) < (rarityOf(c) === 'common' ? 2 : 1));
+      if (!open.length) break;
+      const c = runPickN(R, open, 1, (x) => (x.type === 'creature' ? 3 : 1))[0];
+      list[c.id] = (list[c.id] || 0) + 1;
+      k++;
+    }
+    const feature = Object.keys(list).filter((id) => CARDS[id].type === 'creature').sort((a, b) => costTotal(CARDS[b].cost) - costTotal(CARDS[a].cost))[0];
+    return { name: chief ? chief.deck : 'House Rules', colors, feature: feature || (chief ? chief.sprite : 'dealer'), list };
+  },
+
   /* Every battle on the map but the boss is against one of the Dealer's rivals, picked at random
      and not repeated within a run. Kept on the stop so a reload brings back the same one. */
   rival(n) {
@@ -2191,7 +2209,7 @@ const Run = {
     // a scene card's size and grows to be read, standing on its plinth (Scene.faces). Then
     // then({ els, top }): their holders, and their top in scene px for the sigil chips.
     const cards = (defs, then) => {
-      const rects = [Sc.MID_A, Sc.MID_B].map((x) => [x - Scene.CARD.W / 2, Sc.GY - Sc.PH - Scene.CARD.H]);
+      const rects = [Sc.MID_A, Sc.MID_B].map((x) => [x - Scene.CARD.W / 2, Sc.GY - Sc.PH - Scene.CARD.H + 1]); // a pixel into the plinth's top edge, so each stands on it
       const els = this.sceneFaces(stage, defs, null, rects, draw.toStage, { grow: 'foot', done: (boxes) => {
         // The scene height the camera puts level with the cards' top, found by halving.
         let lo = 0, hi = Sc.GY;

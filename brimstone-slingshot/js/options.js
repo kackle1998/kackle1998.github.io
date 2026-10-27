@@ -81,7 +81,7 @@ const Palette = {
 Palette.apply(Store.read(PALETTE_KEY, 'moss'));
 
 /* ---------- options screen ----------
-   Rows: sound effects, music, CRT, palette, starting ante and skip to beacon (debug), how to play, back. Esc goes back.
+   Rows: sound effects, music, CRT, palette, cursor speed and swap A/B (once a gamepad is seen), starting ante and skip to beacon (debug), how to play, back. Esc goes back.
    Opened from the title; over a match from the gear button, where BACK becomes
    RESUME and returns to the table; or from the run map's gear, where `backTo`
    redraws the map (in the new colors, if the palette changed). */
@@ -112,6 +112,16 @@ function showOptions() {
           <button class="db-step" data-d="1" aria-label="Next palette">&gt;</button>
         </div>
       </div>
+      ${Pad.seen ? `<div class="opt-row"><span class="opt-label">CURSOR SPEED</span>
+        <div class="opt-pal" id="optPadSpeed">
+          <button class="db-step" data-d="-1" aria-label="Slower cursor">&lt;</button>
+          <span class="opt-pval">${PAD_SPEEDS[Pad.opts.speed].name}</span>
+          <button class="db-step" data-d="1" aria-label="Faster cursor">&gt;</button>
+        </div>
+      </div>
+      <div class="opt-row"><span class="opt-label">SWAP A / B</span>
+        <button class="opt-check${Pad.opts.swap ? ' on' : ''}" id="optPadSwap" role="checkbox" aria-checked="${Pad.opts.swap}" aria-label="Swap A and B"></button>
+      </div>` : ''}
       ${isDev() ? `<div class="opt-row"><span class="opt-label">START ANTE (DEBUG)</span>
         <div class="opt-pal" id="optAnte">
           <button class="db-step" data-d="-1" aria-label="Earlier starting ante">&lt;</button>
@@ -132,6 +142,8 @@ function showOptions() {
   $$('#optPal .db-step').forEach((b) => (b.onclick = () => stepPalette(+b.dataset.d)));
   $$('#optAnte .db-step').forEach((b) => (b.onclick = () => stepStartAnte(+b.dataset.d)));
   if ($('#optSkip')) $('#optSkip').onclick = toggleSkipBeacon;
+  $$('#optPadSpeed .db-step').forEach((b) => (b.onclick = () => { Pad.stepSpeed(+b.dataset.d); sfx('select'); showOptions(); }));
+  if ($('#optPadSwap')) $('#optPadSwap').onclick = () => { Pad.toggleSwap(); sfx('select'); showOptions(); };
   $('#optRules').onclick = () => { sfx('select'); showTitleRules(optInMatch); };
   $('#optBack').onclick = () => {
     sfx('select');

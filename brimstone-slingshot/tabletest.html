@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Table Test</title>
+  <!-- One battle on the 2.5D table (js/table.js, js/tabletest.js): the real rules and AI, none of the
+       game around them. Not linked from the game. ?deck=0..5 picks your deck, ?rival=<id> your rival.
+       The side panels, hand tray, toast, banner and drag arrow are the battle screen's own (index.html,
+       style.css), pinned to the window's edges here instead of the 1280 x 720 stage. -->
+  <link href="https://fonts.googleapis.com/css2?family=Silkscreen&family=VT323&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <style>
+    html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg); }
+    #tbStage { position: fixed; inset: 0; width: 100vw; height: 100vh; box-sizing: border-box; }
+    #left, #right, #hand, #toast, #banner, #dragArrow { position: fixed; }
+    #right { left: auto; right: 12px; }
+    /* The hand: the battle screen's tray, docked along the bottom edge and shorter. The cards show their top
+       two thirds and run off the screen; a hovered card lifts on its own to show whole. The tray only moves
+       to slide away on your rival's turn (js/tabletest.js). */
+    #hand { left: 12px; right: 12px; top: auto; bottom: 0; width: auto; height: 148px; z-index: 5; border-bottom: 0; align-items: flex-start; padding-top: 8px; }
+    /* 22 px: as far as render.js's hover tilt follows a lifted hand card, so it can't flicker. */
+    #hand .card.tilting, #hand .card.selected { translate: 0 -22px; z-index: 6; }
+    #toast { left: 50%; top: auto; bottom: 236px; }
+    #dragArrow { z-index: 155; }
+    body.dragging, body.dragging * { cursor: grabbing !important; }
+    #tbEnd { position: fixed; inset: 0; z-index: 170; display: none; align-items: center; justify-content: center; }
+    #tbEnd > .panel { padding: 16px 28px; text-align: center; font-size: 20px; }
+    #tbEnd h2 { font: 20px var(--pixel); margin: 0 0 8px; }
+  </style>
+</head>
+<body>
+  <canvas id="bgfx" style="display: none"></canvas>
+  <div id="tbStage" class="bw-stage"></div>
+  <div id="left">
+    <div id="cpuPanel" class="ppanel panel" data-player="1"></div>
+    <div id="turnBox" class="panel">
+      <button id="bell"><img id="bellImg" alt=""></button>
+      <div id="turnInfo"></div>
+    </div>
+    <div id="youPanel" class="ppanel panel" data-player="0"></div>
+  </div>
+  <div id="right">
+    <div id="inspector" class="panel"></div>
+    <div id="log" class="panel"></div>
+  </div>
+  <div id="hand"></div>
+  <div id="banner"></div>
+  <div id="toast"></div>
+  <div id="tbEnd"></div>
+
+  <script>
+  // Stand-ins for game globals the scripts below touch but this page never uses (as builder.html):
+  // the run map's width (js/run.js) and the DOM helpers (js/ui.js) the options screen's keys call.
+  const RUN_MAP_W = 836;
+  const $ = (s) => document.querySelector(s);
+  const $$ = (s) => document.querySelectorAll(s);
+  </script>
+  <script src="js/data.js"></script>
+  <script src="js/custom.js"></script>
+  <script src="js/render.js"></script>
+  <script src="js/engine.js"></script>
+  <script src="js/ai.js"></script>
+  <script src="js/crt.js"></script>
+  <script src="js/options.js"></script>
+  <script src="js/runmap.js"></script>
+  <script src="js/scene.js"></script>
+  <script>
+  // The swirl paint behind the table, run as the game's CRT loop runs it.
+  Backdrop.init();
+  Backdrop.setPalette(Palette.cur.bd);
+  (function swirl(now) { Backdrop.frame((now - CRT.t0) / 1000); requestAnimationFrame(swirl); })(performance.now());
+  </script>
+  <script src="js/table.js"></script>
+  <script src="js/tabletest.js"></script>
+</body>
+</html>

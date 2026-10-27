@@ -15,6 +15,7 @@ const PixelEditor = (() => {
   let grid = [];           // 16 arrays of 16 chars
   let history = [];
   let paint = '#', tool = 'pen', mirror = false;
+  let drawing = false, drawPaint = '#'; // a stroke under way, and its paint (the eraser on a right drag)
   let onChange = () => {}, onToast = () => {};
   let cv, ctx;
 
@@ -89,6 +90,20 @@ const PixelEditor = (() => {
     qa('#tools [data-tool]').forEach((b) => (b.onclick = () => { tool = b.dataset.tool; renderTools(); }));
     q('#mirrorBtn').onclick = () => { mirror = !mirror; renderTools(); draw(); };
   }
+
+  /* L1 / R1 on a pad (Q / W on a keyboard): the previous or next paint, eraser included, wrapping
+     round. Taken anywhere while the editor is up, so you can flip mid-stroke. A stroke under way
+     keeps going in the new paint. */
+  document.addEventListener('padbumper', (e) => {
+    if (!cv || !cv.isConnected || !cv.offsetParent) return;
+    e.preventDefault();
+    const i = PAINTS.findIndex(([ch]) => ch === paint);
+    paint = PAINTS[(i + e.detail + PAINTS.length) % PAINTS.length][0];
+    if (tool === 'pick') tool = 'pen';
+    if (drawing) drawPaint = paint;
+    sfx('select');
+    renderTools();
+  });
 
   function undo() {
     const prev = history.pop();
@@ -228,7 +243,8 @@ const PixelEditor = (() => {
     ctx = cv.getContext('2d');
     grid = blankGrid();
 
-    let drawing = false, drawPaint = '#';
+    drawing = false;
+    cv.dataset.padGrid = SIZE; // the pad cursor (js/pad.js) frames and steps one pixel at a time here
     cv.addEventListener('contextmenu', (e) => e.preventDefault());
     cv.addEventListener('pointerdown', (e) => {
       const [x, y] = cellAt(e);

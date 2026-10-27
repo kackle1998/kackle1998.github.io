@@ -51,6 +51,7 @@
   <h1>SCENE BUILDER</h1>
   <p class="bd-sub" id="bdSub"></p>
   <p class="bd-err" id="bdErr"></p>
+  <canvas id="bgfx" style="display: none"></canvas>
   <div class="bd-wrap">
     <div class="bd-panel">
       <h2>START FROM</h2>
@@ -94,9 +95,9 @@
 
   <script>
   // Stand-ins for game globals the scene scripts touch but scenes never use, so the whole game
-  // needn't boot: the menu backdrop (js/crt.js), the run map's width (js/run.js), and the DOM
-  // helpers (js/ui.js) that the options screen's key handler calls on every keypress.
-  const Backdrop = { setPalette() {} };
+  // needn't boot: the run map's width (js/run.js), and the DOM helpers (js/ui.js) that the
+  // options screen's key handler calls on every keypress. The swirl backdrop (js/crt.js) is real:
+  // the 'swirl' backdrop (Scene.swirl) copies it into each stage.
   const RUN_MAP_W = 836;
   const $ = (s) => document.querySelector(s);
   const $$ = (s) => document.querySelectorAll(s);
@@ -105,6 +106,7 @@
   <script src="js/custom.js"></script>
   <script src="js/render.js"></script>
   <script src="js/engine.js"></script>
+  <script src="js/crt.js"></script>
   <script src="js/options.js"></script>
   <script src="js/runmap.js"></script>
   <script src="js/scene.js"></script>
@@ -163,7 +165,7 @@
     };
     // The parts' names in the panel (Scene.PARTS has them all; a new one shows by its own name).
     const NAMES = { ash: 'ash', flagstones: 'flagstones', felt: 'casino felt', cracks: 'cracked basalt', path: 'dirt path', grate: 'iron grate', cobbles: 'cobbles', planks: 'planks', checker: 'checker tiles', dunes: 'dune sand', columns: 'basalt columns', ossuary: 'ossuary', forest: 'forest floor', midway: 'carnival midway',
-      sky: 'orrery sky', crypt: 'crypt wall', forge: 'factory hall', carnival: 'carnival rides',
+      sky: 'orrery sky', swirl: 'swirl paint (the game\'s backdrop)', crypt: 'crypt wall', forge: 'factory hall', carnival: 'carnival rides',
       spires: 'spires', slots: 'slot cabinets', vents: 'spikes and vents', graves: 'trees and headstones', woods: 'leafy trees',none: 'none' };
     const named = (k) => NAMES[k] || k;
     // The critter sliders (Scene.crosser's life): [key, label, min %, max %, step, standard %].
@@ -414,6 +416,10 @@
     window.addEventListener('error', (e) => fail(e.message));
     return { add: (d) => designs.push(d), start, land, U, GY, D_ACT, D_FIG, mx, LAND };
   })();
+  // The swirl paint, run as the game's CRT loop runs it (Scene.swirl copies it into the stages).
+  Backdrop.init();
+  Backdrop.setPalette(Palette.cur.bd);
+  (function swirl(now) { Backdrop.frame((now - CRT.t0) / 1000); requestAnimationFrame(swirl); })(performance.now());
   Builder.start();
   </script>
 </body>
