@@ -347,6 +347,81 @@ const SPRITES = {
     '..#ww######ww#..', '..#ww#w##w#ww#..', '#+###wwwwww###+#', '#++###wwww###++#',
     '#+++#-#ww#-#+++#', '#+++#--ww--#+++#', '#++++#-ww-#++++#', '#++++#-##-#++++#',
   ],
+  /* Ante 1, the casino */
+  rival_lacroix: [
+    '..........-.....', '.........--.....', '....######-#....', '...#++++++++#...',
+    '.##############.', '...#wwwwwwww#...', '...#w##ww##w#...', '...#wwwwwwww#...',
+    '...#wwwwwww#w#..', '...#ww#--#ww#...', '....#wwwwww#....', '.....######.....',
+    '...#w#w##w#w#...', '.##++++++++++##.', '#++++-++++-++++#', '#++++-++++-++++#',
+  ],
+  rival_sal: [
+    '................', '.....######.....', '....#++++++#....', '....#------#....',
+    '.##############.', '...#wwwwwwww#...', '...##########...', '..#####ww#####..',
+    '...#wwwwwwww#...', '...#wwww#www#...', '...#w######w#--.', '....#wwwwww#....',
+    '.....######.....', '..###++--++###..', '.#+++++--+++++#.', '#++++++--++++++#',
+  ],
+  rival_bill: [
+    '............##..', '...........#ww#.', '............##..', '.###########.#..',
+    '.#---------#.#..', '.#-#######-#.#..', '.#-#ww#ww#-#.#..', '.#-#w##w##-#.#..',
+    '.#-#######-#.#..', '.#---------###..', '.#---####--#....', '.#---------#....',
+    '.###########....', '..#+++++++++#...', '.#+++#+++#+++#..', '#++++#+++#++++#.',
+  ],
+  rival_croupier: [
+    '................', '....########....', '...#++++++++#...', '..############..',
+    '.#------------#.', '..#wwwwwwwwww#..', '..#ww##ww##ww#..', '..#wwwwwwwwww#..',
+    '..#wwwww#wwww#..', '..#ww++++++ww#..', '...#wwwwwwww#...', '....########....',
+    '.....#w##w#.....', '.###w##++##w###.', '#+++ww#++#ww+++#', '#+++ww#--#ww+++#',
+  ],
+  /* Ante 2, celestial */
+  rival_seraphine: [
+    '....--------....', '................', '#.....####.....#', '##..#wwwwww#..##',
+    '#w#.#wwwwww#.#w#', '#ww##w#ww#w##ww#', '#www#wwwwww#www#', '#www#ww--ww#www#',
+    '#www.#wwww#.www#', '.#ww..####..ww#.', '.#ww#.#ww#.#ww#.', '..#w#-#ww#-#w#..',
+    '...##--##--##...', '...#--------#...', '..#----------#..', '.#------------#.',
+  ],
+  rival_lumen: [
+    '.......##.......', '......#ww#......', '......#ww#......', '.....#wwww#.....',
+    '######wwww######', '#wwwwwwwwwwwwww#', '.#wwww#ww#wwww#.', '..#wwwwwwwwww#..',
+    '...#ww#--#ww#...', '...#wwwwwwww#...', '..#wwww##wwww#..', '..#www#..#www#..',
+    '.#ww#......#-w#.', '.#w#........#-#.', '.##..........#..', '..-.......-.....',
+  ],
+  rival_twins: [
+    '................', '..####....####..', '.#wwww#..#++++#.', '#wwwwww##++++++#',
+    '#w#ww#w##+#++#+#', '#wwwwww##++++++#', '#ww##ww##++--++#', '.#wwww#..#++++#.',
+    '..####....####..', '...#w#....#+#...', '.##############.', '#wwwwwww+++++++#',
+    '#ww-wwww++++-++#', '#wwwwwww+++++++#', '#wwwwwww+++++++#', '################',
+  ],
+  rival_archon: [
+    '.....######.....', '....#------#....', '.....######.....', '.....#++++#.....',
+    '....#++++++#....', '...#++#ww#++#...', '...#+#wwww#+#...', '...#+#w##w#+#...',
+    '...#+#wwww#+#...', '...#++#ww#++#...', '..#++++##++++#..', '.#++++++++++++#.',
+    '#--#++++++++#--#', '####++++++++####', '...#++++++++#...', '..#++++++++++#..',
+  ],
+  /* Ante 3, witchy */
+  rival_grimalkin: [
+    '..#..........#..', '.#+#........#+#.', '.#++#......#++#.', '.#+++######+++#.',
+    '#++++++++++++++#', '#++ww++++++ww++#', '#++w#++++++#w++#', '#++++++##++++++#',
+    '#+++++#++#+++++#', '.#++++++++++++#.', '..##++++++++##..', '....#--ww--#....',
+    '...#+++ww+++#...', '..#++++++++++#..', '.#++++++++++++#.', '#++++++++++++++#',
+  ],
+  rival_hex: [
+    '......##........', '.....#++#.......', '.....#+++#......', '....#++++#......',
+    '....#+++++#.....', '.##############.', '..#wwwwwwwwww#..', '..#w##wwww##w#..',
+    '..#wwwww##www#..', '..#wwwwww##ww#..', '..#ww####www#...', '...#wwwwwwww#...',
+    '....##wwww##....', '..###++++++###..', '.#+++#++++#+++#.', '#++++#++++#++++#',
+  ],
+  rival_bramble: [
+    '#..#........#..#', '.#.#..#..#..#.#.', '..##..#..#..##..', '...###+##+###...',
+    '...#++++++++#...', '..#++-++++-++#..', '..#+ww++++ww+#..', '..#+#w++++w#+#..',
+    '..#++++++++++#..', '..#+-######-+#..', '..#++#w##w#++#..', '...#++++++++#...',
+    '.#..##++++##..#.', '.-#..#++++#..#-.', '..#.#++++++#.#..', '..###++++++###..',
+  ],
+  rival_strawman: [
+    '................', '.....######.....', '....#------#....', '....#------#....',
+    '-##############-', '..#++++++++++#..', '..#+##++++##+#..', '..#+##++++##+#..',
+    '..#++++++++++#..', '..#+#-#-#-#-+#..', '..#++######++#..', '...#++++++++#...',
+    '.-.-########-.-.', '################', '...#w-w--w-w#...', '...#-w-ww-w-#...',
+  ],
   rival_amunet: [
     '.......##.......', '.....######.....', '....#-+-+-+#....', '...#-+-+-+-+#...',
     '..#-+######+-#..', '..#+#ww--ww#+#..', '..#-#w##w--#-#..', '..#+#-www-w#+#..',
@@ -367,6 +442,14 @@ const SPRITES = {
     '...#++####++#...', '..#+########+#..', '..#+###w####+#..', '-.#+##www###+#.w',
     '..#+###w####+#..', '...#+######+#...', '..#+#+####+#+#..', '.#++#+w++w+#++#.',
     '.#++#++++++#++#.', '#+++#+w+++-#+++#', '#+++#++++++#+++#', '################',
+  ],
+  // The Fungus Witch, the third ante's (final) boss: a toadstool cap for a hat, white spots on
+  // it, gills under the brim, a grin, a buttoned robe.
+  witch: [
+    '......####......', '....##-ww-##....', '...#-w----w-#...', '..#----ww----#..',
+    '.#-ww-------w-#.', '################', '...#+-+-+-+-+#..', '....#+w++w+#....',
+    '....#++++++#....', '.....#+ww+#.....', '...##+####+##...', '..#++#-++-#++#..',
+    '.#++#+-++-+#++#.', '.#+#++++++++#+#.', '#++#+w+++w++#++#', '################',
   ],
   /* ---------- spare character art, not used yet ---------- */
   // A hooded stargazer: starry hood, spectacles, a white beard spilling onto the robe.
@@ -779,29 +862,48 @@ const DECKS = [
   },
 ];
 
-/* Alternative opponents to the Dealer. name fits the 12-char panel; deck is an index into DECKS. */
+/* Alternative opponents to the Dealer. name fits the 12-char panel; deck is an index into DECKS.
+   ante: the ante whose battles they turn up in (js/run.js rival), matching its look: 1 the
+   casino's card sharps, 2 the celestial ante's mythic and timeless, 3 the witchy ante's swamp,
+   woods and monsters. */
 const RIVALS = [
-  { id: 'mort',     name: 'MORT SPADE',   title: 'The Gravedigger', deck: 0, sprite: 'rival_mort',     quip: 'Every hole gets filled eventually.' },
-  { id: 'fenna',    name: 'FENNA VULPE',  title: 'The Huntress',    deck: 0, sprite: 'rival_fenna',    quip: 'I can smell your fear from here.' },
-  { id: 'corvin',   name: 'DR. CORVIN',   title: 'The Plague Doctor', deck: 0, sprite: 'rival_corvin', quip: 'Hold still. This is for your health.' },
-  { id: 'marrow',   name: 'OLD MARROW',   title: 'The Restless',    deck: 1, sprite: 'rival_marrow',   quip: 'I have all the time in the world.' },
-  { id: 'boatman',  name: 'THE BOATMAN',  title: 'The Ferryman',    deck: 1, sprite: 'rival_boatman',  quip: 'Two coins. Or your whole hand.' },
-  { id: 'veil',     name: 'MADAME VEIL',  title: 'The Oracle',      deck: 1, sprite: 'rival_veil',     quip: 'I have already seen how this ends.' },
-  { id: 'goldie',   name: 'GOLDIE PICK',  title: 'The Prospector',  deck: 2, sprite: 'rival_goldie',   quip: 'There is gold in them hills. And in your pockets.' },
-  { id: 'rustwell', name: 'SIR RUSTWELL', title: 'The Iron Knight', deck: 2, sprite: 'rival_rustwell', quip: 'Have at thee! ...Once my visor unsticks.' },
-  { id: 'croak',    name: 'BARON CROAK',  title: 'The Bog Noble',   deck: 2, sprite: 'rival_croak',    quip: 'Kneel before the crown of the swamp.' },
-  { id: 'hazel',    name: 'HAZEL BRIMM',  title: 'The Hedge Witch', deck: 3, sprite: 'rival_hazel',    quip: 'Eye of newt, deck of twenty-four.' },
-  { id: 'pip',      name: 'PIP MOTLEY',   title: 'The Jester',      deck: 3, sprite: 'rival_pip',      quip: 'The joke is on you. It always is.' },
-  { id: 'tobias',   name: 'TIN TOBIAS',   title: 'The Automaton',   deck: 3, sprite: 'rival_tobias',   quip: 'CALCULATING. YOUR. DEFEAT.' },
+  { id: 'mort',     ante: 1, name: 'MORT SPADE',   title: 'The Gravedigger', deck: 0, sprite: 'rival_mort',     quip: 'Every hole gets filled eventually.' },
+  { id: 'fenna',    ante: 3, name: 'FENNA VULPE',  title: 'The Huntress',    deck: 0, sprite: 'rival_fenna',    quip: 'I can smell your fear from here.' },
+  { id: 'corvin',   ante: 3, name: 'DR. CORVIN',   title: 'The Plague Doctor', deck: 0, sprite: 'rival_corvin', quip: 'Hold still. This is for your health.' },
+  { id: 'marrow',   ante: 2, name: 'OLD MARROW',   title: 'The Restless',    deck: 1, sprite: 'rival_marrow',   quip: 'I have all the time in the world.' },
+  { id: 'boatman',  ante: 2, name: 'THE BOATMAN',  title: 'The Ferryman',    deck: 1, sprite: 'rival_boatman',  quip: 'Two coins. Or your whole hand.' },
+  { id: 'veil',     ante: 2, name: 'MADAME VEIL',  title: 'The Oracle',      deck: 1, sprite: 'rival_veil',     quip: 'I have already seen how this ends.' },
+  { id: 'goldie',   ante: 1, name: 'GOLDIE PICK',  title: 'The Prospector',  deck: 2, sprite: 'rival_goldie',   quip: 'There is gold in them hills. And in your pockets.' },
+  { id: 'rustwell', ante: 2, name: 'SIR RUSTWELL', title: 'The Iron Knight', deck: 2, sprite: 'rival_rustwell', quip: 'Have at thee! ...Once my visor unsticks.' },
+  { id: 'croak',    ante: 3, name: 'BARON CROAK',  title: 'The Bog Noble',   deck: 2, sprite: 'rival_croak',    quip: 'Kneel before the crown of the swamp.' },
+  { id: 'hazel',    ante: 3, name: 'HAZEL BRIMM',  title: 'The Hedge Witch', deck: 3, sprite: 'rival_hazel',    quip: 'Eye of newt, deck of twenty-four.' },
+  { id: 'pip',      ante: 1, name: 'PIP MOTLEY',   title: 'The Jester',      deck: 3, sprite: 'rival_pip',      quip: 'The joke is on you. It always is.' },
+  { id: 'tobias',   ante: 1, name: 'TIN TOBIAS',   title: 'The Automaton',   deck: 3, sprite: 'rival_tobias',   quip: 'CALCULATING. YOUR. DEFEAT.' },
   /* Halloween */
-  { id: 'jack',     name: 'JACK HOLLOW',  title: 'The Pumpkin King', deck: 0, sprite: 'rival_jack',   quip: 'Trick or treat? I pick both.' },
-  { id: 'vesper',   name: 'COUNT VESPER', title: 'The Vampire',     deck: 1, sprite: 'rival_vesper',   quip: 'Your life total looks... delicious.' },
-  { id: 'brutus',   name: 'BRUTUS BOLT',  title: 'The Stitched Man', deck: 2, sprite: 'rival_brutus', quip: 'BRUTUS... PLAY... CARD.' },
-  { id: 'amunet',   name: 'QUEEN AMUNET', title: 'The Mummy',       deck: 3, sprite: 'rival_amunet',   quip: 'Three thousand years, and still undefeated.' },
+  { id: 'jack',     ante: 3, name: 'JACK HOLLOW',  title: 'The Pumpkin King', deck: 0, sprite: 'rival_jack',   quip: 'Trick or treat? I pick both.' },
+  { id: 'vesper',   ante: 3, name: 'COUNT VESPER', title: 'The Vampire',     deck: 1, sprite: 'rival_vesper',   quip: 'Your life total looks... delicious.' },
+  { id: 'brutus',   ante: 3, name: 'BRUTUS BOLT',  title: 'The Stitched Man', deck: 2, sprite: 'rival_brutus', quip: 'BRUTUS... PLAY... CARD.' },
+  { id: 'amunet',   ante: 2, name: 'QUEEN AMUNET', title: 'The Mummy',       deck: 3, sprite: 'rival_amunet',   quip: 'Three thousand years, and still undefeated.' },
+  /* Ante 1, the casino */
+  { id: 'lacroix',  ante: 1, name: 'LADY LACROIX', title: 'The High Roller', deck: 3, sprite: 'rival_lacroix',  quip: 'Double or nothing, darling.' },
+  { id: 'sal',      ante: 1, name: 'SNAKE EYES',   title: 'The Dice Shark',  deck: 1, sprite: 'rival_sal',      quip: 'Roll you for it.' },
+  { id: 'bill',     ante: 1, name: 'ONE-ARM BILL', title: 'The Bandit',      deck: 2, sprite: 'rival_bill',     quip: 'INSERT. COIN. LOSE.' },
+  { id: 'croupier', ante: 1, name: 'THE CROUPIER', title: 'The House Hand',  deck: 5, sprite: 'rival_croupier', quip: 'The house thanks you.' },
+  /* Ante 2, celestial */
+  { id: 'seraphine', ante: 2, name: 'SERAPHINE',   title: 'The Six-Winged',  deck: 3, sprite: 'rival_seraphine', quip: 'Kneel. It is only polite.' },
+  { id: 'lumen',    ante: 2, name: 'LUMEN',        title: 'The Fallen Star', deck: 2, sprite: 'rival_lumen',    quip: 'I fell for this game.' },
+  { id: 'twins',    ante: 2, name: 'THE TWINS',    title: 'Sun and Moon',    deck: 4, sprite: 'rival_twins',    quip: 'We never play alone.' },
+  { id: 'archon',   ante: 2, name: 'ARCHON HALO',  title: 'The Judge',       deck: 1, sprite: 'rival_archon',   quip: 'Your hand has been weighed.' },
+  /* Ante 3, witchy */
+  { id: 'grimalkin', ante: 3, name: 'GRIMALKIN',   title: 'The Familiar',    deck: 4, sprite: 'rival_grimalkin', quip: 'The witch sends her regards.' },
+  { id: 'hex',      ante: 3, name: 'MOTHER HEX',   title: 'The Crone',       deck: 1, sprite: 'rival_hex',      quip: 'Just a pinch of curse.' },
+  { id: 'bramble',  ante: 3, name: 'NAN BRAMBLE',  title: 'The Rootwife',    deck: 0, sprite: 'rival_bramble',  quip: 'Roots run deeper than luck.' },
+  { id: 'strawman', ante: 3, name: 'OLD STRAWMAN', title: 'The Scarecrow',   deck: 5, sprite: 'rival_strawman', quip: 'Crows do not frighten me.' },
 ];
 
 /* The run's boss by ante (js/run.js runBoss): the Dealer on the first (null: no entry, so the
-   match falls back to the Dealer's name and sprite), then the Cosmologist from the second on.
+   match falls back to the Dealer's name and sprite), the Cosmologist on the second, and the
+   Fungus Witch on the third, the last ante (her `rule` replaces the rolled house rule).
    A boss plays the Dealer's rules; `deck` and `colors` fix its hand, `tag` is the shorter name
    for the narrow panels (as the Dealer's reads DEALER), `stop` is its map tooltip and `win` the
    line when you beat it. The Cosmologist's is the first three-color deck: crystals, arcana, and
@@ -811,4 +913,7 @@ const RUN_BOSSES = [
   { id: 'cosmologist', name: 'THE COSMOLOGIST', tag: 'COSMOLOGIST', title: 'The Stargazer', sprite: 'cosmologist',
     quip: 'I charted this hand before you were born.', deck: 'Star Charts', colors: ['gem', 'hat', 'paw'],
     stop: 'The Cosmologist: every star is already in place.', win: "The Cosmologist's life hit zero. The stars go quiet." },
+  { id: 'witch', name: 'THE FUNGUS WITCH', tag: 'WITCH', title: 'The Rot Mother', sprite: 'witch',
+    quip: 'Everything you grow, I eat from the roots.', deck: 'Rot Garden', colors: ['bone', 'paw'], rule: 'rot',
+    stop: 'The Fungus Witch: what grows here, rots here.', win: "The Fungus Witch's life hit zero. The spores settle." },
 ];

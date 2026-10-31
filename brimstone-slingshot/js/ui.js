@@ -1074,6 +1074,7 @@ function titleMenu() {
 
 function showTitle() {
   Music.play('menu');
+  Backdrop.setMood(1);
   const menu = titleMenu(), rec = getRecord();
   showScreen(`
     <div class="ttl">
@@ -1198,7 +1199,7 @@ document.addEventListener('keydown', (e) => {
 });
 
 /* Fighting-game VS splash before every fight, over the Dealer's Run sky and a lava river
-   (RunMap.vsBackdrop). Each fighter's portrait sits in a Brimstone Slingshot on its bank; both
+   (RunMap.vsBackdrop; in a run, `ante` swaps in that ante's backdrop). Each fighter's portrait sits in a Brimstone Slingshot on its bank; both
    draw back and fling their fighters at each other. They clash mid-air, knock each other
    back, and land on their own floating rocks; the names come up and each
    fighter's die drops from above and bounces to rest on their rock. Click to skip ahead.
@@ -1206,7 +1207,7 @@ document.addEventListener('keydown', (e) => {
    (rollForFirst, or netplay's rollOnline): the dice are #dieYou / #dieCpu, the roll's message
    and buttons go in #rollMsg / #rollBtns, vsWinner() marks the high roller and vsGo() ends it.
    you / foe: { name, deck, sprite } */
-function vsSplash(you, foe) {
+function vsSplash(you, foe, ante = 0) {
   const rig = (p, cls) => `
     <div class="vs-rig ${cls}">
       <div class="vs-fork"></div><div class="vs-band"></div><div class="vs-band"></div>
@@ -1222,7 +1223,7 @@ function vsSplash(you, foe) {
   setDie($('#dieYou'), 6);
   setDie($('#dieCpu'), 6);
   const vs = $('.vs'), C = RunMap.ramp();
-  const back = RunMap.vsBackdrop($('.vs-sky'), $('.vs-lava'), $('.vs-em'), C);
+  const back = RunMap.vsBackdrop($('.vs-sky'), $('.vs-lava'), $('.vs-em'), C, ante);
   return new Promise((resolve) => {
     const W = vs.offsetWidth, H = vs.offsetHeight, SL = RunMap.SL, VSB = RunMap.VSB, K = 3; // the fork's art at 3x
     const FACE = 112, TIP = 26 * K, STEP = 1000 / 12; // the whole scene moves at 12 fps, like the pixel art it is
@@ -1501,8 +1502,8 @@ async function tumble(el, final, frames) {
 /* Shows the roll-off. Resolves to { first, you, cpu }: first is 0 if you go first, 1 if the Dealer does. */
 /* The roll for the first turn, on the VS screen: the slingshot intro plays, then a die under
    each name. you / them: { name, deck, sprite } for vsSplash. */
-async function rollForFirst(you, them) {
-  await vsSplash(you, them);
+async function rollForFirst(you, them, ante = 0) {
+  await vsSplash(you, them, ante);
   const dieYou = $('#dieYou'), dieCpu = $('#dieCpu'), msg = $('#rollMsg'), btns = $('#rollBtns');
   if (!dieYou) return new Promise(() => {}); // the screen was closed
   msg.textContent = 'High roll chooses who goes first.';
@@ -1570,7 +1571,8 @@ async function startGame(deckDef, opts = {}) {
   Music.play('battle');
   const { first, you, cpu } = await rollForFirst(
     { name: heroName(), deck: deckDef.name, sprite: 'hero' },
-    { name: foe ? foe.name : 'DEALER', deck: cpuDeck.name, sprite: oppSprite() });
+    { name: foe ? foe.name : 'DEALER', deck: cpuDeck.name, sprite: oppSprite() },
+    opts.run && Run.s ? Run.s.circuit || 1 : 0); // a run's VS backdrop follows its ante
   setSeats(0);
   runBattle = !!opts.run;
   const g = game = new Game(deckDef, cpuDeck, first, { life: opts.life, boss: opts.boss, cpuName: foe ? foe.short : undefined });

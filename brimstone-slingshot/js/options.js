@@ -81,7 +81,7 @@ const Palette = {
 Palette.apply(Store.read(PALETTE_KEY, 'moss'));
 
 /* ---------- options screen ----------
-   Rows: sound effects, music, CRT, palette, cursor speed and swap A/B (once a gamepad is seen), starting ante and skip to beacon (debug), how to play, back. Esc goes back.
+   Rows: sound effects, music, CRT, palette, cursor speed and swap A/B (once a gamepad is seen), starting ante, jump to ante (from the run map) and skip to beacon (debug), how to play, back. Esc goes back.
    Opened from the title; over a match from the gear button, where BACK becomes
    RESUME and returns to the table; or from the run map's gear, where `backTo`
    redraws the map (in the new colors, if the palette changed). */
@@ -129,6 +129,13 @@ function showOptions() {
           <button class="db-step" data-d="1" aria-label="Later starting ante">&gt;</button>
         </div>
       </div>
+      ${optOnRunMap() ? `<div class="opt-row"><span class="opt-label">JUMP TO ANTE (DEBUG)</span>
+        <div class="opt-pal" id="optJump">
+          <button class="db-step" data-d="-1" aria-label="Jump to the ante before">&lt;</button>
+          <span class="opt-pval">${Run.s.circuit || 1}</span>
+          <button class="db-step" data-d="1" aria-label="Jump to the ante after">&gt;</button>
+        </div>
+      </div>` : ''}
       <div class="opt-row"><span class="opt-label">SKIP TO BEACON (DEBUG)</span>
         <button class="opt-check${skipBeacon() ? ' on' : ''}" id="optSkip" role="checkbox" aria-checked="${skipBeacon()}" aria-label="Skip to beacon"></button>
       </div>` : ''}
@@ -141,6 +148,7 @@ function showOptions() {
   $$('#optCrt .btn').forEach((b) => (b.onclick = () => optCrt(b.dataset.v === 'on')));
   $$('#optPal .db-step').forEach((b) => (b.onclick = () => stepPalette(+b.dataset.d)));
   $$('#optAnte .db-step').forEach((b) => (b.onclick = () => stepStartAnte(+b.dataset.d)));
+  $$('#optJump .db-step').forEach((b) => (b.onclick = () => jumpAnte(+b.dataset.d)));
   if ($('#optSkip')) $('#optSkip').onclick = toggleSkipBeacon;
   $$('#optPadSpeed .db-step').forEach((b) => (b.onclick = () => { Pad.stepSpeed(+b.dataset.d); sfx('select'); showOptions(); }));
   if ($('#optPadSwap')) $('#optPadSwap').onclick = () => { Pad.toggleSwap(); sfx('select'); showOptions(); };
@@ -193,6 +201,16 @@ const START_ANTE_KEY = 'cardgrave.debugStartAnte.v1', START_ANTE_MAX = 3;
 const startAnte = () => isDev() ? Math.max(1, Math.min(START_ANTE_MAX, Store.read(START_ANTE_KEY, 1) | 0)) : 1;
 function stepStartAnte(step) {
   Store.write(START_ANTE_KEY, Math.max(1, Math.min(START_ANTE_MAX, startAnte() + step)));
+  sfx('select');
+  showOptions();
+}
+
+/* Debug: from the run map's gear, deal the run in progress a fresh map at the ante before or
+   after (same deck, life and arcana, back at the base; Run.dealCircuit). BACK shows it. */
+const optOnRunMap = () => isDev() && !optInMatch && !!optBackTo && typeof Run !== 'undefined' && !!Run.s;
+function jumpAnte(step) {
+  const n = Math.max(1, Math.min(START_ANTE_MAX, (Run.s.circuit || 1) + step));
+  if (n !== (Run.s.circuit || 1)) Run.dealCircuit(n);
   sfx('select');
   showOptions();
 }

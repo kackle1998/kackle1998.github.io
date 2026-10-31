@@ -762,6 +762,21 @@
       return m < 0.4 && mud < 1 && bay(X >> 1, Y >> 1) < 11 && crack(X, Y) < 2 ? 3 : -1;
     };
   };
+  /* Marble, for the celestial ante: big pale slabs laid in staggered courses, ink-dark joints with a
+     lit upper-left rim, soft gray veins wandering across them, and now and then a gold star set into
+     a joint. From ante 2 the stars are thicker; at ante 3 brimstone runs in some joints. */
+  const marble = (heat) => (X, Y) => {
+    const S = 96, row = Math.floor(Y / S), y = pmod(Y, S), u = X + (row % 2) * S / 2, col = Math.floor(u / S), x = pmod(u, S);
+    const id = fh(col, row, 41);
+    if (x < 2 || y < 2) {
+      if (heat === 2 && id < 0.25) return 8;
+      return fh(Math.floor(X / 14), Math.floor(Y / 14), 42) < [0.04, 0.08, 0.08][heat] ? 8 : 3; // a gold star in the joint
+    }
+    if (x < 4 || y < 4) return 7;
+    if (x >= S - 2 || y >= S - 2) return 5;
+    const v = Math.sin(X * 0.031 + Math.sin(Y * 0.017 + id * 6) * 2.4 + id * 9) + Math.sin(Y * 0.023 - X * 0.007);
+    return id > 0.45 && Math.abs(v) < 0.03 && bay(X >> 1, Y >> 1) < 10 ? 5 : -1; // faint veins, in about half the slabs
+  };
   /* The carnival midway, out in the open: a boardwalk deck in the middle (where the booth stands and
      in front of it, out to the camera), trodden dirt either side with pebbles and tufts of dry grass,
      the two blended where they meet by Bayer dithering. Its boards run back toward the booth, so the
@@ -769,7 +784,7 @@
      scorched; at ante 3 brimstone glows in the joints. DECK: the boardwalk's middle and half width
      (plane x), where it starts (depth) and how wide the dithered blend is. */
   const DECK = { x: 720, half: 470, y0: -20, blend: 110 };
-  const midway = (heat) => {
+  const midway = (heat, boards = true) => { // boards false: the dirt alone, no boardwalk (the 'dirt' floor)
     const B = 34, L = 190, G = 72; // board width, length; the litter's cell
     const litter = cells((i, j) => {
       const q = fh(i, j, 30);
@@ -805,7 +820,7 @@
           if (Math.hypot(dx - 2, dy - 2) < 3) return 3;
         }
       }
-      if ((bay(X >> 1, Y >> 1) + 0.5) / 16 >= deck(X, Y)) return dirt(X, Y);
+      if (!boards || (bay(X >> 1, Y >> 1) + 0.5) / 16 >= deck(X, Y)) return dirt(X, Y);
       const col = Math.floor(X / B), x = pmod(X, B), v = Y + fh(col, 0, 33) * L, row = Math.floor(v / L), y = pmod(v, L), id = fh(col, row, 34);
       if (x < 2 || y < 2) return heat === 2 && fh(col, row, 35) < 0.3 && bay(X >> 1, Y >> 1) < 10 ? 8 : 2; // the joints
       if (x < 4 || y < 4) return 7; // lit on the upper left, shaded on the lower right
@@ -831,6 +846,8 @@
     ossuary: (heat) => ({ seed: 59, grit: 1200, pattern: ossuary(heat) }),
     forest: (heat) => ({ seed: 61, grit: 1000, pattern: forest(heat) }),
     midway: (heat) => ({ tones: [3, 4, 4, 5], seed: 67, grit: 900, pattern: midway(heat) }), // the dirt a shade darker than ash, so the pale deck stands out
+    dirt: (heat) => ({ tones: [3, 4, 4, 5], seed: 67, grit: 900, pattern: midway(heat, false) }), // the midway's dirt without its boardwalk (the bowling lane's Ante 3)
+    marble: (heat) => ({ tones: [5, 6, 6, 7], seed: 71, grit: 400, pattern: marble(heat) }), // pale, for the celestial ante
   };
   // Backdrops: the sky stays open (the horizon is wherever the floor ends); a wall builds itself in
   // its place at depth `front`, where the floor stops. `open` is where open floor begins in front
@@ -852,6 +869,10 @@
     vents: { draw: ART.lava, kinds: { strata: 'vent' }, size: { vent: [0.6, 1.4] } },
     graves: { draw: ART.graveyard, kinds: { spike: 'tree', basalt: 'stone', strata: 'cross' }, size: { tree: [0.6, 1.6], stone: [0.45, 0.9], cross: [0.55, 0.8] } },
     woods: { draw: ART.woods, kinds: { spike: 'pine', basalt: 'bush', strata: 'fir' }, size: { pine: [0.7, 1.6], bush: [0.6, 0.5], fir: [0.8, 1.9] } },
+    // The map's own ante looks (RunMap.propArt's look kinds): the casino ante's chip towers and giant playing
+    // cards, the celestial ante's broken marble columns and low cloud banks.
+    chips: { kinds: { spike: 'chips', basalt: 'card', strata: 'chips' }, size: { chips: [0.45, 1.1], card: [0.7, 1] } },
+    temple: { kinds: { spike: 'column', basalt: 'cloud', strata: 'column' }, size: { column: [0.75, 1], cloud: [0.5, 2] } },
   };
   // The presets: each place's floor, backdrop, features (any number), and the critters and effects
   // moving in its background. The forge's motion is its machines, part of its backdrop.
@@ -864,6 +885,7 @@
     tropicana: { floor: 'tiles', backdrop: 'tropicana', features: [], critters: [], effects: [] },
     forge: { floor: 'grate', backdrop: 'forge', features: [], critters: [], effects: [] },
     carnival: { floor: 'midway', backdrop: 'carnival', features: [], critters: [], effects: [] },
+    celestial: { floor: 'marble', backdrop: 'sky', features: ['temple'], critters: [], effects: ['glints'] }, // the celestial ante: marble under the orrery, columns and clouds
   };
   /* `horizon` (under the sky) sets how much sky shows over the features' far row: 'wall' (the
      standard: the floor runs far off and a tall row hides the horizon), 'low' (as the hand scenes:
@@ -883,6 +905,7 @@
     wall: { far: -1000 },
     low: { far: -380, ruins: { wall: 0.3, count: 150 } },
     open: { far: -380, ruins: { wall: 0, count: 110 }, clearMiddle: true },
+    edge: { far: 20, ruins: { wall: 0, count: 0 } }, // the floor stops at depth 20, where the bowling lane ends: its far edge is the horizon, as the lane's is; a wall backdrop is moved up to stand there
   };
 
   /* Build a place behind the action and return its floor (Scene.ground's { clear, shade, patch })
@@ -914,8 +937,14 @@
     const bad = [!F && 'floor ' + floor, !B && 'backdrop ' + backdrop, ...fs.filter((k) => !FEATURES[k]).map((k) => 'features ' + k),
       ...cs.filter((k) => !CRITTERS[k]).map((k) => 'critter ' + k), ...es.filter((k) => !EFFECTS[k]).map((k) => 'effect ' + k)].filter(Boolean);
     if (bad.length) throw new Error('Unknown part: ' + bad.join(', '));
-    const H = B.wall ? { far: B.front, from: B.open, ruins: { wall: 0, count: 140 } } : HORIZONS[horizon] || HORIZONS.wall, far = H.far, from = H.from || far;
-    if (B.wall) B.wall(sc, heat);
+    // The 'edge' horizon wins over a wall: the floor stops at its depth and the wall is moved up to stand there.
+    const edge = horizon === 'edge';
+    const H = B.wall && !edge ? { far: B.front, from: B.open, ruins: { wall: 0, count: 140 } } : HORIZONS[horizon] || HORIZONS.wall, far = H.far, from = H.from || far;
+    if (B.wall) {
+      const before = new Set(sc.pl.children);
+      B.wall(sc, heat);
+      if (edge) for (const el of sc.pl.children) if (!before.has(el)) el.style.top = parseFloat(el.style.top || 0) + far - B.front + 'px';
+    }
     if (B.swirl) Scene.swirl(sc);
     // Each feature set takes a share of the props, from its own random stream; the near props go with the first.
     // Before a wall they start where its open floor begins (Scene.ruins starts 40 past area.y0).
@@ -932,6 +961,7 @@
 
   Object.assign(Scene, {
     setting, warmFloor, motes, crosser, CRITTERS, EFFECTS,
+    tropArt, TROP: { W: TW, H: TH, B0: T_B0, arches: TARCH.map((a) => a.cx) }, // the casino court's wall, for Ante 1's VS backdrop (RunMap.vsBackdrop)
     SETTINGS: Object.keys(SETTINGS), PRESETS: SETTINGS,
     HORIZONS: Object.keys(HORIZONS), CLEARINGS: Object.keys(CLEARINGS),
     PARTS: { floors: Object.keys(FLOORS), backdrops: Object.keys(BACKDROPS), features: Object.keys(FEATURES), walls: Object.keys(BACKDROPS).filter((k) => BACKDROPS[k].wall) },

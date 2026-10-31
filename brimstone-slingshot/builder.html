@@ -164,9 +164,10 @@
       factory: { name: 'Factory (Rune Circle, Crystal Forge)', rows: 700, top: 178 },
     };
     // The parts' names in the panel (Scene.PARTS has them all; a new one shows by its own name).
-    const NAMES = { ash: 'ash', flagstones: 'flagstones', felt: 'casino felt', cracks: 'cracked basalt', path: 'dirt path', grate: 'iron grate', cobbles: 'cobbles', planks: 'planks', checker: 'checker tiles', dunes: 'dune sand', columns: 'basalt columns', ossuary: 'ossuary', forest: 'forest floor', midway: 'carnival midway',
+    const NAMES = { ash: 'ash', flagstones: 'flagstones', felt: 'casino felt', cracks: 'cracked basalt', path: 'dirt path', grate: 'iron grate', cobbles: 'cobbles', planks: 'planks', checker: 'checker tiles', dunes: 'dune sand', columns: 'basalt columns', ossuary: 'ossuary', forest: 'forest floor', midway: 'carnival midway', marble: 'marble',
       sky: 'orrery sky', swirl: 'swirl paint (the game\'s backdrop)', crypt: 'crypt wall', forge: 'factory hall', carnival: 'carnival rides',
-      spires: 'spires', slots: 'slot cabinets', vents: 'spikes and vents', graves: 'trees and headstones', woods: 'leafy trees',none: 'none' };
+      dirt: 'midway dirt (no boardwalk)', tiles: 'casino court checker',
+      spires: 'spires', slots: 'slot cabinets', vents: 'spikes and vents', graves: 'trees and headstones', woods: 'leafy trees', chips: 'chip towers and cards', temple: 'marble columns and clouds',none: 'none' };
     const named = (k) => NAMES[k] || k;
     // The critter sliders (Scene.crosser's life): [key, label, min %, max %, step, standard %].
     const LIFE = [['count', 'count', 0, 400, 25, 100], ['size', 'size', 50, 200, 25, 100], ['variety', 'variety', 0, 100, 10, 50], ['motion', 'motion', 0, 100, 10, 50]];
@@ -299,7 +300,7 @@
       };
       opt($('bdBack'), Scene.PARTS.backdrops.map((k) => [k, named(k)]), st.backdrop);
       $('bdBack').onchange = (e) => set('backdrop', e.target.value);
-      opt($('bdSky'), [['wall', 'far off, tall far row'], ['low', 'nearer, low far row'], ['open', 'nearer, open middle']], st.horizon);
+      opt($('bdSky'), [['wall', 'far off, tall far row'], ['low', 'nearer, low far row'], ['open', 'nearer, open middle'], ['edge', 'ends where the bowling lane ends']], st.horizon);
       $('bdSky').onchange = (e) => set('horizon', e.target.value);
       opt($('bdClear'), [['wide', 'wide (the standard)'], ['tight', 'tight, features nearer'], ['none', 'none, up to the action']], st.clearing);
       $('bdClear').onchange = (e) => set('clearing', e.target.value);

@@ -91,9 +91,14 @@ const RunMap = (() => {
     rows.forEach((r, j) => [...r].forEach((ch, i) => { if (map[ch]) { x.fillStyle = map[ch]; x.fillRect(ox + i, oy + j, 1, 1); } }));
   }
 
-  /* ---------- static ground: lit speckle, cracks, and an orrery's rings ---------- */
-  function drawGround(cv, R, C) {
-    const GR = [2, 3, 4, 5]; // ground tones by light level: dark .. artbg
+  /* ---------- static ground: lit speckle, then the ante's floor (see LOOKS) ---------- */
+  /* The casino's is a carpet: a diamond lattice with a suit pip in every other diamond, gold and
+     ink by turns, and no cracks. The celestial one is the old orrery floor, a step paler, with
+     clouds lying on it (lit on top, dithered underneath). The witchy one is a bog: moss patches
+     dithered in, the cracks become roots, tufts of grass and small toadstools. Each look draws on
+     the same random draws (only whether they show changes), so the props lay out the same. */
+  function drawGround(cv, R, C, look = 'celestial') {
+    const GR = look === 'celestial' ? [3, 4, 5, 6] : [2, 3, 4, 5]; // ground tones by light level
     const B = new Uint8Array(CW * CH);
     for (let y = 0; y < CH; y++) for (let x = 0; x < CW; x++) {
       let l = lvl(lightAt(x * 2, y * 2), x, y);
@@ -109,19 +114,62 @@ const RunMap = (() => {
         for (let i = 0; i < L; i++) { a += (R() - 0.5) * 0.9; x += Math.cos(a); y += Math.sin(a); put(x, y, f); }
       }
     };
-    walk(80, (v) => Math.max(1, v - 2));
-    walk(14, () => (R() < 0.45 ? 8 : 1));
-    // Dotted orbits cut round the casino, each with a small planet somewhere along it, and a few
-    // four-point stars between them.
-    const OX = CW / 2, OY = 35;
+    const sky = look === 'celestial', keep = (v) => v;
+    if (look === 'witchy') {
+      // Moss: three crossing waves, dithered a step and two steps darker where they pile up.
+      for (let y = 0; y < CH; y++) for (let x = 0; x < CW; x++) {
+        const n = Math.sin(x * 0.11 + y * 0.03) + Math.sin(y * 0.09 - x * 0.04) + Math.sin((x + y) * 0.06);
+        const d = BAY[(x & 3) + (y & 3) * 4] < 8;
+        if (n > 1.3) B[y * CW + x] = Math.max(1, B[y * CW + x] - (d ? 2 : 1));
+        else if (n > 0.6 && d) B[y * CW + x] = Math.max(1, B[y * CW + x] - 1);
+      }
+    }
+    walk(80, look === 'casino' ? keep : (v) => Math.max(1, v - 2));
+    walk(14, look === 'casino' ? (v) => (R(), v) : () => (R() < 0.45 ? 8 : 1));
+    if (look === 'casino') {
+      // The carpet: lattice lines a step darker, LAT canvas px apart, and the pips.
+      const LAT = 20, P = [[0, -1], [-1, 0], [0, 0], [1, 0], [0, 1]];
+      for (let y = 0; y < CH; y++) for (let x = 0; x < CW; x++) {
+        if ((x + y) % LAT === 0 || (x - y + CH * LAT) % LAT === 0) B[y * CW + x] = Math.max(1, B[y * CW + x] - 1);
+      }
+      for (let y = LAT / 2, j = 0; y < CH; y += LAT / 2, j++) for (let x = ((j + 1) % 2) * LAT / 2 + LAT / 2, i = 0; x < CW; x += LAT, i++) {
+        const gold = (i + j) % 2 === 0;
+        for (const [u, v] of P) put(x + u, y + v, () => (gold ? 8 : 1));
+        if (!gold) { put(x - 1, y + 1, () => 1); put(x + 1, y + 1, () => 1); }
+      }
+    }
+    // Dotted orbits cut round the boss's house, each with a small planet somewhere along it, and a
+    // few four-point stars between them: only on the celestial floor.
+    const OX = CW / 2, OY = 35, orb = sky ? put : () => {};
     for (let rr = 55; rr < 580; rr += 55) {
-      for (let a = 0, i = 0; a < 6.283; a += 1 / rr, i++) if (i % 2 === 0) put(OX + Math.cos(a) * rr, OY + Math.sin(a) * rr * 0.72, (v) => Math.max(1, v - 1));
+      for (let a = 0, i = 0; a < 6.283; a += 1 / rr, i++) if (i % 2 === 0) orb(OX + Math.cos(a) * rr, OY + Math.sin(a) * rr * 0.72, (v) => Math.max(1, v - 1));
       const a = 0.25 + R() * 2.64, px = OX + Math.cos(a) * rr | 0, py = OY + Math.sin(a) * rr * 0.72 | 0;
-      for (let u = -1; u < 3; u++) for (let v = -1; v < 3; v++) put(px + u, py + v, () => (u >= 0 && u < 2 && v >= 0 && v < 2 ? 7 : 1));
+      for (let u = -1; u < 3; u++) for (let v = -1; v < 3; v++) orb(px + u, py + v, () => (u >= 0 && u < 2 && v >= 0 && v < 2 ? 7 : 1));
     }
     for (let k = 0; k < 24; k++) {
       const x = R() * CW | 0, y = R() * CH | 0;
-      for (const [u, v] of [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]]) put(x + u, y + v, () => 7);
+      for (const [u, v] of [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]]) orb(x + u, y + v, () => 7);
+    }
+    // Hashed placements (no random draws), so the props lay out the same on every floor.
+    const spots = (n, k) => Array.from({ length: n }, (_, i) => [noise(i, k) * CW | 0, noise(k, i) * CH | 0]);
+    if (sky) {
+      // Clouds: flattened ellipses a step paler, the lower part dithered back down.
+      for (const [cx, cy] of spots(Math.round(26 * CH / 510), 71)) {
+        const rx = 12 + noise(cx, cy) * 16, ry = rx * 0.45;
+        for (let v = -Math.ceil(ry); v <= ry; v++) for (let u = -Math.ceil(rx); u <= rx; u++) {
+          if ((u / rx) ** 2 + (v / ry) ** 2 > 1) continue;
+          const x = cx + u, y = cy + v, low = v > ry * 0.2 && BAY[(x & 3) + (y & 3) * 4] < 8;
+          put(x, y, (b) => (low ? b : Math.min(7, b + 1)));
+        }
+      }
+    }
+    if (look === 'witchy') {
+      // Grass tufts (a dark V) and toadstools (a 3-wide cap, a pale spot, a stem).
+      for (const [x, y] of spots(Math.round(160 * CH / 510), 72)) { put(x - 1, y, () => 1); put(x + 1, y, () => 1); put(x, y + 1, () => 1); }
+      for (const [x, y] of spots(Math.round(40 * CH / 510), 73)) {
+        put(x - 1, y, () => 2); put(x, y, () => 2); put(x + 1, y, () => 7); put(x - 1, y - 1, () => 3); put(x, y - 1, () => 7); put(x + 1, y - 1, () => 3);
+        put(x, y + 1, () => 6); put(x, y + 2, () => 6);
+      }
     }
     const g = cv.getContext('2d'), im = g.createImageData(CW, CH), dd = im.data, RGB = C.map(rgb);
     for (let i = 0; i < B.length; i++) { const c = RGB[B[i]]; dd[i * 4] = c[0]; dd[i * 4 + 1] = c[1]; dd[i * 4 + 2] = c[2]; dd[i * 4 + 3] = 255; }
@@ -138,11 +186,11 @@ const RunMap = (() => {
      canvas, repainted only when its look changes. Sizes in canvas px; 1 px = 2 map units. */
   const PIPS = { 1: [[1, 1]], 2: [[0, 0], [2, 2]], 3: [[0, 0], [1, 1], [2, 2]], 4: [[0, 0], [2, 0], [0, 2], [2, 2]],
     5: [[0, 0], [2, 0], [1, 1], [0, 2], [2, 2]], 6: [[0, 0], [2, 0], [0, 1], [2, 1], [0, 2], [2, 2]] };
-  const MARK = { dice: { w: 26, h: 86 }, chips: { w: 30, h: 58 }, armillary: { w: 40, h: 82 }, orb: { w: 40, h: 64 }, arcana: { w: 40, h: 110 } };
-  // By ante: the first, then every later one.
+  const MARK = { dice: { w: 26, h: 86 }, chips: { w: 30, h: 58 }, armillary: { w: 40, h: 82 }, orb: { w: 40, h: 64 }, arcana: { w: 40, h: 110 }, well: { w: 40, h: 75 }, frog: { w: 44, h: 68 } };
+  // By ante: the casino's, the celestial ante's, then the witchy ante's (a cursed well and a frog idol).
   // NOTE: the armillary is unused for now. It was the first ante's second landmark until the poker
   // chip replaced it; its art (armillary() in landmarks) is kept for a later ante or set piece.
-  const MARK_PAIRS = [['dice', 'chips'], ['orb', 'arcana']];
+  const MARK_PAIRS = [['dice', 'chips'], ['orb', 'arcana'], ['well', 'frog']];
   const CHIP_TOSS_EVERY = 3; // seconds between a tossed chip's tosses (see chips() in landmarks)
   const MARK_ROWS_APART = 1.5; // ideally, how many rows apart (up or down the board) landmarks stand
   const MARK_COLS_APART = 0.75; // ...and how many beacon gaps apart across it (see show())
@@ -315,11 +363,94 @@ const RunMap = (() => {
       for (const [x, cw, y, i] of cells) R(x, y, cw, 2, back || i >= 3 ? 8 : 7);
       for (let q = 0; q < 4; q++) { const a = q / 4 * 6.283 + step * 0.4; if (Math.sin(a) > -0.2) { R(cx + Math.cos(a) * 12, cy + Math.sin(a) * 3, 1, 1, 7); if (q % 2) R(cx + Math.cos(a) * 12 + 1, cy + Math.sin(a) * 3, 1, 1, 6); } }
     };
+    // Cursed well (the witchy ante): a brick well lit from the left, a dark mouth under a thatched
+    // roof on two posts, a bucket on its rope from the crank, and gold wisps curling up out of the
+    // dark, stepping 5 times a second and never in front of the bucket.
+    const well = ({ R, seed }, t) => {
+      const Q = (u, v, rw, rh, c) => R(u, v - 21, rw, rh, c), f = Math.floor(t * 5) + seed * 5;
+      for (let y = 66; y < 96; y++) for (let x = 7; x <= 33; x++) {
+        const row = Math.floor((y - 66) / 4), mortar = (y - 66) % 4 === 0 || (x - 7 + (row % 2) * 3) % 7 === 0, fr = (x - 7) / 26;
+        Q(x, y, 1, 1, x === 7 || x === 33 || y === 95 ? 1 : mortar ? 3 : fr < 0.3 ? 6 : fr < 0.7 ? 5 : 4);
+      }
+      Q(6, 63, 28, 4, 1); Q(7, 64, 26, 1, 6); Q(8, 65, 24, 1, 0);
+      Q(9, 34, 3, 30, 1); Q(10, 35, 1, 28, 4); Q(28, 34, 3, 30, 1); Q(29, 35, 1, 28, 3);
+      for (let y = 22; y < 37; y++) { const hw = 2 + Math.round((y - 22) * 1.15); Q(20 - hw, y, hw * 2, 1, 1); if (y < 36) Q(21 - hw, y, hw * 2 - 2, 1, y % 3 === 0 ? 2 : 3); }
+      Q(10, 44, 20, 2, 1); Q(11, 44, 18, 1, 4); Q(26, 42, 2, 6, 1);
+      Q(20, 46, 1, 8, 1); Q(17, 54, 7, 6, 1); Q(18, 55, 5, 4, 3); Q(18, 55, 5, 1, 5);
+      for (let i = 0; i < 3; i++) {
+        const p = (f + i * 4) % 12, y = Math.round(62 - p * 2.2), x = 14 + i * 6 + Math.round(Math.sin(p * 0.9 + i) * 2);
+        if (y <= 36 || (x >= 16 && x <= 24 && y >= 46 && y <= 60)) continue;
+        Q(x, y, 2, 2, p > 8 ? 4 : 8); Q(x, y, 1, 1, 7);
+      }
+    };
+    // Frog idol (the witchy ante): a squat stone frog on a plinth, a gold crown between its eyes,
+    // and a fly buzzing a figure-eight in front of it. Over a 5 s loop at 8 steps a second its eyes
+    // follow the fly, its throat puffs, the tongue snaps out in one step and reels the fly back in
+    // two, it gulps with a pleased squint, then a new fly buzzes in from the edge.
+    const FROG_N = 40, FROG_MOUTH = [20, 76];
+    const flyAt = (f) => { const a = f * 0.45; return [32 + Math.round(Math.sin(a) * 4), 42 + Math.round(Math.sin(a * 2) * 2)]; };
+    const flyIn = (f) => { const k = (f - 30) / (FROG_N - 30), [px, py] = flyAt(FROG_N); return [Math.round(46 + (px - 46) * k), Math.round(30 + (py - 30) * k)]; };
+    // The tongue's points, a shallow arc from the mouth toward (tx, ty), s of the way out.
+    const lick = (tx, ty, s) => {
+      const [mx, my] = FROG_MOUTH, cx = (mx + tx) / 2, cy = Math.min(my, ty) - 2, pts = [];
+      for (let i = 0; i <= 8; i++) { const u = i / 8 * s; pts.push([Math.round((1 - u) * (1 - u) * mx + 2 * (1 - u) * u * cx + u * u * tx), Math.round((1 - u) * (1 - u) * my + 2 * (1 - u) * u * cy + u * u * ty)]); }
+      return pts;
+    };
+    const frogPose = (f) => {
+      const tgt = flyAt(19);
+      if (f < 17) return { fly: flyAt(f), look: flyAt(f) };
+      if (f < 19) return { fly: flyAt(f), look: flyAt(f), puff: 1 };
+      if (f === 19) return { open: 1, tongue: lick(...tgt, 1), look: tgt };
+      if (f === 20) { const p = lick(...tgt, 0.55); return { open: 1, tongue: p, fly: p[p.length - 1] }; }
+      if (f === 21) return { open: 1, tongue: lick(...tgt, 0.2) };
+      if (f < 25) return { gulp: 1, squint: 1 };
+      if (f < 30) return { squint: f < 27 };
+      return { fly: flyIn(f), look: flyIn(f) };
+    };
+    const frog = ({ R, seed }, t) => {
+      const Q = (u, v, rw, rh, c) => R(u, v - 28, rw, rh, c), q = (u, v, c) => Q(u, v, 1, 1, c);
+      const f = Math.floor(t * 8), st = frogPose((f + seed * 17) % FROG_N);
+      const ball = (cx, cy, rx, ry, lo, hi) => {
+        for (let dy = -ry; dy <= ry; dy++) for (let dx = -rx; dx <= rx; dx++) {
+          const nx = dx / rx, ny = dy / ry, r = nx * nx + ny * ny;
+          if (r > 1) continue;
+          const l = -0.5 * nx - 0.5 * ny + 0.7 * Math.sqrt(1 - r), edge = ((Math.abs(dx) + 1) / rx) ** 2 + ny * ny > 1 || ((Math.abs(dy) + 1) / ry) ** 2 + nx * nx > 1;
+          q(cx + dx, cy + dy, edge ? 1 : Math.max(lo, Math.min(hi, lo + Math.floor(l * (hi - lo + 1) + BAY[((cx + dx) & 3) + ((cy + dy) & 3) * 4] / 16 - 0.5))));
+        }
+      };
+      const line = (x0, y0, x1, y1, c, w = 1) => { const n = Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0), 1); for (let i = 0; i <= n; i++) Q(x0 + (x1 - x0) * i / n - (w >> 1), y0 + (y1 - y0) * i / n - (w >> 1), w, w, c); };
+      // The plinth, the body (puffed a pixel before the snap), the throat swelling as it gulps.
+      Q(3, 86, 34, 9, 1); Q(4, 87, 32, 7, 5); Q(4, 87, 32, 1, 6); Q(4, 87, 1, 7, 6); Q(6, 84, 28, 3, 1); Q(7, 85, 26, 1, 6);
+      ball(20, 72, 15, 12 + (st.puff ? 1 : 0), 3, 6);
+      if (st.gulp) ball(20, 81, 7, 3, 5, 7);
+      // Eyes: pupils turned toward the fly, or squinting shut.
+      const lk = st.look || [32, 44];
+      for (const ex of [12, 28]) {
+        ball(ex, 60, 5, 5, 4, 6);
+        if (st.squint) { Q(ex - 4, 57, 9, 3, 4); Q(ex - 4, 60, 9, 1, 1); continue; }
+        const ox = Math.max(-1, Math.min(1, Math.round((lk[0] - ex) / 8))), oy = lk[1] < 56 ? -1 : 0;
+        Q(ex - 2 + ox, 60 + oy, 4, 2, 1); q(ex - 2 + ox, 58 + oy, 7);
+      }
+      Q(17, 55, 7, 3, 8); q(17, 54, 8); q(20, 53, 8); q(23, 54, 8); Q(17, 57, 7, 1, 1);
+      if (st.open) { Q(9, 75, 22, 3, 1); Q(11, 76, 18, 1, 2); } else { line(8, 74, 14, 77, 1); line(14, 77, 26, 77, 1); line(26, 77, 32, 74, 1); }
+      Q(7, 80, 8, 4, 1); Q(8, 81, 6, 2, 4); Q(25, 80, 8, 4, 1); Q(26, 81, 6, 2, 4);
+      // The tongue: an ink-edged gold ribbon with a round tip.
+      if (st.tongue) {
+        const p = st.tongue;
+        for (const pass of [0, 1]) for (let i = 1; i < p.length; i++) line(p[i - 1][0], p[i - 1][1], p[i][0], p[i][1], pass ? 8 : 1, pass ? 1 : 3);
+        const [tx, ty] = p[p.length - 1];
+        Q(tx - 2, ty - 2, 5, 5, 1); Q(tx - 1, ty - 1, 3, 3, 8); q(tx - 1, ty - 1, 7);
+      }
+      // The fly, its wings beating up and down a step at a time.
+      if (st.fly) { const [x, y] = st.fly, up = f % 2; Q(x, y, 2, 1, 1); q(x, y - 1 - up, 6); q(x + 1, y - 1 - up, 6); }
+    };
     // A landmark's look only changes now and then (an armillary 4 times a second, an orb or
     // obelisk 6, a dice tower when its top die tumbles or lands), so it is repainted only then: a
     // canvas on the 3D board goes back to the GPU each time it is drawn.
-    const DRAW = { dice, chips, armillary, orb, arcana };
+    const DRAW = { dice, chips, armillary, orb, arcana, well, frog };
     const look = ({ k, seed }, t) => {
+      if (k === 'well') return Math.floor(t * 5);
+      if (k === 'frog') return Math.floor(t * 8);
       if (k === 'armillary') return Math.floor(t * 4);
       if (k === 'orb' || k === 'arcana') return Math.floor(t * 6);
       if (k === 'chips') { const i = chipFrame(t, seed); return i < 0 ? 'rest' : 'F' + i; }
@@ -342,10 +473,22 @@ const RunMap = (() => {
      and how hot those run. Heat 0 is still stone; at 1 the lower seams glow; at 2 every seam and
      the tip do, and they stand taller. The plain spike never changes. */
   const SPIRE_ANTES = [{ strata: 0.03, heat: 0 }, { strata: 0.07, heat: 1 }, { strata: 0.3, heat: 2 }];
+  /* Each ante's look: its floor (drawGround), river (riverPx), motes (MOTES) and props. The map
+     still places spikes, basalt, strata spires and bank crystals; LOOK_PROPS says what each is
+     drawn as. The casino stacks chip towers and stands giant playing cards; the celestial ante
+     raises broken marble columns among low clouds; the witchy one grows toadstools, the hot ones
+     (strata) with glowing spots. */
+  const LOOKS = ['casino', 'celestial', 'witchy'];
+  const LOOK_PROPS = {
+    casino: { spike: 'chips', basalt: 'card', strata: 'chips', crystal: 'chips' },
+    celestial: { spike: 'column', basalt: 'cloud', strata: 'column', crystal: 'crystal' },
+    witchy: { spike: 'toadstool', basalt: 'toadstool', strata: 'toadstool', crystal: 'toadstool' },
+  };
   // Spires and basalt columns per classic board (more on a longer one), and the shortest kept
   // (map units): any shorter only reads as clutter.
   const PROP_MAX = 140, PROP_MIN_H = 36;
-  function placeProps(pl, R, C, block, runes, obel, mix, SR) {
+  function placeProps(pl, R, C, block, runes, obel, mix, SR, look) {
+    const art = (k) => (LOOK_PROPS[look] || {})[k] || k;
     const near = (x, y) => { let m = 1e9; for (const b of block) { const d = Math.hypot(x - b[0], y - b[1]) - b[2]; if (d < m) m = d; } return m; };
     // A prop in front of a path or stop is kept short enough not to hide it.
     const capBehind = (x, y, w) => {
@@ -432,7 +575,7 @@ const RunMap = (() => {
       const glow = (u, v) => { u = Math.round(u); v = Math.round(v); fill(u, v, 1, C[8]); hot.push([u, v]); };
       for (const s of shapes) {
         const { p } = s, u0 = Math.round(s.cx - s.w / 2) - left, top = tall - s.h;
-        propArt(fill, glow, C, lvl(lightAt(p.x, p.y), p.x | 0, p.y | 0), p.k, s.cx - left, top, s.w, s.h, s.seed, p.heat);
+        propArt(fill, glow, C, lvl(lightAt(p.x, p.y), p.x | 0, p.y | 0), art(p.k), s.cx - left, top, s.w, s.h, s.seed, art(p.k) === p.k || p.k === 'strata' ? p.heat : 0);
         if (p.k === 'obelisk') pix(cv, RUNE, { '#': C[4] }, u0 + 3, top + 14);
       }
       const back = Math.max(...list.map((p) => p.y));
@@ -472,6 +615,7 @@ const RunMap = (() => {
   function propArt(fill, glow, C, l, k, cx, top, w, h, seed, heat) {
     const hi = C[l + 1], li = C[Math.max(1, l)], dk = C[Math.max(0, l - 1)], u0 = Math.round(cx - w / 2);
     if (k === 'strata') return strata(fill, glow, cx, top, w, h, seed, heat, [hi, li, dk, C[Math.min(7, l + 2)]]);
+    if (LOOK_ART[k]) return LOOK_ART[k](fill, glow, C, l, cx, top, w, h, seed, heat);
     // Columns across the prop's width: [end fraction, color], as the old gradients were.
     const tones = k === 'spike' ? [[0.14, hi], [0.5, li], [1, dk]]
       : k === 'basalt' ? [[1 / 3, hi], [2 / 3, li], [1, dk]]
@@ -488,6 +632,91 @@ const RunMap = (() => {
       for (const [end, c] of tones) { const to = Math.min(b, Math.round(w * end)); fill(u0 + from, top + r, to - from, c); from = Math.max(from, to); }
     }
   }
+
+  /* The ante looks' props (see LOOK_PROPS), with propArt's arguments. They're paler than the
+     spires: lit side two steps over the floor, shadow side one under (`tones`). */
+  const tones = (C, l) => [C[Math.min(7, l + 3)], C[Math.min(7, l + 2)], C[l + 1]];
+  const side = (q, T) => (q < 0.25 ? T[0] : q < 0.7 ? T[1] : T[2]);
+  const LOOK_ART = {
+    // A tower of poker chips, three rows each (face, notched face, a dark seam), each chip a
+    // pixel askew; white, gold and dark chips mixed; the top one's face lit.
+    chips(fill, glow, C, l, cx, top, w, h, seed) {
+      const T = tones(C, l), cw = Math.max(2, w - 2), u0 = Math.round(cx - w / 2) + 1;
+      for (let r = 0; r < h; r++) {
+        const i = Math.floor((h - 1 - r) / 3), row = (h - 1 - r) % 3, n = noise(seed, i);
+        const off = Math.round((noise(i, seed) - 0.5) * 2), kind = n < 0.5 ? 0 : n < 0.8 ? 1 : 2;
+        for (let u = 0; u < cw; u++) {
+          const q = u / cw;
+          let c = kind === 0 ? side(q, T) : kind === 1 ? (q < 0.25 ? C[7] : q < 0.7 ? C[8] : C[l + 1]) : (q < 0.25 ? C[l + 1] : C[Math.max(1, l)]);
+          if (row === 0) c = C[Math.max(0, l - 1)];
+          else if (row === 1 && (u + i) % 3 === 0) c = kind === 1 ? C[7] : C[8];
+          if (r === 0 || (r === 1 && row === 2)) c = C[7];
+          fill(u0 + u + off, top + r, 1, c);
+        }
+      }
+    },
+    // A giant playing card stood on end: ink edge, a white face dithered on the shadow side, a
+    // corner index and a suit pip (spade, heart, diamond or club) in the middle.
+    card(fill, glow, C, l, cx, top, w, h, seed) {
+      const ch = Math.min(h, Math.round(w * 1.45)), y0 = top + h - ch, u0 = Math.round(cx - w / 2);
+      for (let r = 0; r < ch; r++) for (let u = 0; u < w; u++) {
+        const edge = r === 0 || r === ch - 1 || u === 0 || u === w - 1;
+        fill(u0 + u, y0 + r, 1, edge ? C[1] : u / w > 0.7 && BAY[(u & 3) + (r & 3) * 4] < 8 ? C[6] : C[7]);
+      }
+      if (w < 9 || ch < 12) return;
+      const suit = seed % 4, ink = suit === 1 || suit === 2 ? C[8] : C[1];
+      const PIP = [['..#..', '.###.', '#####', '..#..', '.###.'], ['##.##', '#####', '#####', '.###.', '..#..'],
+        ['..#..', '.###.', '#####', '.###.', '..#..'], ['.###.', '.###.', '#####', '#.#.#', '..#..']][suit];
+      const px = u0 + Math.round(w / 2) - 2, py = y0 + Math.round(ch / 2) - 2;
+      PIP.forEach((row, j) => [...row].forEach((c, i) => { if (c === '#') fill(px + i, py + j, 1, ink); }));
+      fill(u0 + 2, y0 + 2, 1, ink); fill(u0 + 2, y0 + 3, 1, ink);
+    },
+    // A broken marble column: fluted (a groove every third pixel), a plinth, and a jagged top
+    // where it broke, or its capital still on. Hot ones (strata) wear a gold band.
+    column(fill, glow, C, l, cx, top, w, h, seed, heat) {
+      const T = tones(C, l), u0 = Math.round(cx - w / 2), whole = noise(seed, 3) < 0.35, band = Math.round(h * 0.3);
+      for (let u = 0; u < w; u++) {
+        const cut = whole ? 0 : Math.round(noise(seed, u) * Math.min(5, h / 6)), q = u / w;
+        for (let r = cut; r < h; r++) {
+          const shaft = r >= (whole ? 2 : 0) && r < h - 3, inset = shaft && (u === 0 || u === w - 1);
+          if (inset) continue;
+          fill(u0 + u, top + r, 1, shaft && u % 3 === 2 ? T[2] : side(q, T));
+        }
+      }
+      if (heat && w > 3) for (let u = 1; u < w - 1; u += 2) glow(u0 + u, top + band);
+    },
+    // A low cloud bank: a bumpy top, lit along it, the underside dithered.
+    cloud(fill, glow, C, l, cx, top, w, h, seed) {
+      const u0 = Math.round(cx - w / 2);
+      for (let u = 0; u < w; u++) {
+        const q = u / w, hu = Math.round(h * (0.55 + 0.45 * Math.sin(Math.PI * q)) * (0.85 + 0.15 * Math.sin(u * 0.9 + seed)));
+        for (let r = h - hu; r < h; r++) {
+          const f = (r - (h - hu)) / hu;
+          fill(u0 + u, top + r, 1, f < 0.25 ? C[7] : f < 0.7 || BAY[(u & 3) + (r & 3) * 4] < 8 ? C[6] : C[5]);
+        }
+      }
+    },
+    // A toadstool: a pale stem under a domed cap, lit from the upper left, a dark gill line,
+    // and pale spots; on a hot one (strata) the spots glow.
+    toadstool(fill, glow, C, l, cx, top, w, h, seed, heat) {
+      const T = tones(C, l), capH = Math.max(2, Math.round(Math.min(h * 0.45, w * 0.55))), sw = Math.max(1, Math.round(w * 0.32));
+      const s0 = Math.round(cx - sw / 2);
+      for (let r = capH - 1; r < h; r++) for (let u = 0; u < sw; u++) fill(s0 + u, top + r, 1, side(u / sw, T));
+      for (let r = 0; r < capH; r++) {
+        const f = (capH - r - 0.5) / capH, half = (w / 2) * Math.sqrt(Math.max(0, 1 - f * f));
+        const a = Math.round(cx - half), b = Math.round(cx + half);
+        for (let u = a; u < b; u++) {
+          const lit = (u - a) / Math.max(1, b - a) + r / capH;
+          fill(u, top + r, 1, r === capH - 1 ? C[Math.max(0, l - 1)] : lit < 0.55 ? C[Math.min(7, l + 2)] : lit < 1.1 ? C[l + 1] : C[l]);
+        }
+      }
+      const spots = Math.max(1, Math.round(w / 6)), hot = heat > 0;
+      for (let i = 0; i < spots; i++) {
+        const u = Math.round(cx - w / 2 + 2 + noise(seed, i + 11) * Math.max(0, w - 5)), r = Math.round(1 + noise(i + 11, seed) * Math.max(0, capH - 3));
+        if (hot) glow(u, top + r); else fill(u, top + r, 1, C[7]);
+      }
+    },
+  };
 
   /* A strata spire, stepped in five courses that widen down to its base, leaning a little; its
      top row at `top`, centred on cx (canvas px). Each course's exposed ledge catches the light;
@@ -521,23 +750,55 @@ const RunMap = (() => {
   const lavaPx = (d, u, v, t, crust, hot, glow) => (d > 1 ? crust
     : d > 0.4 ? (Math.sin(u * 0.21 - t * 2.2 + v) > 0.8 ? hot : glow)
     : (Math.sin(u * 0.35 - t * 3 + v * 0.6) > 0.5 ? hot : glow));
-  /* Rising embers on a 640x360 overlay canvas: call once per ~80ms tick; it clears the canvas. */
-  function emberDrawer(em, C) {
-    const ex = em.getContext('2d'), embers = [];
+  /* Rising embers on a 640x360 overlay canvas: call once per ~80ms tick; it clears the canvas.
+     On the map the ante's look (see LOOKS) swaps them: gold and white confetti drifting down in
+     the casino, stardust falling slowly in the celestial ante, pale spores rising in the witchy one. */
+  const MOTES = { casino: { dir: 1, v: 1.2, ks: [8, 7] }, celestial: { dir: 1, v: 0.6, ks: [7, 8] }, witchy: { dir: -1, v: 0.6, ks: [7, 6] } };
+  function emberDrawer(em, C, look) {
+    const ex = em.getContext('2d'), embers = [], m = MOTES[look] || { dir: -1, v: 3, ks: [7, 8] };
     return () => {
       ex.clearRect(0, 0, em.width, em.height);
-      if (embers.length < 50) embers.push({ x: Math.random() * em.width, y: em.height + 2, v: 0.3 + Math.random() * 0.8, a: Math.random() * 6, l: 1 });
+      if (embers.length < 50) embers.push({ x: Math.random() * em.width, y: m.dir < 0 ? em.height + 2 : -2, v: 0.3 + Math.random() * 0.8, a: Math.random() * 6, l: 1 });
       for (let i = embers.length - 1; i >= 0; i--) {
         const p = embers[i];
-        p.y -= p.v * 3; p.a += 0.3; p.x += Math.sin(p.a) * 0.6; p.l -= 0.012;
-        if (p.l <= 0) { embers.splice(i, 1); continue; }
-        ex.fillStyle = p.l > 0.5 ? C[7] : C[8];
+        // Rising motes burn out on the way up; falling ones last until they leave the bottom.
+        p.y -= p.v * m.v * -m.dir; p.a += 0.3; p.x += Math.sin(p.a) * 0.6; p.l -= m.dir < 0 ? 0.012 : 0;
+        if (p.l <= 0 || p.y > em.height + 2) { embers.splice(i, 1); continue; }
+        ex.fillStyle = C[m.ks[m.dir < 0 ? (p.l > 0.5 ? 0 : 1) : p.v > 0.7 ? 0 : 1]];
         ex.fillRect(Math.round(p.x), Math.round(p.y), 1, 1);
       }
       return ex;
     };
   }
-  function fxDrawer(fx, ground, C, edges, runes, live, attuned, rings) {
+  /* The ante's river in place of the lava, as a ramp index: dx is the signed offset from the
+     river's middle and ww its half-width (canvas px; the bank runs 2 px past it), y the row, x the
+     column, t seconds, side 0 or 1. Things in it move a whole pixel at a time.
+     casino: a channel of poker chips sliding toward you between gold rails, on dark felt.
+     celestial: a strip of night sky with stars drifting down it, between banks of cloud.
+     The witchy ante keeps the brimstone lava (lavaPx), as every map once had. */
+  const RIVER_LOOKS = ['casino', 'celestial'];
+  function riverPx(look, dx, ww, y, x, t, side) {
+    const d = Math.abs(dx) / ww, dith = BAY[(x & 3) + (y & 3) * 4];
+    if (look === 'casino') {
+      if (d > 1) return Math.abs(dx) > ww + 1 ? 1 : 8; // the rail: gold, inked outside
+      if (d > 0.85) return 3;
+      const s = y - Math.floor(t * 10), cell = Math.floor(s / 7), p = s - cell * 7;
+      if (noise(cell, side + 7) < 0.3 || p > 2) return dith < 5 ? 1 : 2; // felt
+      const o = Math.round((noise(cell, side + 9) - 0.5) * Math.max(0, ww - 3)), u = dx - o, kind = ((cell % 3) + 3) % 3;
+      const face = [7, 8, 4][kind], edge = [5, 3, 3][kind];
+      if (p === 1 ? Math.abs(u) > 3 : Math.abs(u) > 2) return dith < 5 ? 1 : 2;
+      if (p === 2) return edge;
+      return p === 1 && Math.abs(u) === 2 ? (kind === 1 ? 7 : 8) : face;
+    }
+    if (look === 'celestial') {
+      if (d > 1) return dith < 8 ? 6 : 7; // the cloud bank
+      if (d > 0.85) return dith < 8 ? 5 : 6;
+      const s = y - Math.floor(t * 4), h = noise(x * 31 + side, s);
+      if (h < 0.035) return h < 0.01 ? 8 : 7;
+      return d < 0.4 && dith < 5 ? 1 : 2;
+    }
+  }
+  function fxDrawer(fx, ground, C, edges, runes, live, attuned, rings, look) {
     const lineOn = (ctx) => (p0, p1, w, c) => {
       ctx.fillStyle = c;
       const x0 = p0[0] / 2, y0 = p0[1] / 2, dx = p1[0] / 2 - x0, dy = p1[1] / 2 - y0, n = Math.max(Math.abs(dx), Math.abs(dy), 1), o = w >> 1;
@@ -562,7 +823,12 @@ const RunMap = (() => {
     // frame copies just the two narrow strips the rivers run in onto the layer.
     const img = fx.createImageData(CW, CH), buf = new Uint32Array(img.data.buffer);
     const u32 = (h) => { const [r, g, b] = rgb(h); return ((255 << 24) | (b << 16) | (g << 8) | r) >>> 0; };
-    const crust = u32(C[1]), hot = u32(C[7]), glow = u32(C[8]);
+    const crust = u32(C[1]), hot = u32(C[7]), glow = u32(C[8]), K = C.map(u32);
+    // The river's pixel at signed offset dx from its middle (half-width ww), row y, column x,
+    // for river `side` (0 left, 1 right): lava, or the ante's own (see riverPx).
+    const px = RIVER_LOOKS.includes(look)
+      ? (dx, ww, y, x, t, side) => K[riverPx(look, dx, ww, y, x, t, side)]
+      : (dx, ww, y, x, t) => lavaPx(Math.abs(dx) / ww, y, x, t, crust, hot, glow);
     const river = (f) => {
       const rows = [];
       let x0 = CW, x1 = 0;
@@ -574,11 +840,11 @@ const RunMap = (() => {
       return { rows, x0, x1 };
     };
     const rivers = [river(lavaL), river(lavaR)];
-    const lava = ({ rows }, t) => {
+    const lava = ({ rows }, t, side) => {
       for (let y = 0; y < CH; y++) {
         const [cc, ww, a, b] = rows[y];
         for (let x = a; x <= b; x++) {
-          buf[y * CW + x] = lavaPx(Math.abs(x - cc) / ww, y, x, t, crust, hot, glow);
+          buf[y * CW + x] = px(x - cc, ww, y, x, t, side);
         }
       }
     };
@@ -600,8 +866,8 @@ const RunMap = (() => {
     const comets = edges.filter((e) => live.has(e.i));
     return (t) => {
       fx.clearRect(0, 0, CW, CH);
-      lava(rivers[0], t);
-      lava(rivers[1], t + 3);
+      lava(rivers[0], t, 0);
+      lava(rivers[1], t + 3, 1);
       for (const { x0, x1 } of rivers) fx.putImageData(img, 0, 0, x0, 0, x1 - x0 + 1, CH);
       runes.forEach(([x, y]) => rune(x, y, t));
       // A comet runs each live arc toward its stop, its tail stepping down in flat palette tones.
@@ -635,7 +901,10 @@ const RunMap = (() => {
      layer stepped to whole sky pixels. The cloud mask is worked out over a margin (SKY_PAD) round
      the screen so the far layer has room to move; the stars wrap round. */
   const SKY = 3, SKY_FAR = 0.04, SKY_NEAR = 0.07, SKY_PAD = 96; // screen px per sky pixel; see above
-  function skyDrawer(cv, C) {
+  // The run map's orbits by ante: the orrery fills out as the run goes on (out from the sun, so
+  // each ante adds the outer ones). Every other sky (the VS splash, event scenes) keeps all 8.
+  const SKY_RINGS = [4, 6, 8];
+  function skyDrawer(cv, C, count = 8) {
     const g = cv.getContext('2d');
     const u32 = (h) => { const [r, gg, b] = rgb(h); return ((255 << 24) | (b << 16) | (gg << 8) | r) >>> 0; };
     const U = C.map(u32), P = SKY_PAD;
@@ -650,7 +919,7 @@ const RunMap = (() => {
       [sP, cP, sS, cS] = Array.from({ length: 4 }, () => new Float64Array(h));
       const s = w / 320;
       cx = w / 2; cy = h * 0.17;
-      rings = Array.from({ length: 8 }, (_, i) => (50 + i * 36) * s);
+      rings = Array.from({ length: count }, (_, i) => (50 + i * 36) * s);
       // How much cloud each pixel may hold: none on an orbit, rising to full a little way off it
       // (0..1); 2 marks pixels well between orbits, where the clouds also bank up thicker.
       lane = new Float32Array(LW * (h + P * 2));
@@ -724,41 +993,221 @@ const RunMap = (() => {
      fighter, embers rising, and the table's obsidian rim along the bottom. The river and rocks
      are one 640x360 pixel buffer (the run map's lava scale); `rock(i, t)` is where rock i's
      top-center is right now, as fractions of the screen, since the rocks bob and the fighters
-     and dice ride them. */
+     and dice ride them.
+     In a run, `ante` (1..3) gives the ante's look instead (see VS_LOOKS); 0 (other matches) keeps
+     the lava and rocks above. */
   const VSB = { w: 640, h: 360, bank: 236, river: 256, rockTop: 262, rockW: 120, rockH: 22, rim: 10, slow: 0.3 };
   const VS_ROCKS = [{ x: 0.34, ph: 0 }, { x: 0.66, ph: 2.1 }];
-  function vsBackdrop(skyCv, lavaCv, emCv, C) {
-    const sky = skyDrawer(skyCv, C), embers = emberDrawer(emCv, C);
+  /* The antes' VS backdrops (vsBackdrop's `ante`), one per look. Each takes the backdrop's kit
+     ({ set, top, bankEdge, bob, lava, ... }) and returns { sky, draw(t, f) }: sky, whether the
+     orrery shows behind it; t seconds, f the 12-a-second frame for stepped motion.
+     casino: the casino event's court (Scene.tropArt, its arches at x 150 and 450) with its bulbs
+       chasing and slot cabinets lit in turn; the chip river, checker banks, gold-railed card tables.
+     celestial: a ruined marble colonnade on a cloud bank under the orrery; the star river between
+       cloud banks, marble slabs.
+     witchy: deep in a mushroom wood, two ragged banks of mist drifting across the orrery, trunks
+       crowding the sides, lit from below by the lava river; root banks, giant toadstool caps. */
+  const vsDith = (x, y, f) => BAY[(x & 3) + (y & 3) * 4] / 16 < f;
+  const vsMod = (a, n) => ((a % n) + n) % n;
+  const vsBanks = (k, f) => {
+    for (let y = VSB.bank; y < VSB.h - VSB.rim; y++) {
+      const e = k.bankEdge(y);
+      for (let x = 0; x < e; x++) { const c = f(x, y, e); k.set(x, y, c); k.set(VSB.w - 1 - x, y, c); }
+    }
+  };
+  const vsFooting = (k, t, f) => VS_ROCKS.forEach((r, i) => {
+    const y0 = VSB.rockTop + k.bob(i, t), x0 = Math.round(r.x * VSB.w - VSB.rockW / 2);
+    for (let j = 0; j < VSB.rockH; j++) {
+      const ins = Math.max(0, j - 10) * 3;
+      for (let u = ins; u < VSB.rockW - ins; u++) k.set(x0 + u, y0 + j, f(u, j, ins));
+    }
+  });
+  // Smooth value noise (0..1), for the mist's ragged edges.
+  const vsNoise = (x, y) => {
+    const xi = Math.floor(x), yi = Math.floor(y), s = (q) => q * q * (3 - 2 * q), fx = s(x - xi), fy = s(y - yi);
+    const a = noise(xi, yi), b = noise(xi + 1, yi), c = noise(xi, yi + 1), d = noise(xi + 1, yi + 1);
+    return a + (b - a) * fx + (c - a) * fy + (a - b - c + d) * fx * fy;
+  };
+  /* A bank of mist: soft blobs [x, y, rx, ry] summed, broken up by two octaves of noise so the
+     edges fray and holes open, worked out once into levels (0 clear .. 4 thick, 5 a lit top). */
+  function vsMist(x0, y0, w, h, v, blobs) {
+    const dens = (i, j) => {
+      let d = 0;
+      for (const [bx, by, rx, ry] of blobs) d += Math.exp(-(((i - bx) / rx) ** 2 + ((j - by) / ry) ** 2));
+      return d * (0.35 + 1.1 * (0.6 * vsNoise(i / 36, j / 18) + 0.4 * vsNoise(i / 13 + 50, j / 7)));
+    };
+    const k = new Uint8Array(w * h);
+    for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) {
+      const d = dens(i, j);
+      k[j * w + i] = d > 0.95 ? (d - dens(i, j - 4) > 0.3 ? 5 : 4) : d > 0.7 ? 3 : d > 0.45 ? 2 : d > 0.28 ? 1 : 0;
+    }
+    return { x0, y0, w, h, v, k };
+  }
+  const VS_LOOKS = {
+    casino(k) {
+      const T = Scene.TROP, WY = VSB.bank - T.H, ARCH = T.arches.filter((x) => x < VSB.w);
+      const wall = new Uint32Array(Scene.tropArt(k.C).getContext('2d').getImageData(0, 0, VSB.w, T.H).data.buffer);
+      return { sky: false, draw(t, f) {
+        for (let y = 0; y < VSB.bank; y++) for (let x = 0; x < VSB.w; x++) k.buf[y * VSB.w + x] = y < WY ? k.U[4] : wall[(y - WY) * VSB.w + x];
+        // The band's bulbs, a lit run of three chasing along them.
+        for (let x = 4, i = 0; x < VSB.w; x += 10, i++) {
+          const on = vsMod(i - f, 12) < 3, y = WY + T.B0 + 3;
+          k.set(x, y, on ? 7 : 3); k.set(x + 1, y, on ? 7 : 3); k.set(x, y + 1, on ? 8 : 2); k.set(x + 1, y + 1, on ? 8 : 2);
+        }
+        // Slot cabinets in the arches, their toppers lighting in turn.
+        for (const cx of ARCH) [-28, -9, 10, 29].forEach((dx, j) => {
+          const x0 = cx + dx - 6, y0 = WY + T.H - 24;
+          for (let v = 0; v < 21; v++) for (let u = 0; u < 12; u++) {
+            const edge = u === 0 || u === 11 || v === 0 || v === 20;
+            k.set(x0 + u, y0 + v, edge ? 1 : v < 4 ? (vsMod(j + (f >> 1), 4) === 0 ? 8 : 3)
+              : v < 11 ? (u > 1 && u < 10 && v > 5 && v < 10 ? (u % 3 === 1 ? 2 : 7) : 5) : u < 4 ? 6 : 5);
+          }
+        });
+        // The chip river: three lanes of chips sliding along dark felt, a gold lip on its top.
+        for (let x = 0; x < VSB.w; x++) { const y0 = k.top(x); for (let y = y0; y < VSB.h - VSB.rim; y++) k.set(x, y, y === y0 ? 8 : vsDith(x, y, 0.3) ? 1 : 2); }
+        for (let ln = 0; ln < 3; ln++) for (let c = 0; c < 16; c++) {
+          const cx = vsMod(c * 46 + ln * 19 - f * 3, 740) - 50, cy = 268 + ln * 24, kind = (c + ln) % 3, fc = [7, 8, 4][kind], ec = [5, 3, 3][kind];
+          for (let v = 0; v < 7; v++) {
+            const hw = v === 0 || v === 6 ? 4 : 6;
+            for (let u = -hw; u < hw; u++) k.set(cx + u, cy + v, v >= 5 ? ec : (v === 2 || v === 3) && (u === -5 || u === 4 || u === 0) ? (kind === 1 ? 7 : 8) : fc);
+          }
+        }
+        vsBanks(k, (x, y, e) => x >= e - 2 ? 8 : x === e - 3 ? 1 : ((x >> 3) + (y >> 3)) % 2 ? (vsDith(x, y, 0.3) ? 4 : 5) : 6);
+        vsFooting(k, t, (u, j, ins) => j < 3 ? 8 : j < 10 ? (vsDith(u, j, 0.3) ? 2 : 3) : u < ins + 2 || u > VSB.rockW - ins - 3 ? 0 : 1);
+      } };
+    },
+    celestial(k) {
+      const COLS = [30, 110, 190, 270, 370, 450, 530, 610].map((x, i) => ({ x, h: [150, 96, 170, 120, 140, 180, 104, 160][i], whole: i === 2 || i === 5 }));
+      return { sky: true, draw(t, f) {
+        for (const c of COLS) {
+          const cw = 22, x0 = c.x - cw / 2, base = 232;
+          for (let u = 0; u < cw; u++) {
+            const cut = c.whole ? 0 : Math.round(noise(c.x, u) * 10), q = u / cw;
+            for (let r = cut; r < c.h; r++) {
+              const y = base - c.h + r, shaft = r >= (c.whole ? 6 : 0);
+              if (shaft && (u < 2 || u >= cw - 2)) continue;
+              k.set(x0 + u, y, !shaft ? (r < 2 ? 8 : 7) : u % 4 === 3 ? 4 : q < 0.3 ? 7 : q < 0.7 ? 6 : vsDith(u, y, 0.5) ? 4 : 5);
+            }
+          }
+          if (c.whole) for (let u = -3; u < cw + 3; u++) { k.set(x0 + u, base - c.h - 2, 8); k.set(x0 + u, base - c.h - 1, 7); }
+        }
+        for (let x = 0; x < VSB.w; x++) {
+          const hgt = 214 + Math.round(6 * Math.sin(x * 0.05) + 4 * Math.sin(x * 0.13 + 1));
+          for (let y = hgt; y < VSB.bank + 6; y++) k.set(x, y, y - hgt < 3 ? 7 : vsDith(x, y, 0.5) ? 6 : 5);
+        }
+        // The star river: night sky with stars drifting along it, cloud lapping its top.
+        for (let x = 0; x < VSB.w; x++) {
+          const y0 = k.top(x);
+          for (let y = y0; y < VSB.h - VSB.rim; y++) { const s = noise(vsMod(x + f * 2, VSB.w), y); k.set(x, y, s < 0.012 ? (s < 0.004 ? 8 : 7) : Math.abs(y - 290) < 12 && vsDith(x, y, 0.3) ? 1 : 2); }
+          for (let y = y0 - 3; y < y0; y++) k.set(x, y, vsDith(x, y, 0.5) ? 6 : 7);
+        }
+        vsBanks(k, (x, y, e) => { const b = y - VSB.bank; return b < 3 || x > e - 4 ? 7 : vsDith(x, y, 0.5) ? 6 : b > 60 ? 5 : 6; });
+        vsFooting(k, t, (u, j, ins) => j < 3 ? 7 : j < 10 ? (u % 8 === 7 ? 4 : u < VSB.rockW / 3 ? 7 : 6) : u < ins + 2 || u > VSB.rockW - ins - 3 ? 4 : 5);
+      } };
+    },
+    witchy(k) {
+      const SHROOMS = [[20, 70, 50], [96, 44, 34], [160, 96, 64], [250, 52, 40], [330, 80, 56], [410, 40, 30], [480, 104, 70], [570, 60, 44], [630, 76, 52]];
+      const TRUNKS = [[44, 34, 1], [596, 34, 1], [150, 14, 2], [500, 14, 2]]; // [x, width, tone]: near ones dark, far ones a step lighter
+      const MIST = [
+        vsMist(-60, 26, 520, 130, 1, [[90, 70, 90, 30], [200, 55, 110, 38], [330, 80, 100, 32], [430, 66, 70, 26], [260, 95, 140, 22]]),
+        vsMist(240, 112, 480, 110, -1, [[80, 60, 80, 26], [190, 48, 100, 34], [310, 66, 110, 30], [400, 52, 70, 24]]),
+      ];
+      return { sky: true, draw(t, f) {
+        // The mist drifts a pixel every quarter second, dithered so the orrery shows through it.
+        for (const m of MIST) {
+          const ox = vsMod(m.x0 + Math.floor(f / 3) * m.v + m.w, VSB.w + m.w) - m.w;
+          for (let j = 0; j < m.h; j++) for (let i = 0; i < m.w; i++) {
+            const lv = m.k[j * m.w + i], x = ox + i, y = m.y0 + j;
+            if (lv && x >= 0 && x < VSB.w && vsDith(x, y, [0, 0.125, 0.25, 0.5, 0.75, 0.5][lv])) k.set(x, y, [0, 2, 2, 3, 3, 4][lv]);
+          }
+        }
+        // The far wood along the bank.
+        for (let x = 0; x < VSB.w; x++) { const hh = Math.round(18 + 8 * Math.sin(x * 0.07) + 5 * Math.sin(x * 0.19)); for (let y = VSB.bank - hh; y < VSB.bank + 6; y++) k.set(x, y, 1); }
+        for (const [cx, hh, cw] of SHROOMS) {
+          const by = VSB.bank + 2, sw = Math.max(4, cw * 0.18 | 0), capH = cw * 0.4 | 0, cy = by - hh;
+          for (let y = cy + capH - 2; y < by; y++) for (let u = -sw / 2; u < sw / 2; u++) k.set(cx + u, y, u === -sw / 2 ? 2 : 1);
+          for (let r = 0; r < capH; r++) {
+            const q = (capH - r - 0.5) / capH, half = cw / 2 * Math.sqrt(1 - q * q);
+            for (let u = -Math.round(half); u < Math.round(half); u++) k.set(cx + u, cy + r, r < 2 || (u < -half + 3 && r < capH - 2) ? 2 : 1);
+          }
+        }
+        // Trunks rising off the top, flaring at the foot; the side facing the river catches the lava.
+        for (const [cx, tw, tone] of TRUNKS) {
+          const inward = cx < VSB.w / 2;
+          for (let y = 0; y < VSB.bank + 4; y++) {
+            const half = tw / 2 + (y > VSB.bank - 30 ? Math.round((y - (VSB.bank - 30)) * 0.5) : 0);
+            for (let u = -Math.round(half); u < Math.round(half); u++) {
+              const x = cx + u, face = inward ? u >= half - 3 : u < -half + 3, glow = (y - 120) / (VSB.bank - 120);
+              let c = tone;
+              if (face && glow > 0 && vsDith(x, y, glow)) c = y > VSB.bank - 20 && vsDith(x, y, glow - 0.3) ? 8 : 3;
+              else if (!face && u % 7 === 0) c = tone - 1;
+              k.set(x, y, c);
+            }
+          }
+        }
+        // The brimstone river, as the run map's.
+        const lt = t * VSB.slow, bottom = VSB.h - VSB.rim;
+        for (let x = 0; x < VSB.w; x++) {
+          const y0 = k.top(x), mid = (y0 + bottom) / 2, half = (bottom - y0) / 2 - 1;
+          for (let y = y0; y < bottom; y++) k.buf[y * VSB.w + x] = k.lava(x, y, lt, Math.abs(y - mid) / half);
+        }
+        vsBanks(k, (x, y, e) => y === VSB.bank || x === e - 1 || noise(x, y) < 0.06 ? 2 : 1);
+        // Giant toadstool caps to stand on: lit from the upper left, pale spots, a dark gill line, a stub of stem.
+        VS_ROCKS.forEach((r, i) => {
+          const y0 = VSB.rockTop + k.bob(i, t) - 2, cx = Math.round(r.x * VSB.w), cw = 128, capH = 22;
+          for (let j = 0; j < capH; j++) {
+            const q = (capH - j - 0.5) / capH, half = cw / 2 * Math.sqrt(1 - q * q);
+            for (let u = -Math.round(half); u < Math.round(half); u++) {
+              const lit = (u + half) / (2 * half) + j / capH * 0.6;
+              k.set(cx + u, y0 + j, j === capH - 1 ? 2 : lit < 0.45 ? 6 : lit < 0.95 ? 5 : vsDith(cx + u, y0 + j, 0.5) ? 4 : 5);
+            }
+          }
+          for (const [u, v, s] of [[-40, 10, 4], [-18, 5, 5], [6, 8, 4], [28, 4, 3], [44, 12, 3], [-30, 16, 3], [16, 15, 3]]) {
+            for (let a = 0; a < s; a++) for (let b = 0; b < s; b++) if ((a === 0 || a === s - 1) + (b === 0 || b === s - 1) < 2) k.set(cx + u + a, y0 + v + b, 7);
+          }
+          for (let j = capH; j < capH + 5; j++) for (let u = -10; u < 10; u++) k.set(cx + u, y0 + j, u < -6 ? 6 : 5);
+        });
+      } };
+    },
+  };
+  function vsBackdrop(skyCv, lavaCv, emCv, C, ante = 0) {
+    const look = ante ? LOOKS[Math.min(ante, LOOKS.length) - 1] : null;
+    const sky = skyDrawer(skyCv, C, ante ? SKY_RINGS[Math.min(ante, SKY_RINGS.length) - 1] : 8), embers = emberDrawer(emCv, C, look);
     const { w, h } = VSB, g = lavaCv.getContext('2d'), img = g.createImageData(w, h), buf = new Uint32Array(img.data.buffer);
     const U = C.map((hx) => { const [r, gg, b] = rgb(hx); return ((255 << 24) | (b << 16) | (gg << 8) | r) >>> 0; });
-    const set = (x, y, k) => { if (x >= 0 && x < w && y >= 0 && y < h) buf[y * w + x] = U[k]; };
+    const set = (x, y, k) => { x |= 0; y |= 0; if (x >= 0 && x < w && y >= 0 && y < h) buf[y * w + x] = U[k]; };
     const top = (x) => Math.round(VSB.river + Math.sin(x * 0.035) * 3 + Math.sin(x * 0.095 + 1) * 2);
     const bankEdge = (y) => Math.round(92 + (y - VSB.bank) * 0.4 + Math.sin(y * 0.3) * 3);
     const bob = (i, t) => Math.round(Math.sin(t * 1.2 + VS_ROCKS[i].ph) * 2);
     const rock = (i, t) => ({ x: VS_ROCKS[i].x, y: (VSB.rockTop + bob(i, t)) / h });
+    const kit = { set, buf, U, w, h, top, bankEdge, bob, C, lava: (x, y, lt, d) => lavaPx(d, x, y, lt, U[1], U[7], U[8]) };
+    const scene = look && VS_LOOKS[look](kit);
     const draw = (t) => {
-      sky(t);
+      if (!scene || scene.sky) sky(t);
       buf.fill(0);
       const lt = t * VSB.slow, bottom = h - VSB.rim;
-      // The river: the run map's lava churn, flowing sideways (a crust line along its top).
-      for (let x = 0; x < w; x++) {
-        const y0 = top(x), mid = (y0 + bottom) / 2, half = (bottom - y0) / 2 - 1;
-        for (let y = y0; y < bottom; y++) buf[y * w + x] = lavaPx(Math.abs(y - mid) / half, x, y, lt, U[1], U[7], U[8]);
-      }
-      // The banks, mirrored: a lit lip, then rock down to the rim.
-      for (let y = VSB.bank; y < bottom; y++) {
-        const e = bankEdge(y);
-        for (let x = 0; x < e; x++) { const k = y === VSB.bank ? 2 : x === e - 1 ? 2 : 1; set(x, y, k); set(w - 1 - x, y, k); }
-      }
-      // The fighters' rocks: flat tops, lit, tapering under, bobbing out of step.
-      VS_ROCKS.forEach((r, i) => {
-        const y0 = VSB.rockTop + bob(i, t), x0 = Math.round(r.x * w - VSB.rockW / 2);
-        for (let j = 0; j < VSB.rockH; j++) {
-          const inset = Math.max(0, j - 10) * 3;
-          for (let k = inset; k < VSB.rockW - inset; k++) set(x0 + k, y0 + j, j < 2 ? 3 : j < 6 ? 2 : k < inset + 2 || k > VSB.rockW - inset - 3 ? 0 : 1);
+      if (scene) scene.draw(t, Math.floor(t * 12)); // the ante's backdrop, river, banks and footing
+      else {
+        // The river: the run map's lava churn, flowing sideways (a crust line along its top).
+        for (let x = 0; x < w; x++) {
+          const y0 = top(x), mid = (y0 + bottom) / 2, half = (bottom - y0) / 2 - 1;
+          for (let y = y0; y < bottom; y++) buf[y * w + x] = lavaPx(Math.abs(y - mid) / half, x, y, lt, U[1], U[7], U[8]);
         }
-        for (let k = 6; k < VSB.rockW - 6; k += 14) { set(x0 + k, y0 + 2, 4); set(x0 + k + 1, y0 + 2, 4); }
-      });
+        // The banks, mirrored: a lit lip, then rock down to the rim.
+        for (let y = VSB.bank; y < bottom; y++) {
+          const e = bankEdge(y);
+          for (let x = 0; x < e; x++) { const k = y === VSB.bank ? 2 : x === e - 1 ? 2 : 1; set(x, y, k); set(w - 1 - x, y, k); }
+        }
+        // The fighters' rocks: flat tops, lit, tapering under, bobbing out of step.
+        VS_ROCKS.forEach((r, i) => {
+          const y0 = VSB.rockTop + bob(i, t), x0 = Math.round(r.x * w - VSB.rockW / 2);
+          for (let j = 0; j < VSB.rockH; j++) {
+            const inset = Math.max(0, j - 10) * 3;
+            for (let k = inset; k < VSB.rockW - inset; k++) set(x0 + k, y0 + j, j < 2 ? 3 : j < 6 ? 2 : k < inset + 2 || k > VSB.rockW - inset - 3 ? 0 : 1);
+          }
+          for (let k = 6; k < VSB.rockW - 6; k += 14) { set(x0 + k, y0 + 2, 4); set(x0 + k + 1, y0 + 2, 4); }
+        });
+      }
       // The table's rim, a hint of it: obsidian with a lit edge and gold corner fittings.
       for (let x = 0; x < w; x++) { set(x, bottom, 2); set(x, bottom + 1, 2); set(x, bottom + 2, 0); for (let y = bottom + 3; y < h; y++) set(x, y, 1); }
       for (const x0 of [0, w - 14]) for (let j = 0; j < VSB.rim + 2; j++) for (let k = 0; k < 14; k++) set(x0 + k, bottom - 2 + j, j > 2 && j < 5 && k > 3 && k < 10 ? 6 : 8);
@@ -913,8 +1362,82 @@ const RunMap = (() => {
     };
   }
 
-  /* The boss stop by ante: the casino on the first, the Great Dome observatory from the second on. */
-  const BOSS_HOUSES = ['casino', 'observatory'];
+  /* The boss stop by ante: the casino on the first, the Great Dome observatory on the second, the
+     Fungus Witch's crooked cottage on the third (the last). */
+  const BOSS_HOUSES = ['casino', 'observatory', 'cottage'];
+
+  /* The Fungus Witch's crooked cottage, on the casino's footprint: leaning plank walls, a sagging
+     thatch roof grown over with bracket fungus, a crooked chimney puffing spores, and a cauldron
+     bubbling by the door. Lit (reachable), the door, window and brew glow. One standee, repainted
+     5 times a second for the spores and bubbles; its thatch seen from above is lifted to the eaves.
+     Canvas sizes in pixels; 1 px = 2 map units. */
+  const COT = { W: 100, H: 106, oy: 12, eaveH: 38, roofW: 84, roofD: 26 };
+  function cottage(rect0, lit, step) {
+    const rect = (u, v, w, h, k) => rect0(u, v + COT.oy, w, h, k), px = (u, v, k) => rect(u, v, 1, 1, k);
+    const bay = (x, y) => BAY[(x & 3) + (y & 3) * 4] / 16;
+    // Walls: planks with ink seams, leaning a pixel right every 10 rows.
+    for (let y = 56; y <= 93; y++) {
+      const o = Math.floor((93 - y) / 10);
+      for (let x = 20; x <= 76; x++) {
+        let k = x === 20 || x === 76 || (x - 20) % 7 === 0 ? 1 : (x - 20) % 7 < 3 ? 6 : 5;
+        if (k === 5 && bay(x + o, y) < 0.15) k = 4;
+        px(x + o, y, k);
+      }
+    }
+    archAt(rect, 48, 93, 12, 21, 1); archAt(rect, 48, 93, 10, 20, lit ? 8 : 2);
+    if (lit) archAt(rect, 48, 93, 4, 15, 7);
+    rect(27, 64, 11, 9, 1); rect(28, 65, 9, 7, lit ? 7 : 2); if (lit) rect(28, 65, 4, 3, 8);
+    rect(32, 65, 1, 7, 1); rect(28, 68, 9, 1, 1);
+    // The roof: sagging, lit from the left, with thatch strokes across it.
+    const span = [];
+    for (let y = 14; y <= 60; y++) {
+      const t = (y - 14) / 46, hw = Math.round(6 + t * 40 + Math.sin(t * 3.1) * 2), cx = 50 - Math.round(t * 4);
+      span[y] = [cx - hw, cx + hw];
+      for (let x = cx - hw; x <= cx + hw; x++) {
+        const e = x === cx - hw || x === cx + hw || y === 60, f = (x - (cx - hw)) / (hw * 2);
+        px(x, y, e ? 1 : (f < 0.3 ? 4 : f < 0.7 ? 3 : 2) + (bay(x, y) < 0.25 ? 1 : 0));
+      }
+    }
+    for (let y = 22; y < 60; y += 6) for (let x = span[y][0] + 2; x < span[y][1] - 1; x += 3) if (bay(x, y) < 0.4) px(x + ((y / 6) & 1), y, 1);
+    // Bracket fungus: pale shelves, ink-rimmed, lit on top.
+    const shelf = (x, y, r) => {
+      for (let dy = -r; dy <= 1; dy++) for (let dx = -r * 2; dx <= r * 2; dx++) {
+        const d = (dx / (r * 2)) ** 2 + (dy / r) ** 2;
+        if (d <= 1) px(x + dx, y + dy, d > 0.7 || dy === 1 ? 1 : dy < -r / 2 ? 7 : 6);
+      }
+    };
+    shelf(30, 40, 3); shelf(62, 48, 4); shelf(46, 28, 3); shelf(70, 34, 2); shelf(24, 54, 2);
+    rect(62, 10, 7, 20, 1); rect(63, 11, 5, 18, 4); rect(63, 11, 2, 18, 5);
+    // The cauldron by the door, a bubble rising out of the brew.
+    rect(62, 82, 14, 11, 1); rect(63, 83, 12, 9, 2); rect(63, 83, 3, 8, 3);
+    rect(60, 80, 18, 3, 1); rect(61, 81, 16, 1, lit ? 8 : 3);
+    const b = step % 8;
+    if (b < 6) rect(66 + (step % 3), 80 - b, 2, 2, lit ? 7 : 5);
+    // Spores puffing out of the chimney, drifting right as they rise and paling near the top.
+    for (let i = 0; i < 3; i++) {
+      const p = (step + i * 4) % 16, x = 64 + Math.round(Math.sin(p * 0.7 + i * 2) * 2 + p * 0.4), y = 8 - p * 1.3;
+      if (y + COT.oy < 1) continue;
+      rect(x, y, 2, 2, p > 11 ? 5 : 4); px(x, y, p > 11 ? 6 : 7);
+    }
+  }
+  /* The thatch seen from above, behind the face at the eaves. */
+  const cotRoof = (C) => paint(COT.roofW, COT.roofD, C, (rect, px) => {
+    rect(0, 0, COT.roofW, COT.roofD, 1); rect(1, 1, COT.roofW - 2, COT.roofD - 2, 3);
+    for (let v = 2; v < COT.roofD - 1; v += 3) for (let u = 2 + (v % 2) * 2; u < COT.roofW - 2; u += 4) px(u, v, BAY[(u & 3) + (v & 3) * 4] < 8 ? 2 : 4);
+    rect(1, 1, 1, COT.roofD - 2, 4);
+  });
+  /* The cottage's moving parts: repainted only when the 5-a-second step ticks over. */
+  function cottageLights(C, cv, lit) {
+    const g = cv.getContext('2d'), rect = (u, v, w, h, k) => { g.fillStyle = C[k]; g.fillRect(Math.round(u), Math.round(v), w, h); };
+    let last = -1;
+    return (time) => {
+      const step = Math.floor(time * 5);
+      if (step === last) return;
+      last = step;
+      g.clearRect(0, 0, COT.W, COT.H);
+      cottage(rect, lit, step);
+    };
+  }
 
   /* The Great Dome: the Dealer's observatory, on the casino's footprint. A pale stone drum on a
      stepped plinth, its name across a frieze under a gold cornice, arched windows and the casino's
@@ -1310,6 +1833,8 @@ const RunMap = (() => {
     Music.play('menu'); // back from a stop (the casino and bowling lane play their own)
     walking = false;
     const C = ramp(), R = mulberry32((run.seed ^ 0x5eed) >>> 0);
+    const land = LOOKS[Math.min(run.circuit || 1, LOOKS.length) - 1]; // the ante's floor, river, motes and props
+    Backdrop.setMood(run.circuit || 1); // and its swirl
     const nodes = run.map.nodes;
     H = Math.max(BOARD_BASE, Math.max(...nodes.map((n) => n.y)) + 60);
     CH = H / 2;
@@ -1333,20 +1858,20 @@ const RunMap = (() => {
       ...nodes.filter((n) => n.t !== 'boss').map((n) => [n.x + (n.x <= W / 2 ? 1 : -1) * (SL.w + FIG / 2 + 8), n.y + (n.t === 'start' ? 40 : 24), 30]),
     ];
     const clear = (x, y, r) => block.every((b) => Math.hypot(x - b[0], y - b[1]) - b[2] > r);
-    // Rune circles and obelisks: the classic spots, repeated down a longer board.
+    // Rune circles and obelisks (both the witchy ante only): the classic spots, repeated down a longer board.
     // (Spots were placed on the 760-wide board: x scales with the board's width.)
     const tile = (spots) => Array.from({ length: Math.ceil(H / BOARD_BASE) }, (_, k) => spots.map(([x, y]) => [Math.round(x * W / 760), y + k * BOARD_BASE]).filter(([, y]) => y < H - 20)).flat();
-    const runes = tile([[110, 610], [650, 640], [650, 370], [110, 260], [640, 140], [120, 430]]).filter(([x, y]) => clear(x, y, 34)).slice(0, Math.round(3 * H / BOARD_BASE));
+    const runes = land !== 'witchy' ? [] : tile([[110, 610], [650, 640], [650, 370], [110, 260], [640, 140], [120, 430]]).filter(([x, y]) => clear(x, y, 34)).slice(0, Math.round(3 * H / BOARD_BASE));
     runes.forEach(([x, y]) => block.push([x, y, 34]));
     // An obelisk too close to a river for its height (see riverRoom) is moved in toward the middle.
     const inward = ([x, y]) => { for (let i = 0; i < 12 && riverRoom(x, y, 15, 86) < 0; i++) x += x < W / 2 ? 8 : -8; return [x, y]; };
-    const obel = tile([[92, 400], [668, 180], [92, 150], [300, 34], [460, 34], [672, 520], [110, 770], [652, 800]]).map(inward).filter(([x, y]) => riverRoom(x, y, 15, 86) >= 0 && clear(x, y, 14));
+    const obel = land !== 'witchy' ? [] : tile([[92, 400], [668, 180], [92, 150], [300, 34], [460, 34], [672, 520], [110, 770], [652, 800]]).map(inward).filter(([x, y]) => riverRoom(x, y, 15, 86) >= 0 && clear(x, y, 14));
     obel.forEach(([x, y]) => block.push([x, y, 18]));
     // Landmarks: one of each of the ante's pair (dice towers and tossed chips on the first ante, talon
     // orbs and arcana obelisks after the Pit Boss deals you back in), each on clear ground, off the
     // lava and well apart. Their own random stream, so the rest of the board is laid out as before.
     const LR = mulberry32((run.seed ^ 0xd1ce) >>> 0), marks = [];
-    const [ka, kb] = MARK_PAIRS[(run.circuit || 1) > 1 ? 1 : 0];
+    const [ka, kb] = MARK_PAIRS[Math.min(run.circuit || 1, MARK_PAIRS.length) - 1];
     const kinds = LR() < 0.5 ? [ka, kb] : [kb, ka]; // one of each per map
     // Off the rivers, top included (see riverRoom): MARK sizes are canvas px, 2 map units each.
     const offLava = (x, y, k) => riverRoom(x, y, MARK[k].w, MARK[k].h * 2) >= 0;
@@ -1392,9 +1917,9 @@ const RunMap = (() => {
     const idle = () => (reach.length ? 'Pick a lit beacon to sling yourself at' : 'The Dealer awaits');
     tick.textContent = idle();
 
-    drawGround($('#rmGnd'), R, C);
+    drawGround($('#rmGnd'), R, C, land);
     // The ante sets the spires' mix and heat (see SPIRE_ANTES), from their own random stream.
-    const heatTick = placeProps(pl, R, C, block, runes, obel, SPIRE_ANTES[Math.min(run.circuit || 1, SPIRE_ANTES.length) - 1], mulberry32((run.seed ^ 0x5b1e) >>> 0));
+    const heatTick = placeProps(pl, R, C, block, runes, obel, SPIRE_ANTES[Math.min(run.circuit || 1, SPIRE_ANTES.length) - 1], mulberry32((run.seed ^ 0x5b1e) >>> 0), land);
     const markTick = landmarks(pl, C, marks);
     frame(pl, C);
 
@@ -1405,7 +1930,7 @@ const RunMap = (() => {
       const el = document.createElement('div');
       const state = reach.includes(n.id) ? 'reach' : visited.has(n.id) ? 'done' : 'idle';
       if (n.t === 'boss') {
-        // The boss's house (the casino resort, or the Great Dome from the second ante on; see
+        // The boss's house (the casino resort, the Great Dome, or the witch's cottage; see
         // BOSS_HOUSES): footprint on the board, roofs lifted to their height, upright parts as standees.
         const lit = state === 'reach', W2 = CAS.W * 2, D2 = CAS.D * 2;
         el.className = 'rm-casino';
@@ -1422,7 +1947,17 @@ const RunMap = (() => {
           return s;
         };
         const house = BOSS_HOUSES[Math.min(run.circuit || 1, BOSS_HOUSES.length) - 1];
-        if (house === 'observatory') {
+        if (house === 'cottage') {
+          // The Fungus Witch's cottage: its face at the front, the thatch lifted to the eaves behind.
+          const face = document.createElement('canvas');
+          face.width = COT.W; face.height = COT.H;
+          casinoTick = cottageLights(C, face, lit);
+          casinoTick(0);
+          el.append(
+            flat(cotRoof(C), W2 / 2 - COT.roofW, D2 - COT.roofD * 2, COT.eaveH * 2),
+            stand(face, W2 / 2, D2, 0),
+          );
+        } else if (house === 'observatory') {
           // The Great Dome: the drum's face at the front, its roof lifted to the cornice, the dome
           // standing in the roof's middle, an armillary just outside each front corner.
           const drumZ = (OBS.H - 2) * 2, roofY = D2 - OBS.roofD * 2;
@@ -1992,9 +2527,9 @@ const RunMap = (() => {
     // Animate the sky, lava, runes, sigils, casino lights, landmarks, hot spires and rising embers at a stepped ~12fps.
     // Every stop but the casino sits in a sigil ring; the start's is where the lines meet, behind the slingshot.
     const rings = nodes.filter((n) => n.t !== 'boss').map((n) => [n.x, n.y, reach.includes(n.id)]);
-    const draw = fxDrawer($('#rmFx').getContext('2d'), $('#rmGnd').getContext('2d'), C, edges, runes, live, attuned, rings);
-    const sky = skyDrawer($('#rmSky'), C);
-    const embers = emberDrawer($('#rmEm'), C), em = $('#rmEm');
+    const draw = fxDrawer($('#rmFx').getContext('2d'), $('#rmGnd').getContext('2d'), C, edges, runes, live, attuned, rings, land);
+    const sky = skyDrawer($('#rmSky'), C, SKY_RINGS[Math.min(run.circuit || 1, SKY_RINGS.length) - 1]);
+    const embers = emberDrawer($('#rmEm'), C, land), em = $('#rmEm');
     let last = 0;
     (function loop(now) {
       if (!em.isConnected) return;

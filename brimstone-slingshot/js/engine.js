@@ -62,7 +62,7 @@ class Game {
     const { names = ['You', 'Dealer'], cpu = [false, true], viewer = 0, life = [START_LIFE, START_LIFE], boss = null, cpuName = 'the Dealer' } = opts;
     _uid = 1; // both browsers in an online match must hand out the same uids
     this.viewer = viewer;
-    this.boss = boss; // Dealer's Run boss rule: 'gale' | 'ossuary' | 'dice'
+    this.boss = boss; // Dealer's Run boss rule: 'gale' | 'ossuary' | 'dice' | 'rot' (the Fungus Witch's)
     this.cpuName = cpuName; // who the computer player is in sentences: the Dealer, or a run rival
     this.phase2 = false;
     this.players = [this.mkPlayer(0, names[0], deck0, cpu[0], life[0]), this.mkPlayer(1, names[1], deck1, cpu[1], life[1])];
@@ -124,6 +124,7 @@ class Game {
     // after the loop, so a new Guppy stays summoning sick this turn
     const prego = p.board.find((c) => c && has(c, 'prego'));
     if (prego) this.pregoBirth(p, prego);
+    if (this.boss === 'rot' && p.cpu) this.rot(this.opp(p));
     if (this.turnNum > 1) this.drawCard(p); // the starting player skips their first draw
     this.checkOver();
   }
@@ -347,6 +348,17 @@ class Game {
     c.wither = (c.wither || 0) + n;
     this.fx.push({ kind: 'dmg', uid: c.uid, n });
     if (hpLeft(c) <= 0) c.dead = true;
+  }
+
+  /* The Fungus Witch's rule (ROT): at the start of each of her turns, your strongest creature
+     loses 1 power for good. */
+  rot(p) {
+    let c = null;
+    for (const x of this.livingBoard(p)) if (x.atk > 0 && (!c || x.atk > c.atk)) c = x;
+    if (!c) return;
+    c.atk -= 1;
+    this.fx.push({ kind: 'dmg', uid: c.uid, n: 1 });
+    this.say(`Rot withers ${c.name}: -1 power.`, p);
   }
 
   buffCreature(c, n) {

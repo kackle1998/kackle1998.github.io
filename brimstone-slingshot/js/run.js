@@ -69,7 +69,12 @@ const BOSS_RULES = {
   gale:    { name: 'GALE',        text: "Every creature on the Dealer's side takes flight." },
   ossuary: { name: 'OSSUARY',     text: "Skeletons fill every empty slot on the Dealer's side." },
   dice:    { name: 'LOADED DICE', text: 'All your face-down traps are swept away.' },
+  rot:     { name: 'ROT',         text: 'Each of her turns, your strongest creature loses 1 power for good.' },
 };
+// The rules an ante's boss rolls from; a boss with its own `rule` (RUN_BOSSES) plays that instead.
+const HOUSE_RULES = ['gale', 'ossuary', 'dice'];
+// The last ante: beating its boss (the Fungus Witch) wins the run.
+const RUN_FINAL_ANTE = 3;
 
 /* This ante's boss (data.js RUN_BOSSES): null for the Dealer, or the boss that replaces it. */
 const runBoss = (s) => RUN_BOSSES[Math.min(s.circuit || 1, RUN_BOSSES.length) - 1];
@@ -612,7 +617,7 @@ const Run = {
     };
     if (startAnte() > 1) this.s.circuit = startAnte(); // debug: start further in (see Options)
     this.s.map = genRunMap(this.rand(1));
-    this.s.bossRule = Object.keys(BOSS_RULES)[runRand(this.rand(2), 3)];
+    this.s.bossRule = HOUSE_RULES[runRand(this.rand(2), HOUSE_RULES.length)];
     pick.forEach((id) => this.add(id));
     this.save();
     RunMap.show();
@@ -834,14 +839,18 @@ const Run = {
   },
 
   /* Every battle on the map but the boss is against one of the Dealer's rivals, picked at random
-     and not repeated within a run. Kept on the stop so a reload brings back the same one. */
+     from this ante's (data.js RIVALS `ante`; past the last, the last ante's) and not repeated
+     within a run until that ante's have all been met. Kept on the stop so a reload brings back
+     the same one. */
   rival(n) {
     const s = this.s, node = s.node;
     if (n.t === 'boss') return null;
     if (!node.rival || !RIVALS.some((r) => r.id === node.rival)) {
       s.rivals = s.rivals || [];
-      const fresh = RIVALS.filter((r) => !s.rivals.includes(r.id));
-      const from = fresh.length ? fresh : RIVALS;
+      const last = Math.max(...RIVALS.map((r) => r.ante)), ante = Math.min(s.circuit || 1, last);
+      const pool = RIVALS.filter((r) => r.ante === ante);
+      const fresh = pool.filter((r) => !s.rivals.includes(r.id));
+      const from = fresh.length ? fresh : pool;
       node.rival = from[runRand(this.rand(500 + n.id), from.length)].id;
       s.rivals.push(node.rival);
     }
@@ -858,7 +867,7 @@ const Run = {
     node.phase = 'battle';
     this.save();
     // startGame opens with the VS screen (the rival's, the ante's boss's, or the Dealer's).
-    startGame(this.deckDef(), { cpuDeck, life: [s.life, life], boss: boss ? s.bossRule : null, run: true, foe: rival || (boss && runBoss(s)) || null });
+    startGame(this.deckDef(), { cpuDeck, life: [s.life, life], boss: boss ? (runBoss(s) && runBoss(s).rule) || s.bossRule : null, run: true, foe: rival || (boss && runBoss(s)) || null });
   },
 
   /* Called by js/ui.js when a run battle ends (or is conceded). */
@@ -869,6 +878,10 @@ const Run = {
     const n = s.map.nodes[s.cur];
     if (!won) { s.life = 0; return this.finish(false); }
     s.stats.battles++;
+    if (n.t === 'boss' && (s.circuit || 1) >= RUN_FINAL_ANTE) {
+      s.stats.circuits = (s.stats.circuits || 0) + 1;
+      return this.finish(true);
+    }
     if (n.t === 'boss') return this.casinoFalls(youLife);
     s.dealerBonus = 0;
     s.life = Math.max(1, Math.min(s.maxLife, youLife + RUN_WIN_HEAL));
@@ -901,15 +914,19 @@ const Run = {
   /* A new map for the same deck, life and arcana, back at the base. Its Dealers are a little
      tougher (see runCircuitLife, runCircuitCap), and the boss plays a new house rule. */
   newCircuit() {
+    this.dealCircuit((this.s.circuit || 1) + 1);
+    RunMap.show({ fromDark: true });
+  },
+  /* Deal ante n's map, back at the base (newCircuit, and the dev account's JUMP TO ANTE option). */
+  dealCircuit(n) {
     const s = this.s;
-    s.circuit = (s.circuit || 1) + 1;
+    s.circuit = n;
     s.seed = (Math.random() * 2 ** 31) >>> 0;
     s.map = genRunMap(this.rand(1));
-    s.bossRule = Object.keys(BOSS_RULES)[runRand(this.rand(2), 3)];
+    s.bossRule = HOUSE_RULES[runRand(this.rand(2), HOUSE_RULES.length)];
     Object.assign(s, { cur: 0, done: [], visited: [0], node: null, dealerBonus: 0, intro: false, encore: false });
     delete s.sling;
     this.save();
-    RunMap.show({ fromDark: true });
   },
 
   reward(n) {
@@ -1476,6 +1493,7 @@ const Run = {
   bowl(n, ev, animate = false) {
     Music.play('event');
     const node = this.s.node, bw = node.bw || (node.bw = { step: 0 }), test = this.bench;
+    const ante = test ? test.ante : Math.min(this.s.circuit || 1, RunMap.SPIRE_ANTES.length);
     const res = bw.res, down = res ? res.at.filter((a) => a >= 0).length : 0, strike = down === Bowl.PINS.length;
     const pay = down * BOWL_PER_PIN + (strike ? BOWL_STRIKE_BONUS : 0);
     let said = strike ? `STRIKE! +${pay} ARCANA` : down ? `${down} PIN${down > 1 ? 'S' : ''}: +${pay} ARCANA` : 'GUTTER BALL';
@@ -1485,10 +1503,13 @@ const Run = {
       'Stop the bar to throw. A soft throw hooks more; a hard one carries more pins.'];
     const SETS = ['SET SPOT', 'SET ANGLE', 'THROW'];
     const stage = this.sceneScreen(ev.art, ev.title, res ? (animate ? 'The ball rolls...' : said) : SUBS[bw.step],
-      res ? (test ? `<button class="btn" id="bwTake" ${animate ? 'disabled' : ''}>THROW AGAIN</button><button class="btn" id="rnLeave">DONE</button>`
+      res ? (test ? `<button class="btn" id="bwTake" ${animate ? 'disabled' : ''}>THROW AGAIN</button><button class="btn" id="bwAnte" ${animate ? 'disabled' : ''}>ANTE ${ante}</button><button class="btn" id="rnLeave">DONE</button>`
         : `<button class="btn" id="bwTake" ${animate ? 'disabled' : ''}>${pay ? 'TAKE IT' : 'CONTINUE'}</button>`)
-        : `<button class="btn" id="bwGo">${SETS[bw.step]}</button>${test ? '<button class="btn" id="rnLeave">DONE</button>' : ''}`); // no walking out before you throw
-    const draw = Bowl.mount(stage), P = Bowl.PINS;
+        : `<button class="btn" id="bwGo">${SETS[bw.step]}</button>${test ? `<button class="btn" id="bwAnte">ANTE ${ante}</button><button class="btn" id="rnLeave">DONE</button>` : ''}`); // no walking out before you throw
+    // The lane dressed for the ante's world (Bowl.LOOK_OF_ANTE): the casino, the celestial, the witchy wood.
+    const draw = Bowl.mount(stage, RunMap.SPIRE_ANTES[ante - 1].heat), P = Bowl.PINS;
+    // The bench's ANTE button: the next ante's lane, standing on it already (no entrance), ball in hand.
+    if (test) $('#bwAnte').onclick = () => { sfx('select'); test.ante = test.ante % RunMap.SPIRE_ANTES.length + 1; this.s.node = { bw: { step: 0, landed: true } }; this.bowl(n, ev); };
     const side = P.map((p) => (p.x < Bowl.CX ? -1 : 1)), still = P.map(() => 0);
     const tri = (p) => { p -= Math.floor(p); return p < 0.5 ? p * 2 : 2 - p * 2; };
     if (this.bwKey) document.removeEventListener('keydown', this.bwKey);
@@ -1888,7 +1909,8 @@ const Run = {
         + (test ? `<button class="btn" id="glAnte">ANTE ${ante}</button><button class="btn" id="glReset">RESET</button><button class="btn" id="rnLeave">DONE</button>` : '<button class="btn" id="rnLeave">LEAVE</button>'));
     const lk = this.sceneLock();
     let ready = false;
-    const draw = Gallery.mount(stage, RunMap.SPIRE_ANTES[ante - 1].heat, () => fire());
+    // The booth dressed for the ante's world (Gallery.THEME_OF_ANTE): the casino, the celestial, the carnival.
+    const draw = Gallery.mount(stage, RunMap.SPIRE_ANTES[ante - 1].heat, () => fire(), Gallery.THEME_OF_ANTE[ante - 1]);
     // The cards already down (a reload), lying flat from the start.
     for (const s of gl.shots) if (s.i >= 0) draw.down.set(s.r + ':' + s.i, -1e9);
     draw.st.shots = gl.shots.length;
@@ -2568,7 +2590,7 @@ const Run = {
       <div class="result panel">
         <img class="r-art" src="${spriteURL(won ? 'hero' : 'dealer')}" alt="">
         <div class="r-title">${won ? 'RUN CLEARED' : 'RUN OVER'}</div>
-        <div class="r-sub">${won ? 'You beat the Dealer at the end of the circuit.' : 'The circuit claims another spellslinger.'}</div>
+        <div class="r-sub">${won ? 'You felled the Fungus Witch. The run is yours.' : 'The circuit claims another spellslinger.'}</div>
         <div class="r-tally">
           <div><span>CASINOS FELLED</span><b>${s.stats.circuits || 0}</b></div>
           <div><span>STOPS CLEARED</span><b>${s.stats.stops}</b></div>

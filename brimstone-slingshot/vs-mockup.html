@@ -1,0 +1,222 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>VS backdrops by ante</title>
+<style>
+body{margin:0;padding:16px;background:#d9dfb3;color:#1f2418;font:14px/1.4 monospace}
+.vr{display:grid;grid-template-columns:180px 640px;gap:14px;align-items:start;margin-bottom:16px}
+.st{position:relative;width:640px;height:360px;border:2px solid #1f2418;background:#12160e;overflow:hidden}
+.st canvas{position:absolute;left:0;top:0;width:640px;height:360px;image-rendering:pixelated}
+b{display:block;font-size:15px;margin-bottom:4px}
+</style></head><body>
+<div class="vr"><div><b>Ante 1 · casino</b>The casino event's court: stucco wall, sunburst windows, a chasing bulb band, slot cabinets in the arches. Chip river, checker banks, card tables, confetti falling.</div><div class="st"><canvas class="sky" id="s0"></canvas><canvas id="v0" width="640" height="360"></canvas></div></div>
+<div class="vr"><div><b>Ante 2 · celestial</b>The orrery sky behind a ruined marble colonnade on the clouds. Star river, cloud banks, marble slabs, stardust falling.</div><div class="st"><canvas class="sky" id="s1"></canvas><canvas id="v1" width="640" height="360"></canvas></div></div>
+<div class="vr"><div><b>Ante 3 · witchy</b>Deep in a mushroom wood: giant trunks crowd the sides, two big banks of mist drift across the orrery, and the lava lights the trunks from below. Root banks, toadstool caps to stand on, spores rising.</div><div class="st"><canvas class="sky" id="s2"></canvas><canvas id="v2" width="640" height="360"></canvas></div></div>
+<script src="js/data.js"></script><script src="js/render.js"></script><script src="js/engine.js"></script>
+<script src="js/options.js"></script><script src="js/run.js"></script><script src="js/runmap.js"></script>
+<script>
+(() => {
+const C = RunMap.ramp(), BAY = RunMap.BAY, V = RunMap.VSB;
+const W = V.w, H = V.h, BOT = H - V.rim, ROCKS = [[0.34, 0], [0.66, 2.1]];
+const bay = (x, y) => BAY[(x & 3) + ((y & 3) << 2)], dith = (x, y, f) => bay(x, y) / 16 < f, pmod = (a, n) => ((a % n) + n) % n;
+const hs = (a, b) => { let n = (a * 374761393 + b * 668265263) | 0; n = Math.imul(n ^ (n >>> 13), 1274126177); return ((n ^ (n >>> 16)) >>> 0) / 4294967296; };
+const riverTop = (x) => Math.round(V.river + Math.sin(x * 0.035) * 3 + Math.sin(x * 0.095 + 1) * 2);
+const bankEdge = (y) => Math.round(92 + (y - V.bank) * 0.4 + Math.sin(y * 0.3) * 3);
+const lavaPx = (d, u, v, t) => (d > 1 ? 1 : d > 0.4 ? (Math.sin(u * 0.21 - t * 2.2 + v) > 0.8 ? 7 : 8) : (Math.sin(u * 0.35 - t * 3 + v * 0.6) > 0.5 ? 7 : 8));
+const RGB = C.map((h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16)));
+function mk(id) {
+  const g = document.getElementById(id).getContext('2d'), im = g.createImageData(W, H), d = im.data;
+  return { P(x, y, k) { x |= 0; y |= 0; if (x < 0 || y < 0 || x >= W || y >= H) return; const o = (y * W + x) * 4, c = RGB[k]; d[o] = c[0]; d[o + 1] = c[1]; d[o + 2] = c[2]; d[o + 3] = 255; }, done() { g.putImageData(im, 0, 0); } };
+}
+const bob = (i, t) => Math.round(Math.sin(t * 0.25 + ROCKS[i][1]) * 2);
+function rim(p) {
+  for (let x = 0; x < W; x++) { p.P(x, BOT, 2); p.P(x, BOT + 1, 2); p.P(x, BOT + 2, 0); for (let y = BOT + 3; y < H; y++) p.P(x, y, 1); }
+  for (const x0 of [0, W - 14]) for (let j = 0; j < V.rim + 2; j++) for (let k = 0; k < 14; k++) p.P(x0 + k, BOT - 2 + j, j > 2 && j < 5 && k > 3 && k < 10 ? 6 : 8);
+  for (let x = 48; x < W - 40; x += 64) for (let j = 0; j < 2; j++) { p.P(x, BOT + 5 + j, 8); p.P(x + 1, BOT + 5 + j, 8); }
+}
+function banks(p, f) { for (let y = V.bank; y < BOT; y++) { const e = bankEdge(y); for (let x = 0; x < e; x++) { const k = f(x, y, e); p.P(x, y, k); p.P(W - 1 - x, y, k); } } }
+function plats(p, t, f) { ROCKS.forEach(([rx], i) => { const y0 = V.rockTop + bob(i, t), x0 = Math.round(rx * W - V.rockW / 2); for (let j = 0; j < V.rockH; j++) { const ins = Math.max(0, j - 10) * 3; for (let k = ins; k < V.rockW - ins; k++) p.P(x0 + k, y0 + j, f(k, j, ins)); } }); }
+const motes = [[], [], []];
+function moteStep(p, i, dir, ks, size) {
+  const m = motes[i];
+  if (m.length < 60) { const n = m.length; m.push({ x: hs(n, i) * W | 0, y: dir > 0 ? hs(i, n) * BOT | 0 : BOT - hs(i, n) * 200 | 0, v: 1 + (hs(n, i + 9) * 2 | 0), ph: n % 4 }); }
+  for (const q of m) {
+    q.y += dir * q.v; q.ph++;
+    if (dir > 0 && q.y > BOT) q.y = 0; if (dir < 0 && q.y < 0) q.y = BOT;
+    const sx = q.x + ((q.ph >> 1) % 2);
+    for (let u = 0; u < size; u++) for (let v = 0; v < size; v++) p.P(sx + u, q.y + v, ks[q.v % 2]);
+  }
+}
+
+/* Ante 1: the tropicana wall from the casino event (settings.js tropArt), at its own scale, its arches at x 150 and 450. */
+const TH = 230, T_SPRING = 196, T_AR = 44, T_LUN = 118, T_LR = 60, T_B0 = 120, T_B1 = 140, WY = V.bank - TH, ARCH = [150, 450];
+function lunette(x, y, dx, cy, r, n, mold) {
+  const d = Math.hypot(dx, y - cy);
+  if (mold && y === cy + 1 && Math.abs(dx) < r + 7) return 4;
+  if (y > cy || d >= r + (mold ? 7 : 0)) return -1;
+  if (d >= r) return d < r + 2 ? (dx < 0 ? 7 : 5) : d < r + 5 ? (dx < 0 ? 6 : 5) : 4;
+  if (d >= r - 2) return 2;
+  const sun = Math.round(r * 0.22), ring = Math.round(r * 0.6);
+  if (d < sun) return d >= sun - 2 ? 2 : 8;
+  const seg = Math.atan2(cy - y, dx) / Math.PI * n, ray = Math.floor(seg);
+  if (seg - ray < 0.1 || Math.abs(d - ring) < 1) return 2;
+  const k = d < ring ? (ray % 2 ? 8 : 7) : (ray % 2 ? 5 : 7);
+  return k !== 8 && bay(x, y) < 3 ? k - 1 : k;
+}
+const wallBuf = (() => {
+  const b = new Uint8Array(W * TH);
+  for (let y = 0; y < TH; y++) for (let x = 0; x < W; x++) {
+    let k = 6;
+    if (y < 8) k = y < 6 ? 4 : 7; else if (y < 14 && bay(x, y) < (14 - y) * 2) k = 5;
+    if (y > TH - 60 && bay(x, y) < (y - (TH - 60)) / 4) k = 5;
+    if (y >= T_B0 && y <= T_B1) {
+      if (y === T_B0 || y === T_B1 - 1) k = 7; else if (y === T_B0 + 1 || y === T_B1) k = 4;
+      else { const ix = pmod(x, 300) - 86, iy = y - T_B0 - 5, iw = 128, ih = T_B1 - T_B0 - 9; if (ix >= 0 && ix < iw && iy >= 0 && iy < ih) k = ix < 1 || iy < 1 ? 4 : ix >= iw - 1 || iy >= ih - 1 ? 7 : 5; }
+    }
+    for (const cx of [...ARCH, -150, 750]) {
+      const dx = x - cx, ad = Math.abs(dx), l = lunette(x, y, dx, T_LUN, T_LR, 14, true);
+      if (l >= 0) k = l;
+      if (y <= T_B1 || ad >= T_AR + 7) continue;
+      const r = y > T_SPRING ? ad : Math.hypot(dx, y - T_SPRING);
+      if (r < T_AR && y <= T_SPRING) k = lunette(x, y, dx, T_SPRING, T_AR, 10, false);
+      else if (r < T_AR && y < T_SPRING + 3) k = y === T_SPRING + 1 ? 7 : 4;
+      else if (r < T_AR) k = y < T_SPRING + 5 || dx < -T_AR + 4 || y > TH - 4 || bay(x, y) < 2 ? 1 : 0;
+      else if (r < T_AR + 7) k = r < T_AR + 2 ? (dx < 0 ? 4 : 7) : r < T_AR + 5 ? (dx < 0 ? 7 : 5) : 4;
+    }
+    const pdx = pmod(x + 150, 300) - 150, pa = Math.abs(pdx);
+    if (y > T_B1 && pa < 16) {
+      if (y < T_B1 + 8) k = y < T_B1 + 3 ? 7 : pa > 13 ? 4 : 6;
+      else if (y > TH - 12) k = y < TH - 10 ? 7 : pdx > 10 ? 4 : 5;
+      else k = pa > 12 ? (pdx < 0 ? 7 : 4) : pmod(pdx, 6) < 1 || pdx > 6 ? 5 : 6;
+    }
+    if (y >= TH - 3) k = y === TH - 3 ? 4 : 3;
+    b[y * W + x] = k;
+  }
+  return b;
+})();
+function casino(p, t) {
+  for (let y = 0; y < V.bank; y++) for (let x = 0; x < W; x++) p.P(x, y, y < WY ? 4 : wallBuf[(y - WY) * W + x]);
+  // The bulbs along the band, a lit run chasing along them.
+  for (let x = 4, i = 0; x < W; x += 10, i++) { const on = pmod(i - t, 12) < 3; p.P(x, WY + T_B0 + 3, on ? 7 : 3); p.P(x + 1, WY + T_B0 + 3, on ? 7 : 3); p.P(x, WY + T_B0 + 4, on ? 8 : 2); p.P(x + 1, WY + T_B0 + 4, on ? 8 : 2); }
+  // Slot cabinets in the arches.
+  for (const cx of ARCH) for (const [j, dx] of [-28, -9, 10, 29].entries()) {
+    const x0 = cx + dx - 6, y0 = WY + TH - 24;
+    for (let v = 0; v < 21; v++) for (let u = 0; u < 12; u++) {
+      const edge = u === 0 || u === 11 || v === 0 || v === 20;
+      let k = edge ? 1 : v < 4 ? (pmod(j + (t >> 1), 4) === 0 ? 8 : 3) : v < 11 ? (u > 1 && u < 10 && v > 5 && v < 10 ? (u % 3 === 1 ? 2 : 7) : 5) : u < 4 ? 6 : 5;
+      p.P(x0 + u, y0 + v, k);
+    }
+  }
+  for (let x = 0; x < W; x++) { const y0 = riverTop(x); for (let y = y0; y < BOT; y++) p.P(x, y, y === y0 ? 8 : dith(x, y, .3) ? 1 : 2); }
+  for (let ln = 0; ln < 3; ln++) for (let k = 0; k < 16; k++) {
+    const cx = pmod(k * 46 + ln * 19 - t * 3, 740) - 50, cy = 268 + ln * 24, kind = (k + ln) % 3, fc = [7, 8, 4][kind], ec = [5, 3, 3][kind];
+    for (let v = 0; v < 7; v++) { const hw = v === 0 || v === 6 ? 4 : 6; for (let u = -hw; u < hw; u++) p.P(cx + u, cy + v, v >= 5 ? ec : (v === 2 || v === 3) && (u === -5 || u === 4 || u === 0) ? (kind === 1 ? 7 : 8) : fc); }
+  }
+  banks(p, (x, y, e) => x >= e - 2 ? 8 : x === e - 3 ? 1 : ((x >> 3) + (y >> 3)) % 2 ? (dith(x, y, .3) ? 4 : 5) : 6);
+  plats(p, t, (k, j, ins) => j < 3 ? 8 : j < 10 ? (dith(k, j, .3) ? 2 : 3) : k < ins + 2 || k > V.rockW - ins - 3 ? 0 : 1);
+  moteStep(p, 0, 1, [8, 7], 2);
+}
+
+/* Ante 2: a ruined colonnade on a cloud bank under the orrery. */
+const COLS = [30, 110, 190, 270, 370, 450, 530, 610].map((x, i) => ({ x, h: [150, 96, 170, 120, 140, 180, 104, 160][i], whole: i === 2 || i === 5 }));
+function celestial(p, t) {
+  for (const c of COLS) {
+    const w = 22, x0 = c.x - w / 2, base = 232;
+    for (let u = 0; u < w; u++) {
+      const cut = c.whole ? 0 : Math.round(hs(c.x, u) * 10), q = u / w;
+      for (let r = cut; r < c.h; r++) {
+        const y = base - c.h + r, shaft = r >= (c.whole ? 6 : 0);
+        if (shaft && (u < 2 || u >= w - 2)) continue;
+        p.P(x0 + u, y, !shaft ? (r < 2 ? 8 : 7) : u % 4 === 3 ? 4 : q < 0.3 ? 7 : q < 0.7 ? 6 : dith(u, y, .5) ? 4 : 5);
+      }
+    }
+    if (c.whole) for (let u = -3; u < w + 3; u++) { p.P(x0 + u, base - c.h - 2, 8); p.P(x0 + u, base - c.h - 1, 7); }
+  }
+  for (let y = 200; y < V.bank + 6; y++) for (let x = 0; x < W; x++) {
+    const hgt = 214 + Math.round(6 * Math.sin(x * 0.05) + 4 * Math.sin(x * 0.13 + 1));
+    if (y >= hgt) p.P(x, y, y - hgt < 3 ? 7 : dith(x, y, .5) ? 6 : 5);
+  }
+  for (let x = 0; x < W; x++) { const y0 = riverTop(x); for (let y = y0; y < BOT; y++) { const h = hs(pmod(x + t * 2, W), y); p.P(x, y, h < 0.012 ? (h < 0.004 ? 8 : 7) : Math.abs(y - 290) < 12 && dith(x, y, .3) ? 1 : 2); } for (let y = y0 - 3; y < y0; y++) p.P(x, y, dith(x, y, .5) ? 6 : 7); }
+  banks(p, (x, y, e) => { const b = y - V.bank; return b < 3 || x > e - 4 ? 7 : dith(x, y, .5) ? 6 : b > 60 ? 5 : 6; });
+  plats(p, t, (k, j, ins) => j < 3 ? 7 : j < 10 ? (k % 8 === 7 ? 4 : k < V.rockW / 3 ? 7 : 6) : k < ins + 2 || k > V.rockW - ins - 3 ? 4 : 5);
+  moteStep(p, 1, 1, [7, 8], 2);
+}
+
+/* Ante 3: under the canopy of a mushroom wood. Giant caps arch over the top and trunks crowd the
+   sides, so the orrery only shows through the gaps, with mist crawling across it. The lava is the
+   light: trunks and caps catch it on the sides that face the river. */
+const SHROOMS = [[20, 70, 50], [96, 44, 34], [160, 96, 64], [250, 52, 40], [330, 80, 56], [410, 40, 30], [480, 104, 70], [570, 60, 44], [630, 76, 52]];
+const TRUNKS = [[44, 34, 1], [596, 34, 1], [150, 14, 2], [500, 14, 2]];
+/* Mist banks: a few overlapping soft blobs, their density broken up by two octaves of value
+   noise so the edges fray and holes open, worked out once into levels (k: 0 clear .. 4 thick,
+   5 a lit top where the density rises sharply from above). x0, y0: where it starts; v: drift. */
+function noise2(x, y) {
+  const xi = Math.floor(x), yi = Math.floor(y), fx = x - xi, fy = y - yi, s = (f) => f * f * (3 - 2 * f);
+  const a = hs(xi, yi), b = hs(xi + 1, yi), c = hs(xi, yi + 1), d = hs(xi + 1, yi + 1);
+  return a + (b - a) * s(fx) + (c - a) * s(fy) + (a - b - c + d) * s(fx) * s(fy);
+}
+function mistBank(x0, y0, w, h, v, blobs) {
+  const dens = (i, j) => {
+    let d = 0;
+    for (const [bx, by, rx, ry] of blobs) d += Math.exp(-(((i - bx) / rx) ** 2 + ((j - by) / ry) ** 2));
+    const n = 0.6 * noise2(i / 36, j / 18) + 0.4 * noise2(i / 13 + 50, j / 7);
+    return d * (0.35 + 1.1 * n);
+  };
+  const k = new Uint8Array(w * h);
+  for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) {
+    const d = dens(i, j);
+    k[j * w + i] = d > 0.95 ? (d - dens(i, j - 4) > 0.3 ? 5 : 4) : d > 0.7 ? 3 : d > 0.45 ? 2 : d > 0.28 ? 1 : 0;
+  }
+  return { x0, y0, w, h, v, k };
+}
+const MIST = [
+  mistBank(-60, 26, 520, 130, 1, [[90, 70, 90, 30], [200, 55, 110, 38], [330, 80, 100, 32], [430, 66, 70, 26], [260, 95, 140, 22]]),
+  mistBank(240, 112, 480, 110, -1, [[80, 60, 80, 26], [190, 48, 100, 34], [310, 66, 110, 30], [400, 52, 70, 24]]),
+];
+function witchy(p, t) {
+  // Two big banks of mist drifting slowly across the sky, dithered so the orrery shows through:
+  // denser in the middle, thinner at the edges, a bumpy top.
+  for (const m of MIST) {
+    const ox = pmod(m.x0 + Math.floor(t / 3) * m.v + m.w, W + m.w) - m.w;
+    for (let j = 0; j < m.h; j++) for (let i = 0; i < m.w; i++) {
+      const k = m.k[j * m.w + i], x = ox + i, y = m.y0 + j;
+      if (k && x >= 0 && x < W && dith(x, y, [0, 0.125, 0.25, 0.5, 0.75, 0.5][k])) p.P(x, y, [0, 2, 2, 3, 3, 4][k]);
+    }
+  }
+  // The far wood, low along the bank.
+  for (let x = 0; x < W; x++) { const h = Math.round(18 + 8 * Math.sin(x * 0.07) + 5 * Math.sin(x * 0.19)); for (let y = V.bank - h; y < V.bank + 6; y++) p.P(x, y, 1); }
+  for (const [cx, h, cw] of SHROOMS) {
+    const by = V.bank + 2, sw = Math.max(4, cw * 0.18 | 0), capH = cw * 0.4 | 0, cy = by - h;
+    for (let y = cy + capH - 2; y < by; y++) for (let u = -sw / 2; u < sw / 2; u++) p.P(cx + u, y, u === -sw / 2 ? 2 : 1);
+    for (let r = 0; r < capH; r++) { const f = (capH - r - 0.5) / capH, half = cw / 2 * Math.sqrt(1 - f * f); for (let u = -Math.round(half); u < Math.round(half); u++) p.P(cx + u, cy + r, r < 2 || (u < -half + 3 && r < capH - 2) ? 2 : 1); }
+  }
+  // Trunks from the canopy to the bank: the near ones dark (1), the far ones a step lighter (2).
+  // Their river-facing edge and foot catch the lava, dithered up from the bank.
+  for (const [cx, w, k] of TRUNKS) {
+    const inward = cx < W / 2 ? 1 : -1;
+    for (let y = 0; y < V.bank + 4; y++) {
+      const flare = y > V.bank - 30 ? Math.round((y - (V.bank - 30)) * 0.5) : 0, half = w / 2 + flare;
+      for (let u = -Math.round(half); u < Math.round(half); u++) {
+        const x = cx + u, face = inward > 0 ? u >= half - 3 : u < -half + 3, glow = (y - 120) / (V.bank - 120);
+        let c = k;
+        if (face && glow > 0 && dith(x, y, glow)) c = y > V.bank - 20 && dith(x, y, glow - 0.3) ? 8 : 3;
+        else if (!face && u % 7 === 0) c = k === 1 ? 0 : 1;
+        p.P(x, y, c);
+      }
+    }
+  }
+  const lt = t * 0.06;
+  for (let x = 0; x < W; x++) { const y0 = riverTop(x), mid = (y0 + BOT) / 2, half = (BOT - y0) / 2 - 1; for (let y = y0; y < BOT; y++) p.P(x, y, lavaPx(Math.abs(y - mid) / half, x, y, lt)); }
+  banks(p, (x, y, e) => y === V.bank || x === e - 1 ? 2 : hs(x, y) < 0.06 ? 2 : 1);
+  ROCKS.forEach(([rx], i) => {
+    const y0 = V.rockTop + bob(i, t) - 6, cx = Math.round(rx * W), cw = 128, capH = 22;
+    for (let r = 0; r < capH; r++) { const f = (capH - r - 0.5) / capH, half = cw / 2 * Math.sqrt(1 - f * f); for (let u = -Math.round(half); u < Math.round(half); u++) { const lit = (u + half) / (2 * half) + r / capH * 0.6; p.P(cx + u, y0 + r, r === capH - 1 ? 2 : lit < 0.45 ? 6 : lit < 0.95 ? 5 : dith(cx + u, y0 + r, .5) ? 4 : 5); } }
+    for (const [u, v, s] of [[-40, 10, 4], [-18, 5, 5], [6, 8, 4], [28, 4, 3], [44, 12, 3], [-30, 16, 3], [16, 15, 3]]) for (let a = 0; a < s; a++) for (let b = 0; b < s; b++) if ((a === 0 || a === s - 1) + (b === 0 || b === s - 1) < 2) p.P(cx + u + a, y0 + v + b, 7);
+    for (let r = capH; r < capH + 5; r++) for (let u = -10; u < 10; u++) p.P(cx + u, y0 + r, u < -6 ? 6 : 5);
+  });
+  moteStep(p, 2, -1, [7, 6], 2);
+}
+
+const SC = [casino, celestial, witchy], skies = [null, RunMap.skyDrawer(document.getElementById('s1'), C, 6), RunMap.skyDrawer(document.getElementById('s2'), C, 8)]; // the map's rings per ante (SKY_RINGS)
+let t = 0;
+setInterval(() => { for (let i = 0; i < 3; i++) { if (skies[i]) skies[i](performance.now() / 1000); const p = mk('v' + i); SC[i](p, t); rim(p); p.done(); } t++; }, 1000 / 12);
+})();
+</script></body></html>
